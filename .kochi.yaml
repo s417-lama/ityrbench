@@ -1,0 +1,111 @@
+machines:
+  wisteria-o:
+    login_host: wisteria
+    work_dir: /work/gc64/c64050
+    kochi_root: /work/gc64/c64050/.kochi
+    alloc_interact_script:
+      - n_nodes=$(echo $KOCHI_ALLOC_NODE_SPEC | cut -f 1 -d ":" | sed 's/x/*/g' | bc)
+      - pjsub --interact --sparam wait-time=unlimited -j -g gc64 -L rscgrp=interactive-o,node=$KOCHI_ALLOC_NODE_SPEC --mpi proc=$((n_nodes * 48))
+    alloc_script:
+      - n_nodes=$(echo $KOCHI_ALLOC_NODE_SPEC | cut -f 1 -d ":" | sed 's/x/*/g' | bc)
+      - echo $KOCHI_WORKER_LAUNCH_CMD | pjsub -X -j -g gc64 -L rscgrp=regular-o,node=$KOCHI_ALLOC_NODE_SPEC,elapse=${KOCHI_ALLOC_TIME_LIMIT:-6:00:00} --mpi proc=$((n_nodes * 48))
+    load_env_script:
+      on_login_node:
+        - module load odyssey
+        - export MPICC=mpifccpx
+        - export MPICXX=mpiFCCpx
+        - export CFLAGS="-Nclang $CFLAGS"
+      on_machine:
+        - . /work/gc64/c64050/venv/odyssey/bin/activate
+        - export MPICC=mpifcc
+        - export MPICXX=mpiFCC
+        - export CFLAGS="-Nclang $CFLAGS"
+
+  ito-a:
+    login_host: ito
+    alloc_script: |
+      if (( $KOCHI_ALLOC_NODE_SPEC == 1 )); then
+        rscgrp=ito-ss
+      elif (( $KOCHI_ALLOC_NODE_SPEC <= 4 )); then
+        rscgrp=ito-s
+      elif (( $KOCHI_ALLOC_NODE_SPEC <= 16 )); then
+        rscgrp=ito-m
+      elif (( $KOCHI_ALLOC_NODE_SPEC <= 64 )); then
+        rscgrp=ito-l
+      elif (( $KOCHI_ALLOC_NODE_SPEC <= 128 )); then
+        rscgrp=ito-xl
+      elif (( $KOCHI_ALLOC_NODE_SPEC <= 256 )); then
+        rscgrp=ito-xxl
+      else
+        echo "Allocating $KOCHI_ALLOC_NODE_SPEC nodes is not allowed on ITO."
+        exit 1
+      fi
+      echo $KOCHI_WORKER_LAUNCH_CMD | pjsub -j -o /dev/null -L rscunit=ito-a,rscgrp=$rscgrp,vnode=$KOCHI_ALLOC_NODE_SPEC,vnode-core=36,elapse=${KOCHI_ALLOC_TIME_LIMIT:-6:00:00}
+    load_env_script:
+      - module load python/3.6.2
+      - . venv/ito-a/bin/activate
+      - module load gcc/10.2.0
+      - export MPICC=mpicc
+      - export MPICXX=mpicxx
+
+dependencies:
+  ucx:
+    recipes:
+      1.12.1:
+        before_script:
+          - wget https://github.com/openucx/ucx/releases/download/v1.12.1/ucx-1.12.1.tar.gz
+          - tar xvf ucx-1.12.1.tar.gz
+          - cd ucx-1.12.1/
+    script:
+      - mkdir build
+      - cd build/
+      - ../configure --prefix=$KOCHI_INSTALL_PREFIX
+      - make -j
+      - make install
+
+  openmpi:
+    git: https://github.com/open-mpi/ompi.git
+    depends:
+      ucx:
+        recipe: 1.12.1
+    recipes:
+      5.0.0rc2:
+        branch: v5.0.0rc2
+      5.0.x:
+        branch: v5.0.x
+    script:
+      - ./autogen.pl
+      - mkdir build
+      - cd build/
+      - ../configure --prefix=$KOCHI_INSTALL_PREFIX --with-ucx=$KOCHI_INSTALL_PREFIX_UCX --disable-man-pages --with-pmix=internal
+      - make -j
+      - make install
+    activate_script:
+      - export PATH=$KOCHI_INSTALL_PREFIX_OPENMPI/bin:$PATH
+      - export LD_LIBRARY_PATH=$KOCHI_INSTALL_PREFIX_OPENMPI/lib:$LD_LIBRARY_PATH
+
+  massivethreads-dm:
+    git: git@gitlab.eidos.ic.i.u-tokyo.ac.jp:shiina/massivethreads-dm.git
+    depends:
+      openmpi:
+        recipe: 5.0.0rc2
+        machines: [local, ito-a]
+    recipes:
+      release:
+        branch: greedy_gc
+        script:
+          - export CFLAGS="-O3 -g -Wall $CFLAGS"
+          - CCFLAGS=$CFLAGS CXXFLAGS=$CFLAGS ./configure MPICC=$MPICC MPICXX=$MPICXX $host_opt $polling_opt --with-comm-layer=mpi3 --prefix=$KOCHI_INSTALL_PREFIX
+      develop:
+        git: ../massivethreads-dm
+        current_state: true
+        script:
+          - export CFLAGS="-O3 -g -Wall $CFLAGS"
+          - CCFLAGS=$CFLAGS CXXFLAGS=$CFLAGS ./configure MPICC=$MPICC MPICXX=$MPICXX $host_opt $polling_opt --with-comm-layer=mpi3 --prefix=$KOCHI_INSTALL_PREFIX
+    before_script:
+      - $MPICXX --version
+      - if [[ $KOCHI_MACHINE == wisteria-o ]]; then host_opt="--host=aarch64"; else host_opt=""; fi
+      - if [[ $KOCHI_MACHINE == local ]]; then polling_opt="--enable-polling"; else polling_opt=""; fi
+    after_script:
+      - make -j
+      - make install
