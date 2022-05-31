@@ -70,6 +70,7 @@
 
 template <typename T>
 class raw_span {
+  using this_t = raw_span<T>;
   T* ptr_;
   size_t n_;
 public:
@@ -81,16 +82,16 @@ public:
 
   constexpr T& operator[](size_t i) const { assert(i < n_); return ptr_[i]; }
 
-  constexpr raw_span<T> subspan(size_t offset, size_t count) const {
+  constexpr this_t subspan(size_t offset, size_t count) const {
     assert(offset + count <= n_);
     return {ptr_ + offset, count};
   }
 
-  constexpr std::pair<raw_span<T>, raw_span<T>> divide(size_t at) const {
+  constexpr std::pair<this_t, this_t> divide(size_t at) const {
     return {subspan(0, at), subspan(at, n_ - at)};
   }
 
-  constexpr std::pair<raw_span<T>, raw_span<T>> divide_two() const {
+  constexpr std::pair<this_t, this_t> divide_two() const {
     return divide(n_ / 2);
   }
 
@@ -110,14 +111,103 @@ public:
     return acc;
   }
 
-  friend void copy(raw_span<T> dest, raw_span<T> src) {
+  template <pcas::access_mode Mode>
+  raw_span<T> checkout() const { return this; }
+
+  void checkin(raw_span<T> s) const {}
+
+  friend void copy(this_t dest, this_t src) {
     assert(dest.n_ == src.n_);
     std::memcpy(dest.ptr_, src.ptr_, sizeof(T) * dest.n_);
   }
 };
 
+pcas::pcas* g_pc = NULL;
+
+template <typename T, size_t BlockSize = 65536>
+class gptr_span {
+  using this_t = gptr_span<T, BlockSize>;
+  using ptr_t = pcas::global_ptr<T>;
+  ptr_t ptr_;
+  size_t n_;
+public:
+  using element_type = T;
+
+  gptr_span(ptr_t ptr, size_t n) : ptr_(ptr), n_(n) {}
+
+  constexpr size_t size() const noexcept { return n_; }
+
+  constexpr T operator[](size_t i) const {
+    assert(i < n_);
+    auto p = g_pc->checkout<pcas::access_mode::read>(ptr_ + i, 1);
+    T ret = *p;
+    g_pc->checkin(p);
+    return ret;
+  }
+
+  constexpr this_t subspan(size_t offset, size_t count) const {
+    assert(offset + count <= n_);
+    return {ptr_ + offset, count};
+  }
+
+  constexpr std::pair<this_t, this_t> divide(size_t at) const {
+    return {subspan(0, at), subspan(at, n_ - at)};
+  }
+
+  constexpr std::pair<this_t, this_t> divide_two() const {
+    return divide(n_ / 2);
+  }
+
+  template <typename F>
+  void for_each(F f) {
+    for (size_t i = 0; i < n_; i += BlockSize) {
+      size_t b = std::min(n_ - i, BlockSize);
+      auto p = g_pc->checkout<pcas::access_mode::read_write>(ptr_ + i, b);
+      for (size_t j = 0; j < b; j++) {
+        f(p[j]);
+      }
+      g_pc->checkin(p);
+    }
+  }
+
+  template <typename Acc, typename F>
+  Acc reduce(Acc init, F f) {
+    Acc acc = init;
+    for (size_t i = 0; i < n_; i += BlockSize) {
+      size_t b = std::min(n_ - i, BlockSize);
+      auto p = g_pc->checkout<pcas::access_mode::read>(ptr_ + i, b);
+      for (size_t j = 0; j < b; j++) {
+        acc = f(acc, p[j]);
+      }
+      g_pc->checkin(p);
+    }
+    return acc;
+  }
+
+  template <pcas::access_mode Mode>
+  raw_span<T> checkout() const {
+    auto p = g_pc->checkout<Mode>(ptr_, n_);
+    return {const_cast<T*>(p), n_}; // TODO: reconsider const type handling
+  }
+
+  void checkin(raw_span<T> s) const {
+    g_pc->checkin(&s[0]);
+  }
+
+  friend void copy(this_t dest, this_t src) {
+    assert(dest.n_ == src.n_);
+    for (size_t i = 0; i < dest.n_; i += BlockSize) {
+      size_t b = std::min(dest.n_ - i, BlockSize);
+      auto d = g_pc->checkout<pcas::access_mode::write>(dest.ptr_ + i, b);
+      auto s = g_pc->checkout<pcas::access_mode::read >(src.ptr_  + i, b);
+      std::memcpy(d, s, sizeof(T) * b);
+      g_pc->checkin(d);
+      g_pc->checkin(s);
+    }
+  }
+};
+
 using elem_t = float;
-using gptr_t = pcas::global_ptr<elem_t>;
 
 int my_rank = -1;
 int n_procs = -1;
@@ -190,7 +280,7 @@ void quicksort_seq(Span s) {
 }
 
 template <typename Span>
-void merge_seq(Span s1, Span s2, Span dest) {
+void merge_seq(const Span s1, const Span s2, Span dest) {
   assert(s1.size() + s2.size() == dest.size());
 
   size_t d = 0;
@@ -248,7 +338,15 @@ void cilkmerge(Span s1, Span s2, Span dest) {
     return;
   }
   if (s1.size() < cutoff_merge) {
-    merge_seq(s1, s2, dest);
+    auto s1_ = s1.template checkout<pcas::access_mode::read>();
+    auto s2_ = s2.template checkout<pcas::access_mode::read>();
+    auto dest_ = dest.template checkout<pcas::access_mode::write>();
+
+    merge_seq(s1_, s2_, dest_);
+
+    s1.checkin(s1_);
+    s2.checkin(s2_);
+    dest.checkin(dest_);
     return;
   }
 
@@ -268,7 +366,11 @@ void cilksort(Span a, Span b) {
   assert(a.size() == b.size());
 
   if (a.size() < cutoff_quick) {
-    quicksort_seq(a);
+    auto a_ = a.template checkout<pcas::access_mode::read_write>();
+
+    quicksort_seq(a_);
+
+    a.checkin(a_);
     return;
   }
 
@@ -300,9 +402,9 @@ void init_array(Span s) {
 
 template <typename Span>
 bool check_sorted(Span s) {
-  using acc_type = std::pair<bool, typename Span::element_type&>;
+  using acc_type = std::pair<bool, typename Span::element_type>;
   acc_type init{true, s[0]};
-  auto ret = s.reduce(init, [=](auto acc, typename Span::element_type& e) {
+  auto ret = s.reduce(init, [=](auto acc, const typename Span::element_type& e) {
     auto prev_e = acc.second;
     if (prev_e > e) return acc_type{false    , e};
     else            return acc_type{acc.first, e};
@@ -380,26 +482,32 @@ int real_main(int argc, char **argv) {
     fflush(stdout);
   }
 
-  /* constexpr uint64_t cache_size = 16 * 1024 * 1024; */
-  /* pcas::pcas pc(cache_size); */
+  constexpr uint64_t cache_size = 16 * 1024 * 1024;
+  g_pc = new pcas::pcas(cache_size);
 
-  /* auto array = pc.malloc<elem_t>(n_input); */
-  /* auto buf   = pc.malloc<elem_t>(n_input); */
+  auto array = g_pc->malloc<elem_t>(n_input);
+  auto buf   = g_pc->malloc<elem_t>(n_input);
 
-  elem_t* array = (elem_t*)malloc(sizeof(elem_t) * n_input);
-  elem_t* buf   = (elem_t*)malloc(sizeof(elem_t) * n_input);
+  gptr_span<elem_t> a(array, n_input);
+  gptr_span<elem_t> b(buf  , n_input);
 
-  raw_span<elem_t> a(array, n_input);
-  raw_span<elem_t> b(buf  , n_input);
+  /* elem_t* array = (elem_t*)malloc(sizeof(elem_t) * n_input); */
+  /* elem_t* buf   = (elem_t*)malloc(sizeof(elem_t) * n_input); */
+  /* raw_span<elem_t> a(array, n_input); */
+  /* raw_span<elem_t> b(buf  , n_input); */
 
   for (int r = 0; r < n_repeats; r++) {
-    init_array(a);
+    if (my_rank == 0) {
+      init_array(a);
+    }
 
     uint64_t t0 = madi::global_clock::get_time();
 
-    madm::uth::thread<void> th([=]() { cilksort(a, b); });
-    th.join();
-    /* std::sort(array, array + n_input); */
+    if (my_rank == 0) {
+      madm::uth::thread<void> th([=]() { cilksort(a, b); });
+      th.join();
+      /* std::sort(array, array + n_input); */
+    }
 
     uint64_t t1 = madi::global_clock::get_time();
 
@@ -411,13 +519,17 @@ int real_main(int argc, char **argv) {
         }
       }
     }
+
+    madm::uth::barrier();
   }
 
-  /* pc.free(array); */
-  /* pc.free(buf); */
+  g_pc->free(array);
+  g_pc->free(buf);
 
-  free(array);
-  free(buf);
+  delete g_pc;
+
+  /* free(array); */
+  /* free(buf); */
 
   return 0;
 }

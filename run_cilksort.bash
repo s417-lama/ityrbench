@@ -14,8 +14,8 @@ MPICXX=$MPICXX CFLAGS=$CFLAGS make cilksort.out
 export MADM_RUN__=1
 export MADM_PRINT_ENV=1
 
-n=1
-# n=6
+# n=1
+n=6
 # n=36
 # n=48
 
