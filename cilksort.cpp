@@ -86,6 +86,14 @@ public:
     return {ptr_ + offset, count};
   }
 
+  constexpr std::pair<raw_span<T>, raw_span<T>> divide(size_t at) const {
+    return {subspan(0, at), subspan(at, n_ - at)};
+  }
+
+  constexpr std::pair<raw_span<T>, raw_span<T>> divide_two() const {
+    return divide(n_ / 2);
+  }
+
   template <typename F>
   void for_each(F f) {
     for (size_t i = 0; i < n_; i++) {
@@ -166,7 +174,7 @@ std::pair<Span, Span> partition_seq(Span s, elem_t pivot) {
     if (l >= h) break;
     std::swap(s[l++], s[h--]);
   }
-  return {s.subspan(0, h + 1), s.subspan(h + 1, s.size() - (h + 1))};
+  return s.divide(h + 1);
 }
 
 template <typename Span>
@@ -243,16 +251,13 @@ void cilkmerge(Span s1, Span s2, Span dest) {
     merge_seq(s1, s2, dest);
     return;
   }
+
   size_t split1 = s1.size() / 2;
   size_t split2 = binary_search(s2, s1[split1]);
 
-  Span s11 = s1.subspan(0, split1);
-  Span s12 = s1.subspan(split1, s1.size() - split1);
-  Span s21 = s2.subspan(0, split2);
-  Span s22 = s2.subspan(split2, s2.size() - split2);
-
-  Span dest1 = dest.subspan(0, split1 + split2);
-  Span dest2 = dest.subspan(split1 + split2, dest.size() - (split1 + split2));
+  auto [s11  , s12  ] = s1.divide(split1);
+  auto [s21  , s22  ] = s2.divide(split2);
+  auto [dest1, dest2] = dest.divide(split1 + split2);
 
   cilkmerge(s11, s21, dest1);
   cilkmerge(s12, s22, dest2);
@@ -267,26 +272,18 @@ void cilksort(Span a, Span b) {
     return;
   }
 
-  size_t n = a.size();
-  size_t m = n / 4;
+  auto [a12, a34] = a.divide_two();
+  auto [b12, b34] = b.divide_two();
 
-  Span a1 = a.subspan(0    , m        );
-  Span a2 = a.subspan(m    , m        );
-  Span a3 = a.subspan(m * 2, m        );
-  Span a4 = a.subspan(m * 3, n - m * 3);
-
-  Span b1 = b.subspan(0    , m        );
-  Span b2 = b.subspan(m    , m        );
-  Span b3 = b.subspan(m * 2, m        );
-  Span b4 = b.subspan(m * 3, n - m * 3);
+  auto [a1, a2] = a12.divide_two();
+  auto [a3, a4] = a34.divide_two();
+  auto [b1, b2] = b12.divide_two();
+  auto [b3, b4] = b34.divide_two();
 
   cilksort(a1, b1);
   cilksort(a2, b2);
   cilksort(a3, b3);
   cilksort(a4, b4);
-
-  Span b12 = b.subspan(0    , m * 2    );
-  Span b34 = b.subspan(m * 2, n - m * 2);
 
   cilkmerge(a1, a2, b12);
   cilkmerge(a3, a4, b34);
@@ -322,8 +319,8 @@ void show_help_and_exit(int argc, char** argv) {
            "    -c : check the result (int)\n"
            "    -s : serial execution (int)\n"
            "    -i : cutoff for insertion sort (size_t)\n"
-           "    -m : cutoff for mergesort (size_t)\n"
-           "    -q : cutoff for quicksort (size_t)\n", argv[0]);
+           "    -m : cutoff for serial merge (size_t)\n"
+           "    -q : cutoff for serial quicksort (size_t)\n", argv[0]);
   }
   exit(1);
 }
@@ -371,9 +368,9 @@ int real_main(int argc, char **argv) {
            "# of repeats:                  %d\n"
            "Check enabled:                 %d\n"
            "Serial execution:              %d\n"
-           "Cutoff (Insertion sort):       %ld\n"
-           "Cutoff (Mergesort):            %ld\n"
-           "Cutoff (Quicksort):            %ld\n"
+           "Cutoff (insertion sort):       %ld\n"
+           "Cutoff (merge):                %ld\n"
+           "Cutoff (quicksort):            %ld\n"
            "-------------------------------------------------------------\n",
            n_procs, n_input, n_repeats, enable_check, serial_exec,
            cutoff_insert, cutoff_merge, cutoff_quick);
