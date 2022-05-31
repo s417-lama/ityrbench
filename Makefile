@@ -13,7 +13,7 @@ MAIN_TARGETS := $(patsubst %.cpp,%.out,$(SRCS))
 all: $(MAIN_TARGETS) $(LIB_TARGETS)
 
 %.out: %.cpp
-	$(MPICXX) $(CXXFLAGS) -o $@ $^ $(LDFLAGS)
+	${MPICXX} $(CXXFLAGS) -o $@ $^ $(LDFLAGS)
 
 clean:
 	rm -rf $(MAIN_TARGETS) $(LIB_TARGETS)

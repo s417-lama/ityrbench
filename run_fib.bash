@@ -1,16 +1,18 @@
 #!/bin/bash
 set -euo pipefail
 
-mpirun --version
+MPICXX=${MPICXX:-mpicxx}
+
+mpirun --version || true
 $MPICXX --version
 
-make fib.out
+MPICXX=$MPICXX make fib.out
 
 export MADM_RUN__=1
 export MADM_PRINT_ENV=1
 
-n=1
-# n=6
+# n=1
+n=6
 # n=36
 # n=48
 

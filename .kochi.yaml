@@ -10,16 +10,18 @@ machines:
       - n_nodes=$(echo $KOCHI_ALLOC_NODE_SPEC | cut -f 1 -d ":" | sed 's/x/*/g' | bc)
       - echo $KOCHI_WORKER_LAUNCH_CMD | pjsub -X -j -g gc64 -L rscgrp=regular-o,node=$KOCHI_ALLOC_NODE_SPEC,elapse=${KOCHI_ALLOC_TIME_LIMIT:-6:00:00} --mpi proc=$((n_nodes * 48))
     load_env_script:
-      on_login_node:
-        - module load odyssey
-        - export MPICC=mpifccpx
-        - export MPICXX=mpiFCCpx
-        - export CFLAGS="-Nclang $CFLAGS"
-      on_machine:
-        - . /work/gc64/c64050/venv/odyssey/bin/activate
-        - export MPICC=mpifcc
-        - export MPICXX=mpiFCC
-        - export CFLAGS="-Nclang $CFLAGS"
+      on_login_node: |
+        module load odyssey
+        export MPICC=mpifccpx
+        export MPICXX=mpiFCCpx
+        export CFLAGS="-Nclang $CFLAGS"
+        module load cmake/3.22.2
+      on_machine: |
+        . /work/gc64/c64050/venv/odyssey/bin/activate
+        export MPICC=mpifcc
+        export MPICXX=mpiFCC
+        export CFLAGS="-Nclang $CFLAGS"
+        module load cmake/3.22.2
 
   ito-a:
     login_host: ito
@@ -43,10 +45,11 @@ machines:
       echo $KOCHI_WORKER_LAUNCH_CMD | pjsub -j -o /dev/null -L rscunit=ito-a,rscgrp=$rscgrp,vnode=$KOCHI_ALLOC_NODE_SPEC,vnode-core=36,elapse=${KOCHI_ALLOC_TIME_LIMIT:-6:00:00}
     load_env_script:
       - module load python/3.6.2
-      - . venv/ito-a/bin/activate
+      - . ~/venv/ito-a/bin/activate
       - module load gcc/10.2.0
       - export MPICC=mpicc
       - export MPICXX=mpicxx
+      - module load cmake/3.18.2
 
 dependencies:
   ucx:
@@ -66,11 +69,17 @@ dependencies:
   openmpi:
     git: https://github.com/open-mpi/ompi.git
     depends:
-      ucx:
+      - name: ucx
         recipe: 1.12.1
     recipes:
       5.0.0rc2:
         branch: v5.0.0rc2
+      5.0.0rc4:
+        branch: v5.0.0rc4
+      5.0.0rc6:
+        branch: v5.0.0rc6
+      5.0.0rc7:
+        branch: v5.0.0rc7
       5.0.x:
         branch: v5.0.x
     script:
@@ -87,9 +96,12 @@ dependencies:
   massivethreads-dm:
     git: git@gitlab.eidos.ic.i.u-tokyo.ac.jp:shiina/massivethreads-dm.git
     depends:
-      openmpi:
+      - name: openmpi
         recipe: 5.0.0rc2
-        machines: [local, ito-a]
+        machines: [ito-a]
+      - name: openmpi
+        recipe: 5.0.0rc7
+        machines: [local]
     recipes:
       release:
         branch: greedy_gc
@@ -108,4 +120,29 @@ dependencies:
       - if [[ $KOCHI_MACHINE == local ]]; then polling_opt="--enable-polling"; else polling_opt=""; fi
     after_script:
       - make -j
+      - make install
+
+  pcas:
+    git: git@gitlab.eidos.ic.i.u-tokyo.ac.jp:shiina/pcas.git
+    depends:
+      - name: openmpi
+        recipe: 5.0.0rc2
+        machines: [ito-a]
+      - name: openmpi
+        recipe: 5.0.0rc7
+        machines: [local]
+    recipes:
+      release:
+        branch: master
+      develop:
+        git: ../pcas
+        current_state: true
+      develop_test:
+        git: ../pcas
+        current_state: true
+        script:
+          - CC=$MPICC CXX=$MPICXX cmake -DCMAKE_INSTALL_PREFIX=$KOCHI_INSTALL_PREFIX .
+          - make all test install
+    script:
+      - CC=$MPICC CXX=$MPICXX cmake -DCMAKE_INSTALL_PREFIX=$KOCHI_INSTALL_PREFIX -DBUILD_TESTING=OFF .
       - make install
