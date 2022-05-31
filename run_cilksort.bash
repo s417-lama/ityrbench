@@ -6,7 +6,10 @@ MPICXX=${MPICXX:-mpicxx}
 mpirun --version || true
 $MPICXX --version
 
-MPICXX=$MPICXX make cilksort.out
+CFLAGS=${CFLAGS:-""}
+CFLAGS="$CFLAGS -DNDEBUG"
+
+MPICXX=$MPICXX CFLAGS=$CFLAGS make cilksort.out
 
 export MADM_RUN__=1
 export MADM_PRINT_ENV=1

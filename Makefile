@@ -5,8 +5,10 @@ UTH_LDFLAGS  := -L$(UTH_PATH)/lib -luth -lmcomm
 PCAS_PATH     := ${KOCHI_INSTALL_PREFIX_PCAS}
 PCAS_CXXFLAGS := -I$(PCAS_PATH)/include
 
-CXXFLAGS := $(UTH_CXXFLAGS) $(PCAS_CXXFLAGS) -I. -std=c++14 -O3 -g -Wall $(CXXFLAGS) $(CFLAGS)
+CXXFLAGS := $(UTH_CXXFLAGS) $(PCAS_CXXFLAGS) -I. -std=c++17 -O3 -g -Wall $(CXXFLAGS) $(CFLAGS)
 LDFLAGS  := $(UTH_LDFLAGS) -lpthread -lm -ldl
+
+MPICXX := $(or ${MPICXX},mpicxx)
 
 SRCS := $(filter-out $(LIBS),$(wildcard ./*.cpp))
 
@@ -16,7 +18,7 @@ MAIN_TARGETS := $(patsubst %.cpp,%.out,$(SRCS))
 all: $(MAIN_TARGETS) $(LIB_TARGETS)
 
 %.out: %.cpp
-	${MPICXX} $(CXXFLAGS) -o $@ $^ $(LDFLAGS)
+	$(MPICXX) $(CXXFLAGS) -o $@ $^ $(LDFLAGS)
 
 clean:
 	rm -rf $(MAIN_TARGETS) $(LIB_TARGETS)

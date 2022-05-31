@@ -68,6 +68,46 @@
 # define FIXED_SEED 1
 #endif
 
+template <typename T>
+class raw_span {
+  T* ptr_;
+  size_t n_;
+public:
+  using element_type = T;
+
+  raw_span(T* ptr, size_t n) : ptr_(ptr), n_(n) {}
+
+  constexpr size_t size() const noexcept { return n_; }
+
+  constexpr T& operator[](size_t i) const { assert(i < n_); return ptr_[i]; }
+
+  constexpr raw_span<T> subspan(size_t offset, size_t count) const {
+    assert(offset + count <= n_);
+    return {ptr_ + offset, count};
+  }
+
+  template <typename F>
+  void for_each(F f) {
+    for (size_t i = 0; i < n_; i++) {
+      f(ptr_[i]);
+    }
+  }
+
+  template <typename Acc, typename F>
+  Acc reduce(Acc init, F f) {
+    Acc acc = init;
+    for (size_t i = 0; i < n_; i++) {
+      acc = f(acc, ptr_[i]);
+    }
+    return acc;
+  }
+
+  friend void copy(raw_span<T> dest, raw_span<T> src) {
+    assert(dest.n_ == src.n_);
+    std::memcpy(dest.ptr_, src.ptr_, sizeof(T) * dest.n_);
+  }
+};
+
 using elem_t = float;
 using gptr_t = pcas::global_ptr<elem_t>;
 
@@ -92,153 +132,185 @@ static inline elem_t my_random() {
   return dist(engine);
 }
 
-static inline elem_t select_pivot(elem_t* array, size_t n) {
+template <typename Span>
+static inline elem_t select_pivot(Span s) {
   // median of three values
-  if (n < 3) return array[0];
-  elem_t a = array[0];
-  elem_t b = array[1];
-  elem_t c = array[2];
+  if (s.size() < 3) return s[0];
+  elem_t a = s[0];
+  elem_t b = s[1];
+  elem_t c = s[2];
   if ((a > b) != (a > c))      return a;
   else if ((b > a) != (b > c)) return b;
   else                         return c;
 }
 
-void insertion_sort(elem_t* array, size_t n) {
-  for (size_t i = 1; i < n; i++) {
-    elem_t a = array[i];
+template <typename Span>
+void insertion_sort(Span s) {
+  for (size_t i = 1; i < s.size(); i++) {
+    elem_t a = s[i];
     size_t j;
-    for (j = 1; j <= i && array[i - j] > a; j++) {
-      array[i - j + 1] = array[i - j];
+    for (j = 1; j <= i && s[i - j] > a; j++) {
+      s[i - j + 1] = s[i - j];
     }
-    array[i - j + 1] = a;
+    s[i - j + 1] = a;
   }
 }
 
-size_t partition_seq(elem_t* array, size_t n, elem_t pivot) {
+template <typename Span>
+std::pair<Span, Span> partition_seq(Span s, elem_t pivot) {
   size_t l = 0;
-  size_t h = n - 1;
+  size_t h = s.size() - 1;
   while (true) {
-    while (array[l] < pivot) l++;
-    while (array[h] > pivot) h--;
+    while (s[l] < pivot) l++;
+    while (s[h] > pivot) h--;
     if (l >= h) break;
-    std::swap(array[l++], array[h--]);
+    std::swap(s[l++], s[h--]);
   }
-  return h + 1;
+  return {s.subspan(0, h + 1), s.subspan(h + 1, s.size() - (h + 1))};
 }
 
-void quicksort_seq(elem_t* array, size_t n) {
-  if (n <= cutoff_insert) {
-    insertion_sort(array, n);
+template <typename Span>
+void quicksort_seq(Span s) {
+  if (s.size() <= cutoff_insert) {
+    insertion_sort(s);
   } else {
-    elem_t pivot = select_pivot(array, n);
-    size_t l_size = partition_seq(array, n, pivot);
-    quicksort_seq(array         , l_size    );
-    quicksort_seq(array + l_size, n - l_size);
+    elem_t pivot = select_pivot(s);
+    auto [s1, s2] = partition_seq(s, pivot);
+    quicksort_seq(s1);
+    quicksort_seq(s2);
   }
 }
 
-void merge_seq(elem_t* array1, size_t n1,
-               elem_t* array2, size_t n2,
-               elem_t* array_dest) {
+template <typename Span>
+void merge_seq(Span s1, Span s2, Span dest) {
+  assert(s1.size() + s2.size() == dest.size());
+
   size_t d = 0;
   size_t l1 = 0;
   size_t l2 = 0;
-  elem_t a1 = array1[0];
-  elem_t a2 = array2[0];
+  elem_t a1 = s1[0];
+  elem_t a2 = s2[0];
   while (true) {
     if (a1 < a2) {
-      array_dest[d++] = a1;
+      dest[d++] = a1;
       l1++;
-      if (l1 >= n1) break;
-      a1 = array1[l1];
+      if (l1 >= s1.size()) break;
+      a1 = s1[l1];
     } else {
-      array_dest[d++] = a2;
+      dest[d++] = a2;
       l2++;
-      if (l2 >= n2) break;
-      a2 = array2[l2];
+      if (l2 >= s2.size()) break;
+      a2 = s2[l2];
     }
   }
-  if (l1 >= n1) {
-    std::memcpy(&array_dest[d], &array2[l2], sizeof(elem_t) * (n2 - l2));
+  if (l1 >= s1.size()) {
+    Span dest_r = dest.subspan(d, s2.size() - l2);
+    Span src_r  = s2.subspan(l2, s2.size() - l2);
+    copy(dest_r, src_r);
   } else {
-    std::memcpy(&array_dest[d], &array1[l1], sizeof(elem_t) * (n1 - l1));
+    Span dest_r = dest.subspan(d, s1.size() - l1);
+    Span src_r  = s1.subspan(l1, s1.size() - l1);
+    copy(dest_r, src_r);
   }
 }
 
-elem_t binary_search(elem_t* array, size_t n, elem_t value) {
+template <typename Span>
+elem_t binary_search(Span s, const typename Span::element_type& v) {
   size_t l = 0;
-  size_t h = n;
+  size_t h = s.size();
   while (l < h) {
     size_t m = l + (h - l) / 2;
-    if (value <= array[m]) h = m;
-    else                   l = m + 1;
+    if (v <= s[m]) h = m;
+    else           l = m + 1;
   }
-  if (value < array[l]) return l;
-  else                  return l + 1;
+  if (v < s[l]) return l;
+  else          return l + 1;
 }
 
-void cilkmerge(elem_t* array1, size_t n1,
-               elem_t* array2, size_t n2,
-               elem_t* array_dest) {
-  if (n1 < n2) {
-    // array2 is always smaller
-    std::swap(array1, array2);
-    std::swap(n1, n2);
+template <typename Span>
+void cilkmerge(Span s1, Span s2, Span dest) {
+  assert(s1.size() + s2.size() == dest.size());
+
+  if (s1.size() < s2.size()) {
+    // s2 is always smaller
+    std::swap(s1, s2);
   }
-  if (n2 == 0) {
-    std::memcpy(array_dest, array1, sizeof(elem_t) * n1);
+  if (s2.size() == 0) {
+    copy(dest, s1);
     return;
   }
-  if (n1 < cutoff_merge) {
-    merge_seq(array1, n1, array2, n2, array_dest);
+  if (s1.size() < cutoff_merge) {
+    merge_seq(s1, s2, dest);
     return;
   }
-  size_t split1 = n1 / 2;
-  size_t split2 = binary_search(array2, n2, array1[split1]);
-  cilkmerge(array1         , split1     , array2         , split2     , array_dest);
-  cilkmerge(array1 + split1, n1 - split1, array2 + split2, n2 - split2, array_dest + split1 + split2);
+  size_t split1 = s1.size() / 2;
+  size_t split2 = binary_search(s2, s1[split1]);
+
+  Span s11 = s1.subspan(0, split1);
+  Span s12 = s1.subspan(split1, s1.size() - split1);
+  Span s21 = s2.subspan(0, split2);
+  Span s22 = s2.subspan(split2, s2.size() - split2);
+
+  Span dest1 = dest.subspan(0, split1 + split2);
+  Span dest2 = dest.subspan(split1 + split2, dest.size() - (split1 + split2));
+
+  cilkmerge(s11, s21, dest1);
+  cilkmerge(s12, s22, dest2);
 }
 
-void cilksort(elem_t* array, elem_t* buf, size_t n) {
-  if (n < cutoff_quick) {
-    quicksort_seq(array, n);
+template <typename Span>
+void cilksort(Span a, Span b) {
+  assert(a.size() == b.size());
+
+  if (a.size() < cutoff_quick) {
+    quicksort_seq(a);
     return;
   }
 
+  size_t n = a.size();
   size_t m = n / 4;
-  elem_t* a1 = array;
-  elem_t* a2 = array + m;
-  elem_t* a3 = array + 2 * m;
-  elem_t* a4 = array + 3 * m;
-  elem_t* b1 = buf;
-  elem_t* b2 = buf + m;
-  elem_t* b3 = buf + 2 * m;
-  elem_t* b4 = buf + 3 * m;
 
-  cilksort(a1, b1, m        );
-  cilksort(a2, b2, m        );
-  cilksort(a3, b3, m        );
-  cilksort(a4, b4, n - 3 * m);
+  Span a1 = a.subspan(0    , m        );
+  Span a2 = a.subspan(m    , m        );
+  Span a3 = a.subspan(m * 2, m        );
+  Span a4 = a.subspan(m * 3, n - m * 3);
 
-  cilkmerge(a1, m, a2, m        , b1);
-  cilkmerge(a3, m, a4, n - 3 * m, b3);
+  Span b1 = b.subspan(0    , m        );
+  Span b2 = b.subspan(m    , m        );
+  Span b3 = b.subspan(m * 2, m        );
+  Span b4 = b.subspan(m * 3, n - m * 3);
 
-  cilkmerge(b1, 2 * m, b3, n - 2 * m, a1);
+  cilksort(a1, b1);
+  cilksort(a2, b2);
+  cilksort(a3, b3);
+  cilksort(a4, b4);
+
+  Span b12 = b.subspan(0    , m * 2    );
+  Span b34 = b.subspan(m * 2, n - m * 2);
+
+  cilkmerge(a1, a2, b12);
+  cilkmerge(a3, a4, b34);
+
+  cilkmerge(b12, b34, a);
 }
 
-void init_array(elem_t* array, size_t n) {
-  for (size_t i = 0; i < n; i++) {
-    array[i] = my_random();
-  }
+template <typename Span>
+void init_array(Span s) {
+  s.for_each([=](typename Span::element_type& e) {
+    e = my_random();
+  });
 }
 
-bool check_sorted(elem_t* array, size_t n) {
-  for (size_t i = 0; i < n - 1; i++) {
-    if (array[i] > array[i + 1]) {
-      return false;
-    }
-  }
-  return true;
+template <typename Span>
+bool check_sorted(Span s) {
+  using acc_type = std::pair<bool, typename Span::element_type&>;
+  acc_type init{true, s[0]};
+  auto ret = s.reduce(init, [=](auto acc, typename Span::element_type& e) {
+    auto prev_e = acc.second;
+    if (prev_e > e) return acc_type{false    , e};
+    else            return acc_type{acc.first, e};
+  });
+  return ret.first;
 }
 
 void show_help_and_exit(int argc, char** argv) {
@@ -316,15 +388,19 @@ int real_main(int argc, char **argv) {
 
   /* auto array = pc.malloc<elem_t>(n_input); */
   /* auto buf   = pc.malloc<elem_t>(n_input); */
+
   elem_t* array = (elem_t*)malloc(sizeof(elem_t) * n_input);
   elem_t* buf   = (elem_t*)malloc(sizeof(elem_t) * n_input);
 
+  raw_span<elem_t> a(array, n_input);
+  raw_span<elem_t> b(buf  , n_input);
+
   for (int r = 0; r < n_repeats; r++) {
-    init_array(array, n_input);
+    init_array(a);
 
     uint64_t t0 = madi::global_clock::get_time();
 
-    madm::uth::thread<void> th(cilksort, array, buf, n_input);
+    madm::uth::thread<void> th([=]() { cilksort(a, b); });
     th.join();
     /* std::sort(array, array + n_input); */
 
@@ -333,7 +409,7 @@ int real_main(int argc, char **argv) {
     if (my_rank == 0) {
       printf("[%d] %ld ns\n", r, t1 - t0);
       if (enable_check) {
-        if (!check_sorted(array, n_input)) {
+        if (!check_sorted(a)) {
           printf("check failed.\n");
         }
       }
@@ -342,8 +418,10 @@ int real_main(int argc, char **argv) {
 
   /* pc.free(array); */
   /* pc.free(buf); */
+
   free(array);
   free(buf);
+
   return 0;
 }
 
