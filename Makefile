@@ -2,7 +2,10 @@ UTH_PATH     := ${KOCHI_INSTALL_PREFIX_MASSIVETHREADS_DM}
 UTH_CXXFLAGS := -I$(UTH_PATH)/include -fno-stack-protector
 UTH_LDFLAGS  := -L$(UTH_PATH)/lib -luth -lmcomm
 
-CXXFLAGS := $(UTH_CXXFLAGS) -I. -std=c++14 -O3 -g -Wall $(CXXFLAGS) $(CFLAGS)
+PCAS_PATH     := ${KOCHI_INSTALL_PREFIX_PCAS}
+PCAS_CXXFLAGS := -I$(PCAS_PATH)/include
+
+CXXFLAGS := $(UTH_CXXFLAGS) $(PCAS_CXXFLAGS) -I. -std=c++14 -O3 -g -Wall $(CXXFLAGS) $(CFLAGS)
 LDFLAGS  := $(UTH_LDFLAGS) -lpthread -lm -ldl
 
 SRCS := $(filter-out $(LIBS),$(wildcard ./*.cpp))

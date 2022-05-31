@@ -1,21 +1,8 @@
 #include <cstdio>
 #include <cstdlib>
 #include <iostream>
-#include <chrono>
 
 #include "uth.h"
-
-class measure_time {
-  std::chrono::time_point<std::chrono::system_clock> t_start_;
-public:
-  measure_time() {
-    t_start_ = std::chrono::system_clock::now();
-  }
-  ~measure_time() {
-    std::chrono::nanoseconds d = std::chrono::system_clock::now() - t_start_;
-    std::cout << d.count() << " ns" << std::endl;
-  }
-};
 
 int fib(int n) {
   if (n < 2) {
@@ -36,9 +23,11 @@ int real_main(int argc, char** argv) {
   madm::uth::barrier();
 
   if (my_rank == 0) {
-    measure_time mt;
+    uint64_t t0 = madi::global_clock::get_time();
     madm::uth::thread<int> th(fib, n);
     int x = th.join();
+    uint64_t t1 = madi::global_clock::get_time();
+    std::cout << t1 - t0 << " ns" << std::endl;
   }
 
   madm::uth::barrier();
