@@ -280,7 +280,7 @@ void merge_seq(const Span s1, const Span s2, Span dest) {
 }
 
 template <typename Span>
-elem_t binary_search(Span s, const typename Span::element_type& v) {
+size_t binary_search(Span s, const typename Span::element_type& v) {
   size_t l = 0;
   size_t h = s.size();
   while (l < h) {
@@ -288,8 +288,7 @@ elem_t binary_search(Span s, const typename Span::element_type& v) {
     if (v <= s[m]) h = m;
     else           l = m + 1;
   }
-  if (v < s[l]) return l;
-  else          return l + 1;
+  return h;
 }
 
 template <typename Span>
@@ -317,8 +316,8 @@ void cilkmerge(Span s1, Span s2, Span dest) {
     return;
   }
 
-  size_t split1 = s1.size() / 2;
-  size_t split2 = binary_search(s2, s1[split1]);
+  size_t split1 = (s1.size() + 1) / 2;
+  size_t split2 = binary_search(s2, s1[split1 - 1]);
 
   auto [s11  , s12  ] = s1.divide(split1);
   auto [s21  , s22  ] = s2.divide(split2);
