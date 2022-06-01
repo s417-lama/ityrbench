@@ -15,9 +15,11 @@ export MADM_RUN__=1
 export MADM_PRINT_ENV=1
 
 # n=1
-n=6
+# n=2
+# n=6
 # n=36
 # n=48
+n=576
 
 if [[ $KOCHI_MACHINE == ito-a ]]; then
   mpirun -n $n \

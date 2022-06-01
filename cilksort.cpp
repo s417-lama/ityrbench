@@ -1,59 +1,3 @@
-/*
- * Copyright (c) 2000 Massachusetts Institute of Technology
- * Copyright (c) 2000 Matteo Frigo
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
- *
- */
-
-/*
- * this program uses an algorithm that we call `cilksort'.
- * The algorithm is essentially mergesort:
- *
- *   cilksort(in[1..n]) =
- *       spawn cilksort(in[1..n/2], tmp[1..n/2])
- *       spawn cilksort(in[n/2..n], tmp[n/2..n])
- *       sync
- *       spawn cilkmerge(tmp[1..n/2], tmp[n/2..n], in[1..n])
- *
- *
- * The procedure cilkmerge does the following:
- *
- *       cilkmerge(A[1..n], B[1..m], C[1..(n+m)]) =
- *          find the median of A \union B using binary
- *          search.  The binary search gives a pair
- *          (ma, mb) such that ma + mb = (n + m)/2
- *          and all elements in A[1..ma] are smaller than
- *          B[mb..m], and all the B[1..mb] are smaller
- *          than all elements in A[ma..n].
- *
- *          spawn cilkmerge(A[1..ma], B[1..mb], C[1..(n+m)/2])
- *          spawn cilkmerge(A[ma..m], B[mb..n], C[(n+m)/2 .. (n+m)])
- *          sync
- *
- * The algorithm appears for the first time (AFAIK) in S. G. Akl and
- * N. Santoro, "Optimal Parallel Merging and Sorting Without Memory
- * Conflicts", IEEE Trans. Comp., Vol. C-36 No. 11, Nov. 1987 .  The
- * paper does not express the algorithm using recursion, but the
- * idea of finding the median is there.
- *
- * For cilksort of n elements, T_1 = O(n log n) and
- * T_\infty = O(log^3 n).  There is a way to shave a
- * log factor in the critical path (left as homework).
- */
-
 #include <cstdio>
 #include <cstdlib>
 #include <cstdint>
@@ -67,6 +11,11 @@
 #ifndef FIXED_SEED
 # define FIXED_SEED 1
 #endif
+
+pcas::pcas& pc(size_t cache_size = 0) {
+  static pcas::pcas g_pc(cache_size);
+  return g_pc;
+}
 
 template <typename T>
 class raw_span {
@@ -122,8 +71,6 @@ public:
   }
 };
 
-pcas::pcas* g_pc = NULL;
-
 template <typename T, size_t BlockSize = 65536>
 class gptr_span {
   using this_t = gptr_span<T, BlockSize>;
@@ -139,9 +86,9 @@ public:
 
   constexpr T operator[](size_t i) const {
     assert(i < n_);
-    auto p = g_pc->checkout<pcas::access_mode::read>(ptr_ + i, 1);
+    auto p = pc().checkout<pcas::access_mode::read>(ptr_ + i, 1);
     T ret = *p;
-    g_pc->checkin(p);
+    pc().checkin(p);
     return ret;
   }
 
@@ -162,11 +109,11 @@ public:
   void for_each(F f) {
     for (size_t i = 0; i < n_; i += BlockSize) {
       size_t b = std::min(n_ - i, BlockSize);
-      auto p = g_pc->checkout<pcas::access_mode::read_write>(ptr_ + i, b);
+      auto p = pc().checkout<pcas::access_mode::read_write>(ptr_ + i, b);
       for (size_t j = 0; j < b; j++) {
         f(p[j]);
       }
-      g_pc->checkin(p);
+      pc().checkin(p);
     }
   }
 
@@ -175,35 +122,69 @@ public:
     Acc acc = init;
     for (size_t i = 0; i < n_; i += BlockSize) {
       size_t b = std::min(n_ - i, BlockSize);
-      auto p = g_pc->checkout<pcas::access_mode::read>(ptr_ + i, b);
+      auto p = pc().checkout<pcas::access_mode::read>(ptr_ + i, b);
       for (size_t j = 0; j < b; j++) {
         acc = f(acc, p[j]);
       }
-      g_pc->checkin(p);
+      pc().checkin(p);
     }
     return acc;
   }
 
   template <pcas::access_mode Mode>
   raw_span<T> checkout() const {
-    auto p = g_pc->checkout<Mode>(ptr_, n_);
+    auto p = pc().checkout<Mode>(ptr_, n_);
     return {const_cast<T*>(p), n_}; // TODO: reconsider const type handling
   }
 
   void checkin(raw_span<T> s) const {
-    g_pc->checkin(&s[0]);
+    pc().checkin(&s[0]);
   }
 
   friend void copy(this_t dest, this_t src) {
     assert(dest.n_ == src.n_);
     for (size_t i = 0; i < dest.n_; i += BlockSize) {
       size_t b = std::min(dest.n_ - i, BlockSize);
-      auto d = g_pc->checkout<pcas::access_mode::write>(dest.ptr_ + i, b);
-      auto s = g_pc->checkout<pcas::access_mode::read >(src.ptr_  + i, b);
+      auto d = pc().checkout<pcas::access_mode::write>(dest.ptr_ + i, b);
+      auto s = pc().checkout<pcas::access_mode::read >(src.ptr_  + i, b);
       std::memcpy(d, s, sizeof(T) * b);
-      g_pc->checkin(d);
-      g_pc->checkin(s);
+      pc().checkin(d);
+      pc().checkin(s);
     }
+  }
+};
+
+template <size_t MaxTasks, bool SpawnLastTask = false>
+class task_group {
+  madm::uth::thread<void> tasks_[MaxTasks];
+  size_t n_ = 0;
+
+public:
+  task_group() {}
+
+  template <typename F, typename... Args>
+  void run(F f, Args... args) {
+    assert(n_ < MaxTasks);
+    if (SpawnLastTask || n_ < MaxTasks - 1) {
+      pc().release();
+      new (&tasks_[n_++]) madm::uth::thread<void>{[=]() {
+        pc().acquire();
+        f(args...);
+        pc().release();
+      }};
+    } else {
+      pc().acquire();
+      f(args...);
+      pc().release();
+    }
+  }
+
+  void wait() {
+    for (size_t i = 0; i < n_; i++) {
+      tasks_[i].join();
+    }
+    pc().acquire();
+    n_ = 0;
   }
 };
 
@@ -214,8 +195,8 @@ int n_procs = -1;
 
 size_t n_input       = 1024;
 int    n_repeats     = 10;
-int    enable_check  = 1;
-int    serial_exec   = 0;
+size_t cache_size    = 16;
+int    verify_result = 1;
 size_t cutoff_insert = 64;
 size_t cutoff_merge  = 16 * 1024;
 size_t cutoff_quick  = 16 * 1024;
@@ -357,8 +338,12 @@ void cilkmerge(Span s1, Span s2, Span dest) {
   auto [s21  , s22  ] = s2.divide(split2);
   auto [dest1, dest2] = dest.divide(split1 + split2);
 
-  cilkmerge(s11, s21, dest1);
-  cilkmerge(s12, s22, dest2);
+  /* cilkmerge(s11, s21, dest1); */
+  /* cilkmerge(s12, s22, dest2); */
+  task_group<2> tg;
+  tg.run(cilkmerge<Span>, s11, s21, dest1);
+  tg.run(cilkmerge<Span>, s12, s22, dest2);
+  tg.wait();
 }
 
 template <typename Span>
@@ -382,13 +367,27 @@ void cilksort(Span a, Span b) {
   auto [b1, b2] = b12.divide_two();
   auto [b3, b4] = b34.divide_two();
 
-  cilksort(a1, b1);
-  cilksort(a2, b2);
-  cilksort(a3, b3);
-  cilksort(a4, b4);
+  /* cilksort<Span>(a1, b1); */
+  /* cilksort<Span>(a2, b2); */
+  /* cilksort<Span>(a3, b3); */
+  /* cilksort<Span>(a4, b4); */
+  {
+    task_group<4> tg;
+    tg.run(cilksort<Span>, a1, b1);
+    tg.run(cilksort<Span>, a2, b2);
+    tg.run(cilksort<Span>, a3, b3);
+    tg.run(cilksort<Span>, a4, b4);
+    tg.wait();
+  }
 
-  cilkmerge(a1, a2, b12);
-  cilkmerge(a3, a4, b34);
+  /* cilkmerge(a1, a2, b12); */
+  /* cilkmerge(a3, a4, b34); */
+  {
+    task_group<2> tg;
+    tg.run(cilkmerge<Span>, a1, a2, b12);
+    tg.run(cilkmerge<Span>, a3, a4, b34);
+    tg.wait();
+  }
 
   cilkmerge(b12, b34, a);
 }
@@ -432,7 +431,7 @@ int real_main(int argc, char **argv) {
   n_procs = madm::uth::get_n_procs();
 
   int opt;
-  while ((opt = getopt(argc, argv, "n:r:c:s:i:m:q:h")) != EOF) {
+  while ((opt = getopt(argc, argv, "n:r:c:v:s:i:m:q:h")) != EOF) {
     switch (opt) {
       case 'n':
         n_input = atoll(optarg);
@@ -441,10 +440,10 @@ int real_main(int argc, char **argv) {
         n_repeats = atoi(optarg);
         break;
       case 'c':
-        enable_check = atoi(optarg);
+        cache_size = atoll(optarg);
         break;
-      case 's':
-        serial_exec = atoi(optarg);
+      case 'v':
+        verify_result = atoi(optarg);
         break;
       case 'i':
         cutoff_insert = atoll(optarg);
@@ -468,13 +467,13 @@ int real_main(int argc, char **argv) {
            "# of processes:                %d\n"
            "N (Input size):                %ld\n"
            "# of repeats:                  %d\n"
-           "Check enabled:                 %d\n"
-           "Serial execution:              %d\n"
+           "PCAS cache size:               %ld MB\n"
+           "Verify result:                 %d\n"
            "Cutoff (insertion sort):       %ld\n"
            "Cutoff (merge):                %ld\n"
            "Cutoff (quicksort):            %ld\n"
            "-------------------------------------------------------------\n",
-           n_procs, n_input, n_repeats, enable_check, serial_exec,
+           n_procs, n_input, n_repeats, cache_size, verify_result,
            cutoff_insert, cutoff_merge, cutoff_quick);
     printf("uth options:\n");
     madm::uth::print_options(stdout);
@@ -482,11 +481,10 @@ int real_main(int argc, char **argv) {
     fflush(stdout);
   }
 
-  constexpr uint64_t cache_size = 16 * 1024 * 1024;
-  g_pc = new pcas::pcas(cache_size);
+  pc(cache_size * 1024 * 1024);
 
-  auto array = g_pc->malloc<elem_t>(n_input);
-  auto buf   = g_pc->malloc<elem_t>(n_input);
+  auto array = pc().malloc<elem_t>(n_input);
+  auto buf   = pc().malloc<elem_t>(n_input);
 
   gptr_span<elem_t> a(array, n_input);
   gptr_span<elem_t> b(buf  , n_input);
@@ -504,8 +502,9 @@ int real_main(int argc, char **argv) {
     uint64_t t0 = madi::global_clock::get_time();
 
     if (my_rank == 0) {
-      madm::uth::thread<void> th([=]() { cilksort(a, b); });
-      th.join();
+      task_group<1, true> tg;
+      tg.run([=]() { cilksort(a, b); });
+      tg.wait();
       /* std::sort(array, array + n_input); */
     }
 
@@ -513,7 +512,8 @@ int real_main(int argc, char **argv) {
 
     if (my_rank == 0) {
       printf("[%d] %ld ns\n", r, t1 - t0);
-      if (enable_check) {
+      fflush(stdout);
+      if (verify_result) {
         if (!check_sorted(a)) {
           printf("check failed.\n");
         }
@@ -523,10 +523,8 @@ int real_main(int argc, char **argv) {
     madm::uth::barrier();
   }
 
-  g_pc->free(array);
-  g_pc->free(buf);
-
-  delete g_pc;
+  pc().free(array);
+  pc().free(buf);
 
   /* free(array); */
   /* free(buf); */
