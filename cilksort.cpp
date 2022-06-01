@@ -8,10 +8,6 @@
 #include "uth.h"
 #include "pcas/pcas.hpp"
 
-#ifndef FIXED_SEED
-# define FIXED_SEED 1
-#endif
-
 pcas::pcas& pc(size_t cache_size = 0) {
   static pcas::pcas g_pc(cache_size);
   return g_pc;
@@ -201,16 +197,6 @@ size_t cutoff_insert = 64;
 size_t cutoff_merge  = 16 * 1024;
 size_t cutoff_quick  = 16 * 1024;
 
-static inline elem_t my_random() {
-#if FIXED_SEED
-  static std::mt19937 engine(0);
-#else
-  static std::mt19937 engine(std::random_device{}());
-#endif
-  static std::uniform_real_distribution<elem_t> dist(0.0, 1.0);
-  return dist(engine);
-}
-
 template <typename Span>
 static inline elem_t select_pivot(Span s) {
   // median of three values
@@ -392,11 +378,31 @@ void cilksort(Span a, Span b) {
   cilkmerge(b12, b34, a);
 }
 
+template <typename Span, typename Rng>
+void init_array_aux(Span s, Rng r) {
+  static std::uniform_real_distribution<elem_t> dist(0.0, 1.0);
+  if (s.size() < cutoff_quick) {
+    s.for_each([&](typename Span::element_type& e) {
+      e = dist(r);
+    });
+  } else {
+    auto [s1, s2] = s.divide_two();
+    task_group<2> tg;
+    tg.run(init_array_aux<Span, Rng>, s1, r);
+    r.discard(s1.size());
+    tg.run(init_array_aux<Span, Rng>, s2, r);
+    tg.wait();
+  }
+}
+
 template <typename Span>
 void init_array(Span s) {
-  s.for_each([=](typename Span::element_type& e) {
-    e = my_random();
-  });
+  static int counter = 0;
+  std::mt19937 r(counter++);
+  init_array_aux(s, r);
+  /* s.for_each([&](typename Span::element_type& e) { */
+  /*   printf("%f\n", e); */
+  /* }); */
 }
 
 template <typename Span>
