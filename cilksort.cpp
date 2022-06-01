@@ -4,6 +4,7 @@
 #include <cstring>
 #include <unistd.h>
 #include <random>
+#include <sstream>
 
 #include "uth.h"
 #include "pcas/pcas.hpp"
@@ -24,6 +25,9 @@ public:
   raw_span(T* ptr, size_t n) : ptr_(ptr), n_(n) {}
 
   constexpr size_t size() const noexcept { return n_; }
+
+  constexpr T* begin() const noexcept { return ptr_; }
+  constexpr T* end()   const noexcept { return ptr_ + n_; }
 
   constexpr T& operator[](size_t i) const { assert(i < n_); return ptr_[i]; }
 
@@ -57,7 +61,7 @@ public:
   }
 
   template <pcas::access_mode Mode>
-  raw_span<T> checkout() const { return this; }
+  raw_span<T> checkout() const { return *this; }
 
   void checkin(raw_span<T> s) const {}
 
@@ -79,6 +83,10 @@ public:
   gptr_span(ptr_t ptr, size_t n) : ptr_(ptr), n_(n) {}
 
   constexpr size_t size() const noexcept { return n_; }
+
+  // FIXME
+  constexpr T* begin() const noexcept { return nullptr; }
+  constexpr T* end()   const noexcept { return nullptr; }
 
   constexpr T operator[](size_t i) const {
     assert(i < n_);
@@ -184,6 +192,28 @@ public:
   }
 };
 
+enum class exec_t {
+  Serial = 0,
+  Parallel = 1,
+  StdSort = 2,
+};
+
+std::ostream& operator<<(std::ostream& o, const exec_t& e) {
+  switch (e) {
+    case exec_t::Serial:   o << "serial"  ; break;
+    case exec_t::Parallel: o << "parallel"; break;
+    case exec_t::StdSort:  o << "std_sort"; break;
+  }
+  return o;
+}
+
+template <typename T>
+std::string to_str(T x) {
+  std::stringstream ss;
+  ss << x;
+  return ss.str();
+}
+
 using elem_t = float;
 
 int my_rank = -1;
@@ -191,6 +221,7 @@ int n_procs = -1;
 
 size_t n_input       = 1024;
 int    n_repeats     = 10;
+exec_t exec_type     = exec_t::Parallel;
 size_t cache_size    = 16;
 int    verify_result = 1;
 size_t cutoff_insert = 64;
@@ -418,6 +449,50 @@ bool check_sorted(Span s) {
   return ret.first;
 }
 
+template <typename Span>
+void run(Span a, Span b) {
+  for (int r = 0; r < n_repeats; r++) {
+    if (my_rank == 0) {
+      init_array(a);
+    }
+
+    uint64_t t0 = madi::global_clock::get_time();
+
+    if (my_rank == 0) {
+      switch (exec_type) {
+        case exec_t::Serial: {
+          cilksort(a, b);
+          break;
+        }
+        case exec_t::Parallel: {
+          task_group<1, true> tg;
+          tg.run([=]() { cilksort(a, b); });
+          tg.wait();
+          break;
+        }
+        case exec_t::StdSort: {
+          std::sort(a.begin(), a.end());
+          break;
+        }
+      }
+    }
+
+    uint64_t t1 = madi::global_clock::get_time();
+
+    if (my_rank == 0) {
+      printf("[%d] %ld ns\n", r, t1 - t0);
+      fflush(stdout);
+      if (verify_result) {
+        if (!check_sorted(a)) {
+          printf("check failed.\n");
+        }
+      }
+    }
+
+    madm::uth::barrier();
+  }
+}
+
 void show_help_and_exit(int argc, char** argv) {
   if (my_rank == 0) {
     printf("Usage: %s [options]\n"
@@ -425,6 +500,7 @@ void show_help_and_exit(int argc, char** argv) {
            "    -n : Input size (size_t)\n"
            "    -r : # of repeats (int)\n"
            "    -c : check the result (int)\n"
+           "    -e : execution type (0: serial, 1: parallel (default), 2: std::sort())\n"
            "    -s : serial execution (int)\n"
            "    -i : cutoff for insertion sort (size_t)\n"
            "    -m : cutoff for serial merge (size_t)\n"
@@ -438,13 +514,16 @@ int real_main(int argc, char **argv) {
   n_procs = madm::uth::get_n_procs();
 
   int opt;
-  while ((opt = getopt(argc, argv, "n:r:c:v:s:i:m:q:h")) != EOF) {
+  while ((opt = getopt(argc, argv, "n:r:e:c:v:s:i:m:q:h")) != EOF) {
     switch (opt) {
       case 'n':
         n_input = atoll(optarg);
         break;
       case 'r':
         n_repeats = atoi(optarg);
+        break;
+      case 'e':
+        exec_type = exec_t(atoi(optarg));
         break;
       case 'c':
         cache_size = atoll(optarg);
@@ -474,13 +553,14 @@ int real_main(int argc, char **argv) {
            "# of processes:                %d\n"
            "N (Input size):                %ld\n"
            "# of repeats:                  %d\n"
+           "Execution type:                %s\n"
            "PCAS cache size:               %ld MB\n"
            "Verify result:                 %d\n"
            "Cutoff (insertion sort):       %ld\n"
            "Cutoff (merge):                %ld\n"
            "Cutoff (quicksort):            %ld\n"
            "-------------------------------------------------------------\n",
-           n_procs, n_input, n_repeats, cache_size, verify_result,
+           n_procs, n_input, n_repeats, to_str(exec_type).c_str(), cache_size, verify_result,
            cutoff_insert, cutoff_merge, cutoff_quick);
     printf("uth options:\n");
     madm::uth::print_options(stdout);
@@ -490,51 +570,29 @@ int real_main(int argc, char **argv) {
 
   pc(cache_size * 1024 * 1024);
 
-  auto array = pc().malloc<elem_t>(n_input);
-  auto buf   = pc().malloc<elem_t>(n_input);
+  if (exec_type == exec_t::Parallel) {
+    auto array = pc().malloc<elem_t>(n_input);
+    auto buf   = pc().malloc<elem_t>(n_input);
 
-  gptr_span<elem_t> a(array, n_input);
-  gptr_span<elem_t> b(buf  , n_input);
+    gptr_span<elem_t> a(array, n_input);
+    gptr_span<elem_t> b(buf  , n_input);
 
-  /* elem_t* array = (elem_t*)malloc(sizeof(elem_t) * n_input); */
-  /* elem_t* buf   = (elem_t*)malloc(sizeof(elem_t) * n_input); */
-  /* raw_span<elem_t> a(array, n_input); */
-  /* raw_span<elem_t> b(buf  , n_input); */
+    run(a, b);
 
-  for (int r = 0; r < n_repeats; r++) {
-    if (my_rank == 0) {
-      init_array(a);
-    }
+    pc().free(array);
+    pc().free(buf);
+  } else {
+    elem_t* array = (elem_t*)malloc(sizeof(elem_t) * n_input);
+    elem_t* buf   = (elem_t*)malloc(sizeof(elem_t) * n_input);
 
-    uint64_t t0 = madi::global_clock::get_time();
+    raw_span<elem_t> a(array, n_input);
+    raw_span<elem_t> b(buf  , n_input);
 
-    if (my_rank == 0) {
-      task_group<1, true> tg;
-      tg.run([=]() { cilksort(a, b); });
-      tg.wait();
-      /* std::sort(array, array + n_input); */
-    }
+    run(a, b);
 
-    uint64_t t1 = madi::global_clock::get_time();
-
-    if (my_rank == 0) {
-      printf("[%d] %ld ns\n", r, t1 - t0);
-      fflush(stdout);
-      if (verify_result) {
-        if (!check_sorted(a)) {
-          printf("check failed.\n");
-        }
-      }
-    }
-
-    madm::uth::barrier();
+    free(array);
+    free(buf);
   }
-
-  pc().free(array);
-  pc().free(buf);
-
-  /* free(array); */
-  /* free(buf); */
 
   return 0;
 }

@@ -92,6 +92,9 @@ case $KOCHI_MACHINE in
     }
 esac
 
+cores=1
+nodes=1
+
 # for i in 1 2 6 12; do
 for i in $nodes; do
   ityr_mpirun $((cores * i)) $cores ./cilksort.out "$@"
