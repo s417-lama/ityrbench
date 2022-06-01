@@ -198,12 +198,12 @@ size_t cutoff_merge  = 16 * 1024;
 size_t cutoff_quick  = 16 * 1024;
 
 template <typename Span>
-static inline elem_t select_pivot(Span s) {
+static inline typename Span::element_type select_pivot(Span s) {
   // median of three values
   if (s.size() < 3) return s[0];
-  elem_t a = s[0];
-  elem_t b = s[1];
-  elem_t c = s[2];
+  auto a = s[0];
+  auto b = s[1];
+  auto c = s[2];
   if ((a > b) != (a > c))      return a;
   else if ((b > a) != (b > c)) return b;
   else                         return c;
@@ -212,7 +212,7 @@ static inline elem_t select_pivot(Span s) {
 template <typename Span>
 void insertion_sort(Span s) {
   for (size_t i = 1; i < s.size(); i++) {
-    elem_t a = s[i];
+    auto a = s[i];
     size_t j;
     for (j = 1; j <= i && s[i - j] > a; j++) {
       s[i - j + 1] = s[i - j];
@@ -222,7 +222,7 @@ void insertion_sort(Span s) {
 }
 
 template <typename Span>
-std::pair<Span, Span> partition_seq(Span s, elem_t pivot) {
+std::pair<Span, Span> partition_seq(Span s, typename Span::element_type pivot) {
   size_t l = 0;
   size_t h = s.size() - 1;
   while (true) {
@@ -239,7 +239,7 @@ void quicksort_seq(Span s) {
   if (s.size() <= cutoff_insert) {
     insertion_sort(s);
   } else {
-    elem_t pivot = select_pivot(s);
+    auto pivot = select_pivot(s);
     auto [s1, s2] = partition_seq(s, pivot);
     quicksort_seq(s1);
     quicksort_seq(s2);
@@ -253,8 +253,8 @@ void merge_seq(const Span s1, const Span s2, Span dest) {
   size_t d = 0;
   size_t l1 = 0;
   size_t l2 = 0;
-  elem_t a1 = s1[0];
-  elem_t a2 = s2[0];
+  auto a1 = s1[0];
+  auto a2 = s2[0];
   while (true) {
     if (a1 < a2) {
       dest[d++] = a1;
@@ -379,7 +379,7 @@ void cilksort(Span a, Span b) {
 
 template <typename Span, typename Rng>
 void init_array_aux(Span s, Rng r) {
-  static std::uniform_real_distribution<elem_t> dist(0.0, 1.0);
+  static std::uniform_real_distribution<typename Span::element_type> dist(0.0, 1.0);
   if (s.size() < cutoff_quick) {
     s.for_each([&](typename Span::element_type& e) {
       e = dist(r);
@@ -398,7 +398,9 @@ template <typename Span>
 void init_array(Span s) {
   static int counter = 0;
   std::mt19937 r(counter++);
-  init_array_aux(s, r);
+  task_group<1, true> tg;
+  tg.run([=] { init_array_aux(s, r); });
+  tg.wait();
   /* s.for_each([&](typename Span::element_type& e) { */
   /*   printf("%f\n", e); */
   /* }); */
