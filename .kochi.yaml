@@ -8,10 +8,10 @@ machines:
       - pjsub --interact --sparam wait-time=unlimited -j -g gc64 -L rscgrp=interactive-o,node=$KOCHI_ALLOC_NODE_SPEC --mpi proc=$((n_nodes * 48))
     alloc_script:
       - n_nodes=$(echo $KOCHI_ALLOC_NODE_SPEC | cut -f 1 -d ":" | sed 's/x/*/g' | bc)
-      - echo $KOCHI_WORKER_LAUNCH_CMD | pjsub -X -j -g gc64 -L rscgrp=regular-o,node=$KOCHI_ALLOC_NODE_SPEC,elapse=${KOCHI_ALLOC_TIME_LIMIT:-6:00:00} --mpi proc=$((n_nodes * 48))
+      - echo "$KOCHI_WORKER_LAUNCH_CMD" | pjsub -X -j -g gc64 -L rscgrp=regular-o,node=$KOCHI_ALLOC_NODE_SPEC,elapse=${KOCHI_ALLOC_TIME_LIMIT:-6:00:00} --mpi proc=$((n_nodes * 48))
     load_env_script:
       on_login_node: |
-        module load odyssey
+        module load odyssey > /dev/null
         export MPICC=mpifccpx
         export MPICXX=mpiFCCpx
         export CFLAGS="-Nclang $CFLAGS"
@@ -42,7 +42,7 @@ machines:
         echo "Allocating $KOCHI_ALLOC_NODE_SPEC nodes is not allowed on ITO."
         exit 1
       fi
-      echo $KOCHI_WORKER_LAUNCH_CMD | pjsub -j -o /dev/null -L rscunit=ito-a,rscgrp=$rscgrp,vnode=$KOCHI_ALLOC_NODE_SPEC,vnode-core=36,elapse=${KOCHI_ALLOC_TIME_LIMIT:-6:00:00}
+      echo "$KOCHI_WORKER_LAUNCH_CMD" | pjsub -j -o /dev/null -L rscunit=ito-a,rscgrp=$rscgrp,vnode=$KOCHI_ALLOC_NODE_SPEC,vnode-core=36,elapse=${KOCHI_ALLOC_TIME_LIMIT:-6:00:00}
     load_env_script:
       - module load python/3.6.2
       - . ~/venv/ito-a/bin/activate

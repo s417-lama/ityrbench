@@ -6,11 +6,6 @@ MPICXX=${MPICXX:-mpicxx}
 mpirun --version || true
 $MPICXX --version
 
-CFLAGS=${CFLAGS:-""}
-CFLAGS="$CFLAGS -DNDEBUG"
-
-MPICXX=$MPICXX CFLAGS=$CFLAGS make cilksort.out
-
 export MADM_RUN__=1
 export MADM_PRINT_ENV=1
 
@@ -36,7 +31,13 @@ case $KOCHI_MACHINE in
     ityr_mpirun() {
       local n_processes=$1
       local n_processes_per_node=$2
-      mpirun -n $n_processes \
+      STDOUT_FILE=mpirun_out.txt
+      if [[ $PJM_ENVIRONMENT == INTERACT ]]; then
+        of_opt=""
+      else
+        of_opt="-of $STDOUT_FILE"
+      fi
+      mpirun $of_opt -n $n_processes \
         --vcoordfile <(
           np=0
           if [[ -z ${PJM_NODE_Y+x} ]]; then
@@ -77,7 +78,10 @@ case $KOCHI_MACHINE in
             done
           fi
         ) \
-        $KOCHI_INSTALL_PREFIX_MASSIVETHREADS_DM/bin/madm_disable_aslr "${@:3}"
+        $KOCHI_INSTALL_PREFIX_MASSIVETHREADS_DM/bin/madm_disable_aslr "${@:3}" | tee $STDOUT_FILE
+      if [[ $PJM_ENVIRONMENT == BATCH ]]; then
+        cat $STDOUT_FILE
+      fi
     }
     ;;
   *)
@@ -90,12 +94,5 @@ case $KOCHI_MACHINE in
       mpirun -n $n_processes -N $n_processes_per_node \
         $KOCHI_INSTALL_PREFIX_MASSIVETHREADS_DM/bin/madm_disable_aslr "${@:3}"
     }
+    ;;
 esac
-
-cores=1
-nodes=1
-
-# for i in 1 2 6 12; do
-for i in $nodes; do
-  ityr_mpirun $((cores * i)) $cores ./cilksort.out "$@"
-done

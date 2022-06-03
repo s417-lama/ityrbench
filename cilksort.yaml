@@ -1,0 +1,85 @@
+depends:
+  - name: massivethreads-dm
+    recipe: release
+  - name: pcas
+    recipe: release
+
+default_params:
+  nodes: 1
+  cores:
+    - value: 48
+      machines: [wisteria-o]
+    - value: 6
+      machines: [local]
+  n_input: 1_000_000
+  repeats: 10
+  exec_type: 1 # parallel
+  cache_size: 32
+  verify: 0
+  cutoff_i: 64
+  cutoff_m: 16384
+  cutoff_q: 16384
+
+default_name: cilksort
+default_queue: node_${nodes}
+default_duplicates: 3
+
+batches:
+  serial:
+    params:
+      nodes: 1
+      cores: 1
+      exec_type: [0, 2] # serial, std_sort
+      n_input: [10_000_000, 100_000_000]
+    duplicates: 1
+    artifacts:
+      - type: stdout
+        dest: ${batch_name}/n_${n_input}_exec_${exec_type}_${duplicate}.log
+      - type: stats
+        dest: ${batch_name}/n_${n_input}_exec_${exec_type}_${duplicate}.stats
+      - type: file
+        src: mpirun_out.txt
+        dest: ${batch_name}/n_${n_input}_exec_${exec_type}_${duplicate}.out
+
+  scaling:
+    name: cilksort_${batch_name}
+    params:
+      nodes:
+        # - value: [1, 2, 2x3, 2x3x2, 3x4x3, 6x6x4]
+        - value: [1, 2, 2x3]
+          machines: [wisteria-o]
+        - value: [1]
+          machines: [local]
+      n_input: [10_000_000, 100_000_000]
+    artifacts:
+      - type: stdout
+        dest: ${batch_name}/nodes_${nodes}_n_${n_input}_${duplicate}.log
+      - type: stats
+        dest: ${batch_name}/nodes_${nodes}_n_${n_input}_${duplicate}.stats
+      - type: file
+        src: mpirun_out.txt
+        dest: ${batch_name}/nodes_${nodes}_n_${n_input}_${duplicate}.out
+
+build:
+  script: |
+    source common.bash
+
+    CFLAGS=${CFLAGS:-""}
+    CFLAGS="$CFLAGS -DNDEBUG"
+
+    MPICXX=$MPICXX CFLAGS=$CFLAGS make cilksort.out
+
+run:
+  script: |
+    source common.bash
+    n_nodes=$(echo $KOCHI_PARAM_NODES | cut -f 1 -d ":" | sed 's/x/*/g' | bc)
+    ityr_mpirun $((n_nodes * KOCHI_PARAM_CORES)) $KOCHI_PARAM_CORES ./cilksort.out \
+      -n $KOCHI_PARAM_N_INPUT \
+      -r $KOCHI_PARAM_REPEATS \
+      -e $KOCHI_PARAM_EXEC_TYPE \
+      -c $KOCHI_PARAM_CACHE_SIZE \
+      -v $KOCHI_PARAM_VERIFY \
+      -i $KOCHI_PARAM_CUTOFF_I \
+      -m $KOCHI_PARAM_CUTOFF_M \
+      -q $KOCHI_PARAM_CUTOFF_Q
+    # date > test.txt
