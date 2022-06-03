@@ -427,11 +427,18 @@ void init_array_aux(Span s, Rng r) {
 
 template <typename Span>
 void init_array(Span s) {
+  static std::uniform_real_distribution<typename Span::element_type> dist(0.0, 1.0);
   static int counter = 0;
   std::mt19937 r(counter++);
-  task_group<1, true> tg;
-  tg.run([=] { init_array_aux(s, r); });
-  tg.wait();
+  if (exec_type == exec_t::Parallel) {
+    task_group<1, true> tg;
+    tg.run([=] { init_array_aux(s, r); });
+    tg.wait();
+  } else {
+    s.for_each([&](typename Span::element_type& e) {
+      e = dist(r);
+    });
+  }
   /* s.for_each([&](typename Span::element_type& e) { */
   /*   printf("%f\n", e); */
   /* }); */
