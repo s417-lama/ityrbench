@@ -14,7 +14,7 @@ default_params:
   n_input: 1_000_000
   repeats: 10
   exec_type: 2 # parallel
-  policy: ityr_policy
+  policy: naive
   cache_size: 32
   verify: 0
   cutoff_i: 64
@@ -52,7 +52,7 @@ batches:
         - value: [1]
           machines: [local]
       n_input: [10_000_000, 100_000_000]
-      policy: ityr_policy_workfirst
+      policy: [naive, workfirst]
     artifacts:
       - type: stdout
         dest: ${batch_name}/nodes_${nodes}_n_${n_input}_${duplicate}.log
@@ -69,7 +69,7 @@ build:
 
     CFLAGS=${CFLAGS:-""}
     CFLAGS="$CFLAGS -DNDEBUG"
-    CFLAGS="$CFLAGS -DITYR_POLICY=$KOCHI_PARAM_POLICY"
+    CFLAGS="$CFLAGS -DITYR_POLICY=ityr_policy_$KOCHI_PARAM_POLICY"
 
     make clean
     MPICXX=$MPICXX CFLAGS=$CFLAGS make cilksort.out

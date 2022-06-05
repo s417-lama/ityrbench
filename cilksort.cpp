@@ -450,7 +450,7 @@ void run(Span a, Span b) {
       }
     }
 
-    madm::uth::barrier();
+    ityr::barrier();
   }
 }
 
@@ -472,7 +472,7 @@ void show_help_and_exit(int argc, char** argv) {
 
 int real_main(int argc, char **argv) {
   my_rank = ityr::rank();
-  n_procs = ityr::nprocs();
+  n_procs = ityr::n_ranks();
 
   int opt;
   while ((opt = getopt(argc, argv, "n:r:e:c:v:s:i:m:q:h")) != EOF) {
