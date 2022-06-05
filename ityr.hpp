@@ -18,17 +18,18 @@ public:
   void run(F f, Args... args) {
     assert(n_ < MaxTasks);
     if (SpawnLastTask || n_ < MaxTasks - 1) {
-      if (!P::work_first) {
-        iro::release();
-      }
-      new (&tasks_[n_++]) madm::uth::thread<void>{[=]() {
+      iro::release();
+      auto p_th = &tasks_[n_++];
+      new (p_th) madm::uth::thread<void>{[=]() {
         if (!P::work_first) {
           iro::acquire();
         }
         f(args...);
         iro::release();
       }};
-      iro::acquire();
+      if (!P::work_first || !p_th->synched()) {
+        iro::acquire();
+      }
     } else {
       f(args...);
     }
@@ -113,3 +114,15 @@ struct ityr_if {
 struct ityr_policy {
   static constexpr bool work_first = false;
 };
+
+struct ityr_policy_workfirst : ityr_policy {
+  static constexpr bool work_first = true;
+};
+
+#ifndef ITYR_POLICY
+#define ITYR_POLICY ityr_policy
+#endif
+
+using ityr = ityr_if<ITYR_POLICY>;
+
+#undef ITYR_POLICY

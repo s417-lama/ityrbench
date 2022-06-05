@@ -10,15 +10,15 @@ LDFLAGS  := $(UTH_LDFLAGS) -lpthread -lm -ldl
 
 MPICXX := $(or ${MPICXX},mpicxx)
 
-SRCS := $(filter-out $(LIBS),$(wildcard ./*.cpp))
+SRCS := $(wildcard ./*.cpp)
+HEADERS := $(wildcard ./*.hpp)
 
-LIB_TARGETS  := $(patsubst %.cpp,%.so,$(LIBS))
 MAIN_TARGETS := $(patsubst %.cpp,%.out,$(SRCS))
 
 all: $(MAIN_TARGETS) $(LIB_TARGETS)
 
-%.out: %.cpp
-	$(MPICXX) $(CXXFLAGS) -o $@ $^ $(LDFLAGS)
+%.out: %.cpp $(HEADERS)
+	$(MPICXX) $(CXXFLAGS) -o $@ $< $(LDFLAGS)
 
 clean:
 	rm -rf $(MAIN_TARGETS) $(LIB_TARGETS)

@@ -104,7 +104,7 @@ dependencies:
         machines: [local]
     recipes:
       release:
-        branch: greedy_gc
+        branch: ityr
         script:
           - export CFLAGS="-O3 -g -Wall $CFLAGS"
           - CCFLAGS=$CFLAGS CXXFLAGS=$CFLAGS ./configure MPICC=$MPICC MPICXX=$MPICXX $host_opt $polling_opt --with-comm-layer=mpi3 --prefix=$KOCHI_INSTALL_PREFIX

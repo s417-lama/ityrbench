@@ -8,13 +8,6 @@
 
 #include "ityr.hpp"
 
-struct ityr_policy_workfirst : ityr_policy {
-  static constexpr bool work_first = true;
-};
-
-/* using ityr = ityr_if<ityr_policy>; */
-using ityr = ityr_if<ityr_policy_workfirst>;
-
 template <typename T>
 class raw_span {
   using this_t = raw_span<T>;
