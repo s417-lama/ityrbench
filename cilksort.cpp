@@ -6,13 +6,14 @@
 #include <random>
 #include <sstream>
 
-#include "uth.h"
-#include "pcas/pcas.hpp"
+#include "ityr.hpp"
 
-pcas::pcas& pc(size_t cache_size = 0) {
-  static pcas::pcas g_pc(cache_size);
-  return g_pc;
-}
+struct ityr_policy_workfirst : ityr_policy {
+  static constexpr bool work_first = true;
+};
+
+/* using ityr = ityr_if<ityr_policy>; */
+using ityr = ityr_if<ityr_policy_workfirst>;
 
 template <typename T>
 class raw_span {
@@ -60,7 +61,7 @@ public:
     return acc;
   }
 
-  template <pcas::access_mode Mode>
+  template <ityr::iro::access_mode Mode>
   raw_span<T> checkout() const { return *this; }
 
   void checkin(raw_span<T> s) const {}
@@ -74,7 +75,7 @@ public:
 template <typename T, size_t BlockSize = 65536>
 class gptr_span {
   using this_t = gptr_span<T, BlockSize>;
-  using ptr_t = pcas::global_ptr<T>;
+  using ptr_t = ityr::iro::global_ptr<T>;
   ptr_t ptr_;
   size_t n_;
 public:
@@ -90,9 +91,9 @@ public:
 
   constexpr T operator[](size_t i) const {
     assert(i < n_);
-    auto p = pc().checkout<pcas::access_mode::read>(ptr_ + i, 1);
+    auto p = ityr::iro::checkout<ityr::iro::access_mode::read>(ptr_ + i, 1);
     T ret = *p;
-    pc().checkin(p);
+    ityr::iro::checkin(p);
     return ret;
   }
 
@@ -111,98 +112,64 @@ public:
 
   template <typename F>
   void for_each(F f) {
-    for (size_t i = 0; i < n_; i += BlockSize) {
-      size_t b = std::min(n_ - i, BlockSize);
-      auto p = pc().checkout<pcas::access_mode::read_write>(ptr_ + i, b);
+    for (size_t i = 0; i < n_; i += BlockSize / sizeof(T)) {
+      size_t b = std::min(n_ - i, BlockSize / sizeof(T));
+      auto p = ityr::iro::checkout<ityr::iro::access_mode::read_write>(ptr_ + i, b);
       for (size_t j = 0; j < b; j++) {
         f(p[j]);
       }
-      pc().checkin(p);
+      ityr::iro::checkin(p);
     }
   }
 
   template <typename Acc, typename F>
   Acc reduce(Acc init, F f) {
     Acc acc = init;
-    for (size_t i = 0; i < n_; i += BlockSize) {
-      size_t b = std::min(n_ - i, BlockSize);
-      auto p = pc().checkout<pcas::access_mode::read>(ptr_ + i, b);
+    for (size_t i = 0; i < n_; i += BlockSize / sizeof(T)) {
+      size_t b = std::min(n_ - i, BlockSize / sizeof(T));
+      auto p = ityr::iro::checkout<ityr::iro::access_mode::read>(ptr_ + i, b);
       for (size_t j = 0; j < b; j++) {
         acc = f(acc, p[j]);
       }
-      pc().checkin(p);
+      ityr::iro::checkin(p);
     }
     return acc;
   }
 
-  template <pcas::access_mode Mode>
+  template <ityr::iro::access_mode Mode>
   raw_span<T> checkout() const {
-    auto p = pc().checkout<Mode>(ptr_, n_);
+    auto p = ityr::iro::checkout<Mode>(ptr_, n_);
     return {const_cast<T*>(p), n_}; // TODO: reconsider const type handling
   }
 
   void checkin(raw_span<T> s) const {
-    pc().checkin(&s[0]);
+    ityr::iro::checkin(&s[0]);
   }
 
   friend void copy(this_t dest, this_t src) {
     assert(dest.n_ == src.n_);
-    for (size_t i = 0; i < dest.n_; i += BlockSize) {
-      size_t b = std::min(dest.n_ - i, BlockSize);
-      auto d = pc().checkout<pcas::access_mode::write>(dest.ptr_ + i, b);
-      auto s = pc().checkout<pcas::access_mode::read >(src.ptr_  + i, b);
+    for (size_t i = 0; i < dest.n_; i += BlockSize / sizeof(T)) {
+      size_t b = std::min(dest.n_ - i, BlockSize / sizeof(T));
+      auto d = ityr::iro::checkout<ityr::iro::access_mode::write>(dest.ptr_ + i, b);
+      auto s = ityr::iro::checkout<ityr::iro::access_mode::read >(src.ptr_  + i, b);
       std::memcpy(d, s, sizeof(T) * b);
-      pc().checkin(d);
-      pc().checkin(s);
+      ityr::iro::checkin(d);
+      ityr::iro::checkin(s);
     }
-  }
-};
-
-template <size_t MaxTasks, bool SpawnLastTask = false>
-class task_group {
-  madm::uth::thread<void> tasks_[MaxTasks];
-  size_t n_ = 0;
-
-public:
-  task_group() {}
-
-  template <typename F, typename... Args>
-  void run(F f, Args... args) {
-    assert(n_ < MaxTasks);
-    if (SpawnLastTask || n_ < MaxTasks - 1) {
-      pc().release();
-      new (&tasks_[n_++]) madm::uth::thread<void>{[=]() {
-        pc().acquire();
-        f(args...);
-        pc().release();
-      }};
-    } else {
-      pc().acquire();
-      f(args...);
-      pc().release();
-    }
-  }
-
-  void wait() {
-    for (size_t i = 0; i < n_; i++) {
-      tasks_[i].join();
-    }
-    pc().acquire();
-    n_ = 0;
   }
 };
 
 enum class exec_t {
   Serial = 0,
-  Parallel = 1,
-  StdSort = 2,
+  StdSort = 1,
+  Parallel = 2,
 };
 
 std::ostream& operator<<(std::ostream& o, const exec_t& e) {
   switch (e) {
     case exec_t::Serial:   o << "serial"  ; break;
-    case exec_t::Parallel: o << "parallel"; break;
     case exec_t::StdSort:  o << "std_sort"; break;
+    case exec_t::Parallel: o << "parallel"; break;
   }
   return o;
 }
@@ -335,9 +302,9 @@ void cilkmerge(Span s1, Span s2, Span dest) {
     return;
   }
   if (s1.size() < cutoff_merge) {
-    auto s1_ = s1.template checkout<pcas::access_mode::read>();
-    auto s2_ = s2.template checkout<pcas::access_mode::read>();
-    auto dest_ = dest.template checkout<pcas::access_mode::write>();
+    auto s1_ = s1.template checkout<ityr::iro::access_mode::read>();
+    auto s2_ = s2.template checkout<ityr::iro::access_mode::read>();
+    auto dest_ = dest.template checkout<ityr::iro::access_mode::write>();
 
     merge_seq(s1_, s2_, dest_);
 
@@ -356,7 +323,7 @@ void cilkmerge(Span s1, Span s2, Span dest) {
 
   /* cilkmerge(s11, s21, dest1); */
   /* cilkmerge(s12, s22, dest2); */
-  task_group<2> tg;
+  ityr::ito_group<2> tg;
   tg.run(cilkmerge<Span>, s11, s21, dest1);
   tg.run(cilkmerge<Span>, s12, s22, dest2);
   tg.wait();
@@ -367,7 +334,7 @@ void cilksort(Span a, Span b) {
   assert(a.size() == b.size());
 
   if (a.size() < cutoff_quick) {
-    auto a_ = a.template checkout<pcas::access_mode::read_write>();
+    auto a_ = a.template checkout<ityr::iro::access_mode::read_write>();
 
     quicksort_seq(a_);
 
@@ -388,7 +355,7 @@ void cilksort(Span a, Span b) {
   /* cilksort<Span>(a3, b3); */
   /* cilksort<Span>(a4, b4); */
   {
-    task_group<4> tg;
+    ityr::ito_group<4> tg;
     tg.run(cilksort<Span>, a1, b1);
     tg.run(cilksort<Span>, a2, b2);
     tg.run(cilksort<Span>, a3, b3);
@@ -399,7 +366,7 @@ void cilksort(Span a, Span b) {
   /* cilkmerge(a1, a2, b12); */
   /* cilkmerge(a3, a4, b34); */
   {
-    task_group<2> tg;
+    ityr::ito_group<2> tg;
     tg.run(cilkmerge<Span>, a1, a2, b12);
     tg.run(cilkmerge<Span>, a3, a4, b34);
     tg.wait();
@@ -417,7 +384,7 @@ void init_array_aux(Span s, Rng r) {
     });
   } else {
     auto [s1, s2] = s.divide_two();
-    task_group<2> tg;
+    ityr::ito_group<2> tg;
     tg.run(init_array_aux<Span, Rng>, s1, r);
     r.discard(s1.size());
     tg.run(init_array_aux<Span, Rng>, s2, r);
@@ -430,15 +397,9 @@ void init_array(Span s) {
   static std::uniform_real_distribution<typename Span::element_type> dist(0.0, 1.0);
   static int counter = 0;
   std::mt19937 r(counter++);
-  if (exec_type == exec_t::Parallel) {
-    task_group<1, true> tg;
-    tg.run([=] { init_array_aux(s, r); });
-    tg.wait();
-  } else {
-    s.for_each([&](typename Span::element_type& e) {
-      e = dist(r);
-    });
-  }
+  ityr::ito_group<1, true> tg;
+  tg.run([=] { init_array_aux(s, r); });
+  tg.wait();
   /* s.for_each([&](typename Span::element_type& e) { */
   /*   printf("%f\n", e); */
   /* }); */
@@ -471,14 +432,14 @@ void run(Span a, Span b) {
           cilksort(a, b);
           break;
         }
-        case exec_t::Parallel: {
-          task_group<1, true> tg;
-          tg.run([=]() { cilksort(a, b); });
-          tg.wait();
-          break;
-        }
         case exec_t::StdSort: {
           std::sort(a.begin(), a.end());
+          break;
+        }
+        case exec_t::Parallel: {
+          ityr::ito_group<1, true> tg;
+          tg.run([=]() { cilksort(a, b); });
+          tg.wait();
           break;
         }
       }
@@ -507,7 +468,7 @@ void show_help_and_exit(int argc, char** argv) {
            "    -n : Input size (size_t)\n"
            "    -r : # of repeats (int)\n"
            "    -c : check the result (int)\n"
-           "    -e : execution type (0: serial, 1: parallel (default), 2: std::sort())\n"
+           "    -e : execution type (0: serial, 1: std::sort(), 2: parallel (default))\n"
            "    -s : serial execution (int)\n"
            "    -i : cutoff for insertion sort (size_t)\n"
            "    -m : cutoff for serial merge (size_t)\n"
@@ -517,8 +478,8 @@ void show_help_and_exit(int argc, char** argv) {
 }
 
 int real_main(int argc, char **argv) {
-  my_rank = madm::uth::get_pid();
-  n_procs = madm::uth::get_n_procs();
+  my_rank = ityr::rank();
+  n_procs = ityr::nprocs();
 
   int opt;
   while ((opt = getopt(argc, argv, "n:r:e:c:v:s:i:m:q:h")) != EOF) {
@@ -575,19 +536,19 @@ int real_main(int argc, char **argv) {
     fflush(stdout);
   }
 
-  pc(cache_size * 1024 * 1024);
+  ityr::iro::init(cache_size * 1024 * 1024);
 
   if (exec_type == exec_t::Parallel) {
-    auto array = pc().malloc<elem_t>(n_input);
-    auto buf   = pc().malloc<elem_t>(n_input);
+    auto array = ityr::iro::malloc<elem_t>(n_input);
+    auto buf   = ityr::iro::malloc<elem_t>(n_input);
 
     gptr_span<elem_t> a(array, n_input);
     gptr_span<elem_t> b(buf  , n_input);
 
     run(a, b);
 
-    pc().free(array);
-    pc().free(buf);
+    ityr::iro::free(array);
+    ityr::iro::free(buf);
   } else {
     elem_t* array = (elem_t*)malloc(sizeof(elem_t) * n_input);
     elem_t* buf   = (elem_t*)malloc(sizeof(elem_t) * n_input);
@@ -605,6 +566,6 @@ int real_main(int argc, char **argv) {
 }
 
 int main(int argc, char** argv) {
-  madm::uth::start(real_main, argc, argv);
+  ityr::main(real_main, argc, argv);
   return 0;
 }

@@ -13,7 +13,7 @@ default_params:
       machines: [local]
   n_input: 1_000_000
   repeats: 10
-  exec_type: 1 # parallel
+  exec_type: 2 # parallel
   cache_size: 32
   verify: 0
   cutoff_i: 64
@@ -29,7 +29,7 @@ batches:
     params:
       nodes: 1
       cores: 1
-      exec_type: [0, 2] # serial, std_sort
+      exec_type: [0, 1] # serial, std_sort
       n_input: [10_000_000, 100_000_000]
     duplicates: 1
     artifacts:
@@ -82,4 +82,3 @@ run:
       -i $KOCHI_PARAM_CUTOFF_I \
       -m $KOCHI_PARAM_CUTOFF_M \
       -q $KOCHI_PARAM_CUTOFF_Q
-    # date > test.txt
