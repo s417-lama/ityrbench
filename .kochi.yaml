@@ -146,3 +146,15 @@ dependencies:
     script:
       - CC=$MPICC CXX=$MPICXX cmake -DCMAKE_INSTALL_PREFIX=$KOCHI_INSTALL_PREFIX -DBUILD_TESTING=OFF .
       - make install
+
+  massivelogger:
+    git: https://github.com/massivethreads/massivelogger.git
+    recipes:
+      release:
+        branch: master
+      develop:
+        git: ../massivelogger
+        current_state: true
+    script:
+      - rm -rf $KOCHI_INSTALL_PREFIX/*
+      - cp -af . $KOCHI_INSTALL_PREFIX

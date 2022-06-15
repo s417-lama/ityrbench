@@ -72,6 +72,55 @@ public:
   static void checkin(T* raw_ptr) {}
 };
 
+// Wallclock Time
+// -----------------------------------------------------------------------------
+
+template <typename P>
+class wallclock_native {
+public:
+  static uint64_t gettime() {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (uint64_t)ts.tv_sec * 1000000000 + (uint64_t)ts.tv_nsec;
+  }
+};
+
+template <typename P>
+class wallclock_madm {
+public:
+  static uint64_t gettime() {
+    return madi::global_clock::get_time();
+  }
+};
+
+template <typename P>
+class wallclock_pcas {
+public:
+  static uint64_t gettime() {
+    return pcas::global_clock::get_time();
+  }
+};
+
+// Logger
+// -----------------------------------------------------------------------------
+
+template <typename P>
+class logger_dummy {
+public:
+  static void flush(uint64_t t0, uint64_t t1) {}
+};
+
+template <typename P>
+class logger_pcas {
+public:
+  static void flush(uint64_t t0, uint64_t t1) {
+    pcas::logger::flush_and_print_stat(t0, t1);
+  }
+};
+
+// ityr interface
+// -----------------------------------------------------------------------------
+
 template <typename P>
 class ityr_if {
 public:
@@ -79,6 +128,10 @@ public:
   using ito_group = typename P::template ito_group_t<P, MaxTasks, SpawnLastTask>;
 
   using iro = typename P::template iro_t<P>;
+
+  using wallclock = typename P::template wallclock_t<P>;
+
+  using logger = typename P::template logger_t<P>;
 
   static uint64_t rank() { return P::rank(); }
 
@@ -112,6 +165,12 @@ struct ityr_policy_serial {
 
   template <typename P>
   using iro_t = iro_dummy<P>;
+
+  template <typename P>
+  using wallclock_t = wallclock_native<P>;
+
+  template <typename P>
+  using logger_t = logger_dummy<P>;
 
   static uint64_t rank() { return 0; }
 
@@ -168,6 +227,12 @@ struct ityr_policy_naive {
 
   template <typename P>
   using iro_t = iro_pcas<P>;
+
+  template <typename P>
+  using wallclock_t = wallclock_pcas<P>;
+
+  template <typename P>
+  using logger_t = logger_pcas<P>;
 
   static uint64_t rank() {
     return madm::uth::get_pid();

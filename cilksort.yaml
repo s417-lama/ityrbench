@@ -3,6 +3,8 @@ depends:
     recipe: release
   - name: pcas
     recipe: release
+  - name: massivelogger
+    recipe: release
 
 default_params:
   nodes: 1
@@ -20,6 +22,7 @@ default_params:
   cutoff_i: 64
   cutoff_m: 16384
   cutoff_q: 16384
+  trace: false
 
 default_name: cilksort
 default_queue: node_${nodes}
@@ -32,6 +35,7 @@ batches:
       cores: 1
       exec_type: [0, 1] # serial, std_sort
       n_input: [10_000_000, 100_000_000]
+      policy: serial
     duplicates: 1
     artifacts:
       - type: stdout
@@ -55,27 +59,30 @@ batches:
       policy: [naive, workfirst]
     artifacts:
       - type: stdout
-        dest: ${batch_name}/nodes_${nodes}_n_${n_input}_${duplicate}.log
+        dest: ${batch_name}/nodes_${nodes}_n_${n_input}_p_${policy}_${duplicate}.log
       - type: stats
-        dest: ${batch_name}/nodes_${nodes}_n_${n_input}_${duplicate}.stats
+        dest: ${batch_name}/nodes_${nodes}_n_${n_input}_p_${policy}_${duplicate}.stats
       - type: file
         src: mpirun_out.txt
-        dest: ${batch_name}/nodes_${nodes}_n_${n_input}_${duplicate}.out
+        dest: ${batch_name}/nodes_${nodes}_n_${n_input}_p_${policy}_${duplicate}.out
 
 build:
-  depend_params: [policy]
+  depend_params: [policy, trace]
   script: |
     source common.bash
 
     CFLAGS=${CFLAGS:-""}
     CFLAGS="$CFLAGS -DNDEBUG"
     CFLAGS="$CFLAGS -DITYR_POLICY=ityr_policy_$KOCHI_PARAM_POLICY"
+    if $KOCHI_PARAM_TRACE; then
+      CFLAGS="$CFLAGS -DPCAS_LOGGER_POLICY=policy_trace"
+    fi
 
     make clean
     MPICXX=$MPICXX CFLAGS=$CFLAGS make cilksort.out
 
 run:
-  depend_params: [nodes, cores, n_input, repeats, exec_type, cache_size, verify, cutoff_i, cutoff_m, cutoff_q]
+  depend_params: [nodes, cores, n_input, repeats, exec_type, cache_size, verify, cutoff_i, cutoff_m, cutoff_q, trace]
   script: |
     source common.bash
     n_nodes=$(echo $KOCHI_PARAM_NODES | cut -f 1 -d ":" | sed 's/x/*/g' | bc)
@@ -88,3 +95,4 @@ run:
       -i $KOCHI_PARAM_CUTOFF_I \
       -m $KOCHI_PARAM_CUTOFF_M \
       -q $KOCHI_PARAM_CUTOFF_Q
+    if $KOCHI_PARAM_TRACE; then run_trace_viewer; fi

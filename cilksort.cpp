@@ -417,7 +417,7 @@ void run(Span a, Span b) {
       init_array(a);
     }
 
-    uint64_t t0 = madi::global_clock::get_time();
+    uint64_t t0 = ityr::wallclock::gettime();
 
     if (my_rank == 0) {
       switch (exec_type) {
@@ -438,7 +438,7 @@ void run(Span a, Span b) {
       }
     }
 
-    uint64_t t1 = madi::global_clock::get_time();
+    uint64_t t1 = ityr::wallclock::gettime();
 
     if (my_rank == 0) {
       printf("[%d] %ld ns\n", r, t1 - t0);
@@ -449,6 +449,14 @@ void run(Span a, Span b) {
         }
       }
     }
+
+    ityr::barrier();
+
+    // FIXME
+    madi::comm::broadcast(&t0, 1, 0);
+    madi::comm::broadcast(&t1, 1, 0);
+
+    ityr::logger::flush(t0, t1);
 
     ityr::barrier();
   }

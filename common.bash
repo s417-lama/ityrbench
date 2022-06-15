@@ -1,5 +1,5 @@
 #!/bin/bash
-set -euo pipefail
+# set -euo pipefail
 
 MPICXX=${MPICXX:-mpicxx}
 
@@ -96,3 +96,11 @@ case $KOCHI_MACHINE in
     }
     ;;
 esac
+
+run_trace_viewer() {
+  if [[ -z ${KOCHI_FORWARD_PORT+x} ]]; then
+    echo "Trace viewer cannot be launched without 'kochi interact' command."
+    exit 1
+  fi
+  MLOG_VIEWER_ONESHOT=false bokeh serve $KOCHI_INSTALL_PREFIX_MASSIVELOGGER/viewer --port $KOCHI_FORWARD_PORT --allow-websocket-origin \* --args pcas_log_*.ignore
+}
