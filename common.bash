@@ -8,6 +8,8 @@ $MPICXX --version
 
 export MADM_RUN__=1
 export MADM_PRINT_ENV=1
+export PCAS_PRINT_ENV=1
+export ITYR_PRINT_ENV=1
 
 case $KOCHI_MACHINE in
   ito-a)

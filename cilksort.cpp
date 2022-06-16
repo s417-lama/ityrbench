@@ -488,7 +488,6 @@ void run(Span a, Span b) {
     madi::comm::broadcast(&t0, 1, 0);
     madi::comm::broadcast(&t1, 1, 0);
 
-    my_ityr::iro::flush_and_print_stat(t0, t1);
     my_ityr::logger::flush_and_print_stat(t0, t1);
 
     my_ityr::barrier();

@@ -6,12 +6,15 @@
 #include "ityr/logger/kind.hpp"
 #include "ityr/logger/impl_dummy.hpp"
 #include "ityr/logger/impl_trace.hpp"
+#include "ityr/logger/impl_stats.hpp"
 
 namespace ityr {
 namespace logger {
 
 template <typename ParentPolicy>
 struct policy {
+  static const char* outfile_prefix() { return "ityr"; }
+  using iro_t = typename ParentPolicy::template iro_t<ParentPolicy>;
   using wallclock_t = typename ParentPolicy::wallclock_t;
   using logger_kind_t = typename ParentPolicy::logger_kind_t;
   template <typename P>
@@ -20,6 +23,7 @@ struct policy {
 
 template <typename P>
 class logger_if {
+  using iro = typename P::iro_t;
   using kind = typename P::logger_kind_t;
   using impl = typename P::template impl_t<P>;
 
@@ -31,10 +35,12 @@ public:
   }
 
   static void flush(uint64_t t_begin, uint64_t t_end) {
+    iro::logger_flush(t_begin, t_end);
     impl::flush(t_begin, t_end);
   }
 
   static void flush_and_print_stat(uint64_t t_begin, uint64_t t_end) {
+    iro::logger_flush_and_print_stat(t_begin, t_end);
     impl::flush_and_print_stat(t_begin, t_end);
   }
 

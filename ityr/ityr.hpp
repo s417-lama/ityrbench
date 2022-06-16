@@ -1,6 +1,5 @@
 #pragma once
 
-#include "pcas/logger/impl_trace.hpp"
 #include "uth.h"
 #include "pcas/pcas.hpp"
 
@@ -15,18 +14,14 @@ namespace ityr {
 
 template <typename P>
 using ityr_logger_impl_t = logger::ITYR_LOGGER_IMPL<P>;
-template <typename P>
-using pcas_logger_impl_t = pcas::logger::ITYR_LOGGER_IMPL<P>;
 
 #undef ITYR_LOGGER_IMPL
 
 template <typename ParentPolicy>
 struct my_pcas_policy : pcas::policy_default {
   using wallclock_t = typename ParentPolicy::wallclock_t;
-  /* template <typename P> */
-  /* using logger_impl_t = typename ParentPolicy::template logger_impl_t<P>; */
   template <typename P>
-  using logger_impl_t = pcas_logger_impl_t<P>;
+  using logger_impl_t = typename ParentPolicy::template logger_impl_t<P>;
 };
 
 template <typename P>
@@ -70,7 +65,11 @@ public:
     pc().checkin(raw_ptr);
   }
 
-  static void flush_and_print_stat(uint64_t t_begin, uint64_t t_end) {
+  static void logger_flush(uint64_t t_begin, uint64_t t_end) {
+    my_pcas::logger::flush(t_begin, t_end);
+  }
+
+  static void logger_flush_and_print_stat(uint64_t t_begin, uint64_t t_end) {
     my_pcas::logger::flush_and_print_stat(t_begin, t_end);
   }
 
@@ -91,22 +90,20 @@ public:
   static void init(size_t cache_size) {}
 
   static void release() {}
-
   static void acquire() {}
 
   template <typename T>
   static global_ptr<T> malloc(uint64_t nelems) { return (T*)std::malloc(nelems * sizeof(T)); }
-
   template <typename T>
   static void free(global_ptr<T> ptr) { std::free(ptr); }
 
   template <access_mode Mode, typename T>
   static auto checkout(global_ptr<T> ptr, uint64_t nelems) { return ptr; }
-
   template <typename T>
   static void checkin(T* raw_ptr) {}
 
-  static void flush_and_print_stat(uint64_t t_begin, uint64_t t_end) {}
+  static void logger_flush(uint64_t t_begin, uint64_t t_end) {}
+  static void logger_flush_and_print_stat(uint64_t t_begin, uint64_t t_end) {}
 };
 
 // Wallclock Time
@@ -133,19 +130,6 @@ public:
   }
   static uint64_t get_time() {
     return madi::global_clock::get_time();
-  }
-};
-
-class wallclock_pcas {
-public:
-  static void init() {
-    pcas::global_clock::init();
-  }
-  static void sync() {
-    pcas::global_clock::sync();
-  }
-  static uint64_t get_time() {
-    return pcas::global_clock::get_time();
   }
 };
 
@@ -215,7 +199,7 @@ struct ityr_policy_naive {
   template <typename P>
   using iro_t = iro_pcas_default<P>;
 
-  using wallclock_t = wallclock_pcas;
+  using wallclock_t = wallclock_madm;
 
   using logger_kind_t = logger::kind_dummy;
 
