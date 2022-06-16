@@ -11,7 +11,7 @@ LDFLAGS  := $(UTH_LDFLAGS) -lpthread -lm -ldl
 MPICXX := $(or ${MPICXX},mpicxx)
 
 SRCS := $(wildcard ./*.cpp)
-HEADERS := $(wildcard ./*.hpp)
+HEADERS := $(wildcard **/*.hpp)
 
 MAIN_TARGETS := $(patsubst %.cpp,%.out,$(SRCS))
 
