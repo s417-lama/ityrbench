@@ -102,5 +102,6 @@ run_trace_viewer() {
     echo "Trace viewer cannot be launched without 'kochi interact' command."
     exit 1
   fi
-  MLOG_VIEWER_ONESHOT=false bokeh serve $KOCHI_INSTALL_PREFIX_MASSIVELOGGER/viewer --port $KOCHI_FORWARD_PORT --allow-websocket-origin \* --args pcas_log_*.ignore
+  shopt -s nullglob
+  MLOG_VIEWER_ONESHOT=false bokeh serve $KOCHI_INSTALL_PREFIX_MASSIVELOGGER/viewer --port $KOCHI_FORWARD_PORT --allow-websocket-origin \* --args ityr_log_*.ignore pcas_log_*.ignore
 }

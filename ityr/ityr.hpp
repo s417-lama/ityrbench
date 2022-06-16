@@ -1,12 +1,37 @@
+#pragma once
+
+#include "pcas/logger/impl_trace.hpp"
 #include "uth.h"
 #include "pcas/pcas.hpp"
 
+#include "ityr/ito_group.hpp"
+#include "ityr/logger/logger.hpp"
+
+namespace ityr {
+
+#ifndef ITYR_LOGGER_IMPL
+#define ITYR_LOGGER_IMPL impl_dummy
+#endif
+
 template <typename P>
-class iro_pcas {
-  static pcas::pcas& pc(size_t cache_size = 0) {
-    static pcas::pcas g_pc(cache_size);
-    return g_pc;
-  }
+using ityr_logger_impl_t = logger::ITYR_LOGGER_IMPL<P>;
+template <typename P>
+using pcas_logger_impl_t = pcas::logger::ITYR_LOGGER_IMPL<P>;
+
+#undef ITYR_LOGGER_IMPL
+
+template <typename ParentPolicy>
+struct my_pcas_policy : pcas::policy_default {
+  using wallclock_t = typename ParentPolicy::wallclock_t;
+  /* template <typename P> */
+  /* using logger_impl_t = typename ParentPolicy::template logger_impl_t<P>; */
+  template <typename P>
+  using logger_impl_t = pcas_logger_impl_t<P>;
+};
+
+template <typename P>
+class iro_pcas_default {
+  using my_pcas = pcas::pcas_if<my_pcas_policy<P>>;
 
 public:
   template <typename T>
@@ -27,7 +52,7 @@ public:
 
   template <typename T>
   static global_ptr<T> malloc(uint64_t nelems) {
-    return pc().malloc<T>(nelems);
+    return pc().template malloc<T>(nelems);
   }
 
   template <typename T>
@@ -37,12 +62,22 @@ public:
 
   template <access_mode Mode, typename T>
   static auto checkout(global_ptr<T> ptr, uint64_t nelems) {
-    return pc().checkout<Mode>(ptr, nelems);
+    return pc().template checkout<Mode>(ptr, nelems);
   }
 
   template <typename T>
   static void checkin(T* raw_ptr) {
     pc().checkin(raw_ptr);
+  }
+
+  static void flush_and_print_stat(uint64_t t_begin, uint64_t t_end) {
+    my_pcas::logger::flush_and_print_stat(t_begin, t_end);
+  }
+
+private:
+  static my_pcas& pc(size_t cache_size = 0) {
+    static my_pcas g_pc(cache_size);
+    return g_pc;
   }
 };
 
@@ -70,51 +105,47 @@ public:
 
   template <typename T>
   static void checkin(T* raw_ptr) {}
+
+  static void flush_and_print_stat(uint64_t t_begin, uint64_t t_end) {}
 };
 
 // Wallclock Time
 // -----------------------------------------------------------------------------
 
-template <typename P>
 class wallclock_native {
 public:
-  static uint64_t gettime() {
+  static void init() {}
+  static void sync() {}
+  static uint64_t get_time() {
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
     return (uint64_t)ts.tv_sec * 1000000000 + (uint64_t)ts.tv_nsec;
   }
 };
 
-template <typename P>
 class wallclock_madm {
 public:
-  static uint64_t gettime() {
+  static void init() {
+    madi::global_clock::init();
+  }
+  static void sync() {
+    madi::global_clock::sync();
+  }
+  static uint64_t get_time() {
     return madi::global_clock::get_time();
   }
 };
 
-template <typename P>
 class wallclock_pcas {
 public:
-  static uint64_t gettime() {
-    return pcas::global_clock::get_time();
+  static void init() {
+    pcas::global_clock::init();
   }
-};
-
-// Logger
-// -----------------------------------------------------------------------------
-
-template <typename P>
-class logger_dummy {
-public:
-  static void flush(uint64_t t0, uint64_t t1) {}
-};
-
-template <typename P>
-class logger_pcas {
-public:
-  static void flush(uint64_t t0, uint64_t t1) {
-    pcas::logger::flush_and_print_stat(t0, t1);
+  static void sync() {
+    pcas::global_clock::sync();
+  }
+  static uint64_t get_time() {
+    return pcas::global_clock::get_time();
   }
 };
 
@@ -129,9 +160,11 @@ public:
 
   using iro = typename P::template iro_t<P>;
 
-  using wallclock = typename P::template wallclock_t<P>;
+  using wallclock = typename P::wallclock_t;
 
-  using logger = typename P::template logger_t<P>;
+  using logger_kind = typename P::logger_kind_t::value;
+
+  using logger = typename logger::template logger_if<logger::policy<P>>;
 
   static uint64_t rank() { return P::rank(); }
 
@@ -148,17 +181,6 @@ public:
 // Serial
 // -----------------------------------------------------------------------------
 
-template <typename P, size_t MaxTasks, bool SpawnLastTask>
-class ito_group_serial {
-public:
-  ito_group_serial() {}
-
-  template <typename F, typename... Args>
-  void run(F f, Args... args) { f(args...); }
-
-  void wait() {}
-};
-
 struct ityr_policy_serial {
   template <typename P, size_t MaxTasks, bool SpawnLastTask>
   using ito_group_t = ito_group_serial<P, MaxTasks, SpawnLastTask>;
@@ -166,11 +188,12 @@ struct ityr_policy_serial {
   template <typename P>
   using iro_t = iro_dummy<P>;
 
-  template <typename P>
-  using wallclock_t = wallclock_native<P>;
+  using wallclock_t = wallclock_native;
+
+  using logger_kind_t = logger::kind_dummy;
 
   template <typename P>
-  using logger_t = logger_dummy<P>;
+  using logger_impl_t = logger::impl_dummy<P>;
 
   static uint64_t rank() { return 0; }
 
@@ -185,54 +208,19 @@ struct ityr_policy_serial {
 // Naive
 // -----------------------------------------------------------------------------
 
-template <typename P, size_t MaxTasks, bool SpawnLastTask>
-class ito_group_naive {
-  using iro = typename P::template iro_t<P>;
-
-  madm::uth::thread<void> tasks_[MaxTasks];
-  size_t n_ = 0;
-
-public:
-  ito_group_naive() {}
-
-  template <typename F, typename... Args>
-  void run(F f, Args... args) {
-    assert(n_ < MaxTasks);
-    if (SpawnLastTask || n_ < MaxTasks - 1) {
-      iro::release();
-      new (&tasks_[n_++]) madm::uth::thread<void>{[=] {
-        iro::acquire();
-        f(args...);
-        iro::release();
-      }};
-      iro::acquire();
-    } else {
-      f(args...);
-    }
-  }
-
-  void wait() {
-    iro::release();
-    for (size_t i = 0; i < n_; i++) {
-      tasks_[i].join();
-    }
-    iro::acquire();
-    n_ = 0;
-  }
-};
-
 struct ityr_policy_naive {
   template <typename P, size_t MaxTasks, bool SpawnLastTask>
   using ito_group_t = ito_group_naive<P, MaxTasks, SpawnLastTask>;
 
   template <typename P>
-  using iro_t = iro_pcas<P>;
+  using iro_t = iro_pcas_default<P>;
+
+  using wallclock_t = wallclock_pcas;
+
+  using logger_kind_t = logger::kind_dummy;
 
   template <typename P>
-  using wallclock_t = wallclock_pcas<P>;
-
-  template <typename P>
-  using logger_t = logger_pcas<P>;
+  using logger_impl_t = ityr_logger_impl_t<P>;
 
   static uint64_t rank() {
     return madm::uth::get_pid();
@@ -255,68 +243,6 @@ struct ityr_policy_naive {
 // Work-first fence elimination
 // -----------------------------------------------------------------------------
 
-template <typename P, size_t MaxTasks, bool SpawnLastTask>
-class ito_group_workfirst {
-  using iro = typename P::template iro_t<P>;
-
-  madm::uth::thread<void> tasks_[MaxTasks];
-  bool synched_[MaxTasks];
-  uint64_t initial_rank;
-  size_t n_ = 0;
-
-public:
-  ito_group_workfirst() { initial_rank = ityr_if<P>::rank(); }
-
-  template <typename F, typename... Args>
-  void run(F f, Args... args) {
-    assert(n_ < MaxTasks);
-    if (SpawnLastTask || n_ < MaxTasks - 1) {
-      auto p_th = &tasks_[n_];
-      iro::release();
-      new (p_th) madm::uth::thread<void>{};
-      synched_[n_] = p_th->spawn_aux(f, std::make_tuple(args...),
-      [=] (bool parent_popped) {
-        // on-die callback
-        if (!parent_popped) {
-          iro::release();
-        }
-      });
-      if (!synched_[n_]) {
-        iro::acquire();
-      }
-      n_++;
-    } else {
-      f(args...);
-    }
-  }
-
-  void wait() {
-    bool blocked = false;
-    for (size_t i = 0; i < n_; i++) {
-      tasks_[i].join_aux(0, [&blocked] {
-        // on-block callback
-        if (!blocked) {
-          iro::release();
-          blocked = true;
-        }
-      });
-    }
-    bool all_synched = true;
-    for (size_t i = 0; i < n_; i++) {
-      if (!synched_[i]) {
-        all_synched = false;
-        break;
-      }
-    }
-    if (initial_rank != ityr_if<P>::rank() ||
-        (!all_synched || blocked)) {
-      // FIXME: (all_synched && blocked) is true only for root tasks
-      iro::acquire();
-    }
-    n_ = 0;
-  }
-};
-
 struct ityr_policy_workfirst : ityr_policy_naive {
   template <typename P, size_t MaxTasks, bool SpawnLastTask>
   using ito_group_t = ito_group_workfirst<P, MaxTasks, SpawnLastTask>;
@@ -329,6 +255,8 @@ struct ityr_policy_workfirst : ityr_policy_naive {
 #define ITYR_POLICY ityr_policy_naive
 #endif
 
-using ityr = ityr_if<ITYR_POLICY>;
+using ityr_policy = ITYR_POLICY;
 
 #undef ITYR_POLICY
+
+}
