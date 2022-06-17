@@ -12,6 +12,9 @@ enum class kind_value {
   Init = 0,
   Quicksort,
   Merge,
+  BinarySearch,
+  QuicksortKernel,
+  MergeKernel,
   _NKinds,
 };
 
@@ -20,10 +23,13 @@ public:
   using ityr::logger::kind_base<kind, kind_value>::kind_base;
   constexpr const char* str() const {
     switch (val_) {
-      case value::Init:      return "";
-      case value::Quicksort: return "quicksort";
-      case value::Merge:     return "merge";
-      default:               return "other";
+      case value::Init:               return "";
+      case value::Quicksort:          return "quicksort";
+      case value::Merge:              return "merge";
+      case value::BinarySearch:       return "binary_search";
+      case value::QuicksortKernel:    return "quicksort_kernel";
+      case value::MergeKernel:        return "merge_kernel";
+      default:                        return "other";
     }
   }
 };
@@ -321,23 +327,27 @@ void cilkmerge(Span s1, Span s2, Span dest) {
     return;
   }
   if (s1.size() < cutoff_merge) {
+    auto ev = my_ityr::logger::record<my_ityr::logger_kind::Merge>();
+
     auto s1_ = s1.template checkout<my_ityr::iro::access_mode::read>();
     auto s2_ = s2.template checkout<my_ityr::iro::access_mode::read>();
     auto dest_ = dest.template checkout<my_ityr::iro::access_mode::write>();
-
     {
-      auto ev = my_ityr::logger::record<my_ityr::logger_kind::Merge>();
+      auto ev2 = my_ityr::logger::record<my_ityr::logger_kind::MergeKernel>();
       merge_seq(s1_, s2_, dest_);
     }
-
     s1.checkin(s1_);
     s2.checkin(s2_);
     dest.checkin(dest_);
     return;
   }
 
-  size_t split1 = (s1.size() + 1) / 2;
-  size_t split2 = binary_search(s2, s1[split1 - 1]);
+  size_t split1, split2;
+  {
+    auto ev = my_ityr::logger::record<my_ityr::logger_kind::BinarySearch>();
+    split1 = (s1.size() + 1) / 2;
+    split2 = binary_search(s2, s1[split1 - 1]);
+  }
 
   auto [s11  , s12  ] = s1.divide(split1);
   auto [s21  , s22  ] = s2.divide(split2);
@@ -356,13 +366,13 @@ void cilksort(Span a, Span b) {
   assert(a.size() == b.size());
 
   if (a.size() < cutoff_quick) {
-    auto a_ = a.template checkout<my_ityr::iro::access_mode::read_write>();
+    auto ev = my_ityr::logger::record<my_ityr::logger_kind::Quicksort>();
 
+    auto a_ = a.template checkout<my_ityr::iro::access_mode::read_write>();
     {
-      auto ev = my_ityr::logger::record<my_ityr::logger_kind::Quicksort>();
+      auto ev2 = my_ityr::logger::record<my_ityr::logger_kind::QuicksortKernel>();
       quicksort_seq(a_);
     }
-
     a.checkin(a_);
     return;
   }
