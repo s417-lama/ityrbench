@@ -56,7 +56,7 @@ class ito_group_workfirst {
   using iro = typename P::template iro_t<P>;
 
   madm::uth::thread<void> tasks_[MaxTasks];
-  bool synched_[MaxTasks];
+  bool all_synched_ = true;
   uint64_t initial_rank;
   size_t n_ = 0;
 
@@ -70,16 +70,17 @@ public:
       auto p_th = &tasks_[n_];
       iro::release();
       new (p_th) madm::uth::thread<void>{};
-      synched_[n_] = p_th->spawn_aux(f, std::make_tuple(args...),
-      [=] (bool parent_popped) {
-        // on-die callback
-        if (!parent_popped) {
-          iro::release();
-        }
-      });
-      if (!synched_[n_]) {
+      bool synched = p_th->spawn_aux(f, std::make_tuple(args...),
+        [=] (bool parent_popped) {
+          // on-die callback
+          if (!parent_popped) {
+            iro::release();
+          }
+        });
+      if (!synched) {
         iro::acquire();
       }
+      all_synched_ &= synched;
       n_++;
     } else {
       f(args...);
@@ -97,15 +98,7 @@ public:
         }
       });
     }
-    bool all_synched = true;
-    for (size_t i = 0; i < n_; i++) {
-      if (!synched_[i]) {
-        all_synched = false;
-        break;
-      }
-    }
-    if (initial_rank != P::rank() ||
-        (!all_synched || blocked)) {
+    if (initial_rank != P::rank() || !all_synched_ || blocked) {
       // FIXME: (all_synched && blocked) is true only for root tasks
       iro::acquire();
     }

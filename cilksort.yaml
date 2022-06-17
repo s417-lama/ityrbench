@@ -13,6 +13,7 @@ default_params:
       machines: [wisteria-o]
     - value: 6
       machines: [local]
+  elem_type: float
   n_input: 1_000_000
   repeats: 10
   exec_type: 2 # 0:serial/1:std::sort/2:parallel
@@ -67,12 +68,13 @@ batches:
         dest: ${batch_name}/nodes_${nodes}_n_${n_input}_p_${policy}_${duplicate}.out
 
 build:
-  depend_params: [policy, logger]
+  depend_params: [elem_type, policy, logger]
   script: |
     source common.bash
 
     CFLAGS=${CFLAGS:-""}
     CFLAGS="$CFLAGS -DNDEBUG"
+    CFLAGS="$CFLAGS -DITYR_BENCH_ELEM_TYPE=$KOCHI_PARAM_ELEM_TYPE"
     CFLAGS="$CFLAGS -DITYR_POLICY=ityr_policy_$KOCHI_PARAM_POLICY"
     CFLAGS="$CFLAGS -DITYR_LOGGER_IMPL=impl_$KOCHI_PARAM_LOGGER"
 

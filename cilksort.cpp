@@ -13,6 +13,7 @@ enum class kind_value {
   Quicksort,
   Merge,
   BinarySearch,
+  Copy,
   QuicksortKernel,
   MergeKernel,
   _NKinds,
@@ -29,6 +30,7 @@ public:
       case value::BinarySearch:       return "binary_search";
       case value::QuicksortKernel:    return "quicksort_kernel";
       case value::MergeKernel:        return "merge_kernel";
+      case value::Copy:               return "copy";
       default:                        return "other";
     }
   }
@@ -206,7 +208,13 @@ std::string to_str(T x) {
   return ss.str();
 }
 
-using elem_t = float;
+#ifndef ITYR_BENCH_ELEM_TYPE
+#define ITYR_BENCH_ELEM_TYPE float
+#endif
+
+using elem_t = ITYR_BENCH_ELEM_TYPE;
+
+#undef ITYR_BENCH_ELEM_TYPE
 
 int my_rank = -1;
 int n_procs = -1;
@@ -323,6 +331,7 @@ void cilkmerge(Span s1, Span s2, Span dest) {
     std::swap(s1, s2);
   }
   if (s2.size() == 0) {
+    auto ev = my_ityr::logger::record<my_ityr::logger_kind::Copy>();
     copy(dest, s1);
     return;
   }
@@ -410,12 +419,25 @@ void cilksort(Span a, Span b) {
   cilkmerge(b12, b34, a);
 }
 
+template <typename T, typename Rng>
+std::enable_if_t<std::is_integral_v<T>>
+set_random_elem(T& e, Rng& r) {
+  static std::uniform_int_distribution<T> dist(0, std::numeric_limits<T>::max());
+  e = dist(r);
+}
+
+template <typename T, typename Rng>
+std::enable_if_t<std::is_floating_point_v<T>>
+set_random_elem(T& e, Rng& r) {
+  static std::uniform_real_distribution<T> dist(0, 1.0);
+  e = dist(r);
+}
+
 template <typename Span, typename Rng>
 void init_array_aux(Span s, Rng r) {
-  static std::uniform_real_distribution<typename Span::element_type> dist(0.0, 1.0);
   if (s.size() < cutoff_quick) {
     s.for_each([&](typename Span::element_type& e) {
-      e = dist(r);
+      set_random_elem(e, r);
     });
   } else {
     auto [s1, s2] = s.divide_two();
@@ -429,7 +451,6 @@ void init_array_aux(Span s, Rng r) {
 
 template <typename Span>
 void init_array(Span s) {
-  static std::uniform_real_distribution<typename Span::element_type> dist(0.0, 1.0);
   static int counter = 0;
   std::mt19937 r(counter++);
   my_ityr::ito_group<1, true> tg;
@@ -563,6 +584,7 @@ int real_main(int argc, char **argv) {
     setlocale(LC_NUMERIC, "en_US.UTF-8");
     printf("=============================================================\n"
            "[Cliksort]\n"
+           "Element type:                  %s (%ld bytes)\n"
            "# of processes:                %d\n"
            "N (Input size):                %ld\n"
            "# of repeats:                  %d\n"
@@ -573,6 +595,7 @@ int real_main(int argc, char **argv) {
            "Cutoff (merge):                %ld\n"
            "Cutoff (quicksort):            %ld\n"
            "-------------------------------------------------------------\n",
+           ityr::typename_str<elem_t>(), sizeof(elem_t),
            n_procs, n_input, n_repeats, to_str(exec_type).c_str(), cache_size, verify_result,
            cutoff_insert, cutoff_merge, cutoff_quick);
     printf("uth options:\n");

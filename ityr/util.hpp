@@ -5,6 +5,14 @@
 
 namespace ityr {
 
+template <typename T> constexpr inline const char* typename_str()         { return "unknown"; }
+template <>           constexpr inline const char* typename_str<char>()   { return "char";    }
+template <>           constexpr inline const char* typename_str<short>()  { return "short";   }
+template <>           constexpr inline const char* typename_str<int>()    { return "int";     }
+template <>           constexpr inline const char* typename_str<long>()   { return "long";    }
+template <>           constexpr inline const char* typename_str<float>()  { return "float";   }
+template <>           constexpr inline const char* typename_str<double>() { return "double";  }
+
 template <typename T>
 inline T get_env_(const char* env_var, T default_val) {
   if (const char* val_str = std::getenv(env_var)) {
