@@ -6,6 +6,8 @@
 #include <random>
 #include <sstream>
 
+#include <mpi.h>
+
 #include "ityr/ityr.hpp"
 
 enum class kind_value {
@@ -73,7 +75,14 @@ public:
   }
 
   template <typename F>
-  void for_each(F f) {
+  void for_each(F f) const {
+    for (size_t i = 0; i < n_; i++) {
+      f(const_cast<const T>(ptr_[i]));
+    }
+  }
+
+  template <typename F>
+  void map(F f) {
     for (size_t i = 0; i < n_; i++) {
       f(ptr_[i]);
     }
@@ -121,6 +130,8 @@ public:
     auto p = my_ityr::iro::checkout<my_ityr::iro::access_mode::read>(ptr_ + i, 1);
     T ret = *p;
     my_ityr::iro::checkin(p);
+    /* T ret; */
+    /* my_ityr::iro::get(ptr_ + i, &ret, 1); */
     return ret;
   }
 
@@ -138,7 +149,19 @@ public:
   }
 
   template <typename F>
-  void for_each(F f) {
+  void for_each(F f) const {
+    for (size_t i = 0; i < n_; i += BlockSize / sizeof(T)) {
+      size_t b = std::min(n_ - i, BlockSize / sizeof(T));
+      auto p = my_ityr::iro::checkout<my_ityr::iro::access_mode::read>(ptr_ + i, b);
+      for (size_t j = 0; j < b; j++) {
+        f(const_cast<const T>(p[j]));
+      }
+      my_ityr::iro::checkin(p);
+    }
+  }
+
+  template <typename F>
+  void map(F f) {
     for (size_t i = 0; i < n_; i += BlockSize / sizeof(T)) {
       size_t b = std::min(n_ - i, BlockSize / sizeof(T));
       auto p = my_ityr::iro::checkout<my_ityr::iro::access_mode::read_write>(ptr_ + i, b);
@@ -217,7 +240,7 @@ using elem_t = ITYR_BENCH_ELEM_TYPE;
 #undef ITYR_BENCH_ELEM_TYPE
 
 int my_rank = -1;
-int n_procs = -1;
+int n_ranks = -1;
 
 size_t n_input       = 1024;
 int    n_repeats     = 10;
@@ -436,7 +459,7 @@ set_random_elem(T& e, Rng& r) {
 template <typename Span, typename Rng>
 void init_array_aux(Span s, Rng r) {
   if (s.size() < cutoff_quick) {
-    s.for_each([&](typename Span::element_type& e) {
+    s.map([&](typename Span::element_type& e) {
       set_random_elem(e, r);
     });
   } else {
@@ -453,11 +476,16 @@ template <typename Span>
 void init_array(Span s) {
   static int counter = 0;
   std::mt19937 r(counter++);
+
+  /* s.map([&](typename Span::element_type& e) { */
+  /*   set_random_elem(e, r); */
+  /* }); */
   my_ityr::ito_group<1, true> tg;
   tg.run([=] { init_array_aux(s, r); });
   tg.wait();
+
   /* s.for_each([&](typename Span::element_type& e) { */
-  /*   printf("%f\n", e); */
+  /*   std::cout << e << std::endl; */
   /* }); */
 }
 
@@ -479,6 +507,10 @@ void run(Span a, Span b) {
     if (my_rank == 0) {
       init_array(a);
     }
+
+    my_ityr::barrier();
+    my_ityr::logger::clear();
+    my_ityr::barrier();
 
     uint64_t t0 = my_ityr::wallclock::get_time();
 
@@ -503,23 +535,29 @@ void run(Span a, Span b) {
 
     uint64_t t1 = my_ityr::wallclock::get_time();
 
+    my_ityr::barrier();
+
     if (my_rank == 0) {
       printf("[%d] %ld ns\n", r, t1 - t0);
       fflush(stdout);
+    }
+
+    if (n_ranks > 1) {
+      // FIXME
+      MPI_Bcast(&t0, 1, MPI_UINT64_T, 0, MPI_COMM_WORLD);
+      MPI_Bcast(&t1, 1, MPI_UINT64_T, 0, MPI_COMM_WORLD);
+    }
+
+    my_ityr::logger::flush_and_print_stat(t0, t1);
+
+    if (my_rank == 0) {
       if (verify_result) {
         if (!check_sorted(a)) {
           printf("check failed.\n");
+          fflush(stdout);
         }
       }
     }
-
-    my_ityr::barrier();
-
-    // FIXME
-    madi::comm::broadcast(&t0, 1, 0);
-    madi::comm::broadcast(&t1, 1, 0);
-
-    my_ityr::logger::flush_and_print_stat(t0, t1);
 
     my_ityr::barrier();
   }
@@ -543,9 +581,9 @@ void show_help_and_exit(int argc, char** argv) {
 
 int real_main(int argc, char **argv) {
   my_rank = my_ityr::rank();
-  n_procs = my_ityr::n_ranks();
+  n_ranks = my_ityr::n_ranks();
 
-  my_ityr::logger::init(my_rank, n_procs);
+  my_ityr::logger::init(my_rank, n_ranks);
 
   int opt;
   while ((opt = getopt(argc, argv, "n:r:e:c:v:s:i:m:q:h")) != EOF) {
@@ -596,7 +634,7 @@ int real_main(int argc, char **argv) {
            "Cutoff (quicksort):            %ld\n"
            "-------------------------------------------------------------\n",
            ityr::typename_str<elem_t>(), sizeof(elem_t),
-           n_procs, n_input, n_repeats, to_str(exec_type).c_str(), cache_size, verify_result,
+           n_ranks, n_input, n_repeats, to_str(exec_type).c_str(), cache_size, verify_result,
            cutoff_insert, cutoff_merge, cutoff_quick);
     printf("uth options:\n");
     madm::uth::print_options(stdout);

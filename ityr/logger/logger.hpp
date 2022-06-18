@@ -49,6 +49,7 @@ public:
   }
 
   static void clear() {
+    iro::logger_clear();
     impl::clear();
   }
 

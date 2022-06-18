@@ -55,6 +55,16 @@ public:
     pc().free(ptr);
   }
 
+  template <typename T>
+  static void get(global_ptr<T> from_ptr, T* to_ptr, uint64_t nelems) {
+    return pc().get(from_ptr, to_ptr, nelems);
+  }
+
+  template <typename T>
+  static void put(const T* from_ptr, global_ptr<T> to_ptr, uint64_t nelems) {
+    return pc().put(from_ptr, to_ptr, nelems);
+  }
+
   template <access_mode Mode, typename T>
   static auto checkout(global_ptr<T> ptr, uint64_t nelems) {
     return pc().template checkout<Mode>(ptr, nelems);
@@ -63,6 +73,10 @@ public:
   template <typename T>
   static void checkin(T* raw_ptr) {
     pc().checkin(raw_ptr);
+  }
+
+  static void logger_clear() {
+    my_pcas::logger::clear();
   }
 
   static void logger_flush(uint64_t t_begin, uint64_t t_end) {
@@ -97,11 +111,17 @@ public:
   template <typename T>
   static void free(global_ptr<T> ptr) { std::free(ptr); }
 
+  template <typename T>
+  static void get(global_ptr<T> from_ptr, T* to_ptr, uint64_t nelems) {}
+  template <typename T>
+  static void put(const T* from_ptr, global_ptr<T> to_ptr, uint64_t nelems) {}
+
   template <access_mode Mode, typename T>
   static auto checkout(global_ptr<T> ptr, uint64_t nelems) { return ptr; }
   template <typename T>
   static void checkin(T* raw_ptr) {}
 
+  static void logger_clear() {}
   static void logger_flush(uint64_t t_begin, uint64_t t_end) {}
   static void logger_flush_and_print_stat(uint64_t t_begin, uint64_t t_end) {}
 };
