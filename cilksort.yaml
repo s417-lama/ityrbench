@@ -11,6 +11,8 @@ default_params:
   cores:
     - value: 48
       machines: [wisteria-o]
+    - value: 36
+      machines: [ito-a]
     - value: 6
       machines: [local]
   elem_type: float

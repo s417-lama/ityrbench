@@ -54,12 +54,19 @@ machines:
 dependencies:
   ucx:
     recipes:
+      1.10.0:
+        before_script:
+          - wget https://github.com/openucx/ucx/releases/download/v1.10.0/ucx-1.10.0.tar.gz
+          - tar xvf ucx-1.10.0.tar.gz
+          - cd ucx-1.10.0/
       1.12.1:
         before_script:
           - wget https://github.com/openucx/ucx/releases/download/v1.12.1/ucx-1.12.1.tar.gz
           - tar xvf ucx-1.12.1.tar.gz
           - cd ucx-1.12.1/
     script:
+      - unset MPICC
+      - unset MPICXX
       - mkdir build
       - cd build/
       - ../configure --prefix=$KOCHI_INSTALL_PREFIX
@@ -68,9 +75,9 @@ dependencies:
 
   openmpi:
     git: https://github.com/open-mpi/ompi.git
-    depends:
-      - name: ucx
-        recipe: 1.12.1
+    # depends:
+    #   - name: ucx
+    #     recipe: 1.10.0
     recipes:
       5.0.0rc2:
         branch: v5.0.0rc2
@@ -86,7 +93,8 @@ dependencies:
       - ./autogen.pl
       - mkdir build
       - cd build/
-      - ../configure --prefix=$KOCHI_INSTALL_PREFIX --with-ucx=$KOCHI_INSTALL_PREFIX_UCX --disable-man-pages --with-pmix=internal
+      # - ../configure --prefix=$KOCHI_INSTALL_PREFIX --with-ucx=$KOCHI_INSTALL_PREFIX_UCX --disable-man-pages --with-pmix=internal --with-hwloc=internal --with-libevent=internal --without-hcoll
+      - ../configure --prefix=$KOCHI_INSTALL_PREFIX --with-ucx --disable-man-pages --with-pmix=internal --with-hwloc=internal --with-libevent=internal --without-hcoll
       - make -j
       - make install
     activate_script:
@@ -97,11 +105,8 @@ dependencies:
     git: git@gitlab.eidos.ic.i.u-tokyo.ac.jp:shiina/massivethreads-dm.git
     depends:
       - name: openmpi
-        recipe: 5.0.0rc2
-        machines: [ito-a]
-      - name: openmpi
         recipe: 5.0.0rc7
-        machines: [local]
+        machines: [ito-a, local]
     recipes:
       release:
         branch: ityr
@@ -126,11 +131,8 @@ dependencies:
     git: git@gitlab.eidos.ic.i.u-tokyo.ac.jp:shiina/pcas.git
     depends:
       - name: openmpi
-        recipe: 5.0.0rc2
-        machines: [ito-a]
-      - name: openmpi
         recipe: 5.0.0rc7
-        machines: [local]
+        machines: [ito-a, local]
     recipes:
       release:
         branch: master
