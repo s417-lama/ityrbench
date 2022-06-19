@@ -3,6 +3,7 @@
 #include "uth.h"
 #include "pcas/pcas.hpp"
 
+#include "ityr/util.hpp"
 #include "ityr/ito_group.hpp"
 #include "ityr/logger/logger.hpp"
 
@@ -176,6 +177,7 @@ public:
 
   template <typename F, typename... Args>
   static void main(F f, Args... args) {
+    set_segv_handler();
     P::main(f, args...);
   }
 

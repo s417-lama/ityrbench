@@ -5,6 +5,8 @@ depends:
     recipe: release
   - name: massivelogger
     recipe: release
+  - name: libunwind
+    recipe: 1.6.2
 
 default_params:
   nodes: 1
