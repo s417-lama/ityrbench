@@ -5,8 +5,8 @@ depends:
     recipe: release
   - name: massivelogger
     recipe: release
-  - name: libunwind
-    recipe: 1.6.2
+  - name: backward-cpp
+    recipe: v1.6
 
 default_params:
   nodes: 1

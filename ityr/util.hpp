@@ -5,8 +5,9 @@
 #include <signal.h>
 #include <dlfcn.h>
 
-#define UNW_LOCAL_ONLY
-#include "libunwind.h"
+#define BACKWARD_HAS_BFD 1
+#define BACKWARD_HAS_LIBUNWIND 1
+#include "backward.hpp"
 
 namespace ityr {
 
@@ -46,38 +47,13 @@ inline T get_env(const char* env_var, T default_val, int rank) {
 }
 
 inline void print_backtrace() {
-  unw_cursor_t cursor;
-  unw_context_t context;
-  unw_word_t offset;
-  unw_proc_info_t pinfo;
-  Dl_info dli;
-  char sname[256];
-  void *addr;
-  int count = 0;
-  char *buf;
-  size_t buf_size;
-  FILE* mstream = open_memstream(&buf, &buf_size);
-
-  unw_getcontext(&context);
-  unw_init_local(&cursor, &context);
-
-  fprintf(mstream, "Backtrace:\n");
-  while (unw_step(&cursor) > 0) {
-    unw_get_proc_info(&cursor, &pinfo);
-    unw_get_proc_name(&cursor, sname, sizeof(sname), &offset);
-    addr = (char *)pinfo.start_ip + offset;
-    dladdr(addr, &dli);
-    fprintf(mstream, "  #%d %p in %s + 0x%lx from %s\n",
-            count, addr, sname, offset, dli.dli_fname);
-    count++;
-  }
-  fprintf(mstream, "\n");
-  fflush(mstream);
-
-  fwrite(buf, sizeof(char), buf_size, stdout);
-
-  fclose(mstream);
-  free(buf);
+  backward::StackTrace st;
+  st.load_here(32);
+  backward::Printer p;
+  p.object = true;
+  p.color_mode = backward::ColorMode::always;
+  p.address = true;
+  p.print(st, stderr);
 }
 
 inline void segv_handler(int sig) {
