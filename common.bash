@@ -20,6 +20,7 @@ case $KOCHI_MACHINE in
       local n_processes=$1
       local n_processes_per_node=$2
       mpirun -n $n_processes -N $n_processes_per_node \
+        -x UCX_TLS=ib \
         --mca plm_rsh_agent pjrsh \
         --hostfile $PJM_O_NODEINF \
         --mca osc_ucx_acc_single_intrinsic true \

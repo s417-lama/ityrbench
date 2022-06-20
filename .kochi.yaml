@@ -54,28 +54,27 @@ machines:
 dependencies:
   ucx:
     recipes:
+      1.7.0:
+        before_script: UCX_VERSION=1.7.0
+      1.8.0:
+        before_script: UCX_VERSION=1.8.0 && sed -i 's/\x0//g' sys/module.c # error: null character(s) ignored [-Werror]
+      1.9.0:
+        before_script: UCX_VERSION=1.9.0
       1.10.0:
-        before_script:
-          - wget https://github.com/openucx/ucx/releases/download/v1.10.0/ucx-1.10.0.tar.gz
-          - tar xvf ucx-1.10.0.tar.gz
-          - cd ucx-1.10.0/
+        before_script: UCX_VERSION=1.10.0
       1.11.0:
-        before_script:
-          - wget https://github.com/openucx/ucx/releases/download/v1.11.0/ucx-1.11.0.tar.gz
-          - tar xvf ucx-1.11.0.tar.gz
-          - cd ucx-1.11.0/
+        before_script: UCX_VERSION=1.11.0
+      1.11.2:
+        before_script: UCX_VERSION=1.11.2
       1.12.1:
-        before_script:
-          - wget https://github.com/openucx/ucx/releases/download/v1.12.1/ucx-1.12.1.tar.gz
-          - tar xvf ucx-1.12.1.tar.gz
-          - cd ucx-1.12.1/
+        before_script: UCX_VERSION=1.12.1
     script:
       - unset MPICC
       - unset MPICXX
-      - mkdir build
-      - cd build/
-      - ../configure --prefix=$KOCHI_INSTALL_PREFIX
-      # - ./contrib/configure-release --prefix=$KOCHI_INSTALL_PREFIX
+      - wget https://github.com/openucx/ucx/releases/download/v${UCX_VERSION}/ucx-${UCX_VERSION}.tar.gz
+      - tar xvf ucx-${UCX_VERSION}.tar.gz
+      - cd ucx-${UCX_VERSION}/
+      - ./contrib/configure-release --prefix=$KOCHI_INSTALL_PREFIX
       # - ./contrib/configure-devel --prefix=$KOCHI_INSTALL_PREFIX
       - make -j
       - make install
@@ -96,11 +95,49 @@ dependencies:
         branch: v5.0.0rc7
       5.0.x:
         branch: v5.0.x
+        depends:
+          - name: ucx
+            recipe: 1.12.1
+      test1: # fail
+        branch: v5.0.0rc1
+        depends:
+          - name: ucx
+            recipe: 1.10.0
+      test2: # fail
+        branch: v5.0.0rc1
+        depends:
+          - name: ucx
+            recipe: 1.9.0
+      test3: # build failed: Please upgrade to UCX version 1.9 or higher
+        branch: v5.0.0rc1
+        depends:
+          - name: ucx
+            recipe: 1.8.0
+      test4: # fail
+        branch: v5.0.0rc1
+        depends:
+          - name: ucx
+            recipe: 1.12.1
+      test5: # fail
+        branch: v5.0.0rc7
+        depends:
+          - name: ucx
+            recipe: 1.12.1
+      test6: # fail
+        branch: v5.0.0rc4
+        depends:
+          - name: ucx
+            recipe: 1.11.0
+      test7: # fail
+        branch: main
+        depends:
+          - name: ucx
+            recipe: 1.11.0
     script:
       - ./autogen.pl
       - mkdir build
       - cd build/
-      - ../configure --prefix=$KOCHI_INSTALL_PREFIX --with-ucx=$KOCHI_INSTALL_PREFIX_UCX --disable-man-pages --with-pmix=internal --with-hwloc=internal --with-libevent=internal --without-hcoll
+      - ../configure CFLAGS="-g" --prefix=$KOCHI_INSTALL_PREFIX --with-ucx=$KOCHI_INSTALL_PREFIX_UCX --disable-man-pages --with-pmix=internal --with-hwloc=internal --with-libevent=internal --without-hcoll
       - make -j
       - make install
     activate_script:
@@ -111,7 +148,8 @@ dependencies:
     git: git@gitlab.eidos.ic.i.u-tokyo.ac.jp:shiina/massivethreads-dm.git
     depends:
       - name: openmpi
-        recipe: 5.0.0rc7
+        # recipe: 5.0.0rc2
+        recipe: test7
         machines: [ito-a, local]
     recipes:
       release:
@@ -137,7 +175,8 @@ dependencies:
     git: git@gitlab.eidos.ic.i.u-tokyo.ac.jp:shiina/pcas.git
     depends:
       - name: openmpi
-        recipe: 5.0.0rc7
+        # recipe: 5.0.0rc2
+        recipe: test7
         machines: [ito-a, local]
     recipes:
       release:

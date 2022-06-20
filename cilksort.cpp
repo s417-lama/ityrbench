@@ -639,6 +639,7 @@ int real_main(int argc, char **argv) {
     printf("uth options:\n");
     madm::uth::print_options(stdout);
     printf("=============================================================\n\n");
+    printf("PID of the main worker: %d\n", getpid());
     fflush(stdout);
   }
 
