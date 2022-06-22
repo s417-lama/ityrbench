@@ -214,7 +214,11 @@ dependencies:
       - wget http://download.savannah.nongnu.org/releases/libunwind/libunwind-${LIBUNWIND_VERSION}.tar.gz
       - tar xvf libunwind-${LIBUNWIND_VERSION}.tar.gz
       - cd libunwind-${LIBUNWIND_VERSION}/
-      - ./configure --prefix=$KOCHI_INSTALL_PREFIX
+      - if [[ $KOCHI_MACHINE == wisteria-o ]]; then
+      -   ./configure CC=fccpx CXX=FCCpx --prefix=$KOCHI_INSTALL_PREFIX --host=aarch64-linux-gnu
+      - else
+      -   ./configure --prefix=$KOCHI_INSTALL_PREFIX
+      - fi
       - make -j
       - make install
 
