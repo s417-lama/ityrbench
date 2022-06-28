@@ -98,41 +98,6 @@ dependencies:
         depends:
           - name: ucx
             recipe: 1.12.1
-      test1: # fail
-        branch: v5.0.0rc1
-        depends:
-          - name: ucx
-            recipe: 1.10.0
-      test2: # fail
-        branch: v5.0.0rc1
-        depends:
-          - name: ucx
-            recipe: 1.9.0
-      test3: # build failed: Please upgrade to UCX version 1.9 or higher
-        branch: v5.0.0rc1
-        depends:
-          - name: ucx
-            recipe: 1.8.0
-      test4: # fail
-        branch: v5.0.0rc1
-        depends:
-          - name: ucx
-            recipe: 1.12.1
-      test5: # fail
-        branch: v5.0.0rc7
-        depends:
-          - name: ucx
-            recipe: 1.12.1
-      test6: # fail
-        branch: v5.0.0rc4
-        depends:
-          - name: ucx
-            recipe: 1.11.0
-      test7: # fail
-        branch: main
-        depends:
-          - name: ucx
-            recipe: 1.11.0
     script:
       - ./autogen.pl
       - mkdir build
@@ -148,8 +113,7 @@ dependencies:
     git: git@gitlab.eidos.ic.i.u-tokyo.ac.jp:shiina/massivethreads-dm.git
     depends:
       - name: openmpi
-        # recipe: 5.0.0rc2
-        recipe: test7
+        recipe: 5.0.0rc7
         machines: [ito-a, local]
     recipes:
       release:
@@ -175,8 +139,7 @@ dependencies:
     git: git@gitlab.eidos.ic.i.u-tokyo.ac.jp:shiina/pcas.git
     depends:
       - name: openmpi
-        # recipe: 5.0.0rc2
-        recipe: test7
+        recipe: 5.0.0rc7
         machines: [ito-a, local]
     recipes:
       release:

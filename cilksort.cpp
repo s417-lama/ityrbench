@@ -477,12 +477,15 @@ void init_array(Span s) {
   static int counter = 0;
   std::mt19937 r(counter++);
 
-  /* s.map([&](typename Span::element_type& e) { */
-  /*   set_random_elem(e, r); */
-  /* }); */
-  my_ityr::ito_group<1, true> tg;
-  tg.run([=] { init_array_aux(s, r); });
-  tg.wait();
+  if (exec_type == exec_t::Parallel) {
+    my_ityr::ito_group<1, true> tg;
+    tg.run([=] { init_array_aux(s, r); });
+    tg.wait();
+  } else {
+    s.map([&](typename Span::element_type& e) {
+      set_random_elem(e, r);
+    });
+  }
 
   /* s.for_each([&](typename Span::element_type& e) { */
   /*   std::cout << e << std::endl; */

@@ -39,7 +39,7 @@ batches:
       nodes: 1
       cores: 1
       exec_type: [0, 1] # serial, std_sort
-      n_input: [10_000_000, 100_000_000]
+      n_input: [10_000_000, 100_000_000, 1_000_000_000]
       policy: serial
     duplicates: 1
     artifacts:
@@ -55,13 +55,13 @@ batches:
     name: cilksort_${batch_name}
     params:
       nodes:
-        - value: [1, 2, 2x3, 2x3x2, 3x4x3, 6x6x4]
-        # - value: [1, 2, 2x3]
+        - value: [1, 2, 2x3, 2x3x2, 3x4x3, 6x6x4, 8x9x8]
           machines: [wisteria-o]
         - value: [1]
           machines: [local]
-      n_input: [10_000_000, 100_000_000]
+      n_input: [10_000_000, 100_000_000, 1_000_000_000]
       policy: [naive, workfirst]
+      logger: stats
     artifacts:
       - type: stdout
         dest: ${batch_name}/nodes_${nodes}_n_${n_input}_p_${policy}_${duplicate}.log
