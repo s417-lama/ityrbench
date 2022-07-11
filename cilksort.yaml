@@ -57,8 +57,8 @@ batches:
       nodes:
         - value: [1, 2, 2x3, 2x3x2, 3x4x3, 6x6x4, 8x9x8]
           machines: [wisteria-o]
-        - value: [1]
-          machines: [local]
+        - value: [1, 2, 4, 8, 16]
+          machines: [ito-a]
       n_input: [10_000_000, 100_000_000, 1_000_000_000]
       policy: [naive, workfirst]
       logger: stats

@@ -11,6 +11,8 @@ export MADM_PRINT_ENV=1
 export PCAS_PRINT_ENV=1
 export ITYR_PRINT_ENV=1
 
+STDOUT_FILE=mpirun_out.txt
+
 case $KOCHI_MACHINE in
   ito-a)
     cores=36
@@ -19,11 +21,17 @@ case $KOCHI_MACHINE in
     ityr_mpirun() {
       local n_processes=$1
       local n_processes_per_node=$2
+
+      if [[ $PJM_ENVIRONMENT == BATCH ]]; then
+        OUTPUT_CMD="tee $STDOUT_FILE"
+      else
+        OUTPUT_CMD=cat
+      fi
       mpirun -n $n_processes -N $n_processes_per_node \
         --mca plm_rsh_agent pjrsh \
         --hostfile $PJM_O_NODEINF \
         --mca osc_ucx_acc_single_intrinsic true \
-        $KOCHI_INSTALL_PREFIX_MASSIVETHREADS_DM/bin/madm_disable_aslr "${@:3}"
+        $KOCHI_INSTALL_PREFIX_MASSIVETHREADS_DM/bin/madm_disable_aslr "${@:3}" | $OUTPUT_CMD
     }
     ;;
   wisteria-o)
@@ -33,7 +41,6 @@ case $KOCHI_MACHINE in
     ityr_mpirun() {
       local n_processes=$1
       local n_processes_per_node=$2
-      STDOUT_FILE=mpirun_out.txt
       if [[ $PJM_ENVIRONMENT == INTERACT ]]; then
         of_opt=""
       else
