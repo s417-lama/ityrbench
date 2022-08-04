@@ -33,6 +33,7 @@ public:
   template <typename T>
   using global_ptr = pcas::global_ptr<T>;
   using access_mode = pcas::access_mode;
+  using release_handler = pcas::release_handler;
 
   static void init(size_t cache_size) {
     pc(cache_size);
@@ -42,8 +43,20 @@ public:
     pc().release();
   }
 
+  static void release_lazy(release_handler* handler) {
+    pc().release_lazy(handler);
+  }
+
   static void acquire() {
     pc().acquire();
+  }
+
+  static void acquire(release_handler handler) {
+    pc().acquire(handler);
+  }
+
+  static void poll() {
+    pc().poll();
   }
 
   template <typename T>
@@ -101,11 +114,15 @@ public:
   template <typename T>
   using global_ptr = T*;
   using access_mode = pcas::access_mode;
+  using release_handler = int;
 
   static void init(size_t cache_size) {}
 
   static void release() {}
+  static void release_lazy(release_handler*) {}
   static void acquire() {}
+  static void acquire(release_handler) {}
+  static void poll() {}
 
   template <typename T>
   static global_ptr<T> malloc(uint64_t nelems) { return (T*)std::malloc(nelems * sizeof(T)); }
@@ -252,6 +269,14 @@ struct ityr_policy_naive {
 struct ityr_policy_workfirst : ityr_policy_naive {
   template <typename P, size_t MaxTasks, bool SpawnLastTask>
   using ito_group_t = ito_group_workfirst<P, MaxTasks, SpawnLastTask>;
+};
+
+// Work-first fence elimination + lazy release
+// -----------------------------------------------------------------------------
+
+struct ityr_policy_workfirst_lazy : ityr_policy_naive {
+  template <typename P, size_t MaxTasks, bool SpawnLastTask>
+  using ito_group_t = ito_group_workfirst_lazy<P, MaxTasks, SpawnLastTask>;
 };
 
 // Policy selection

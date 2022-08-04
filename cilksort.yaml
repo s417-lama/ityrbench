@@ -21,7 +21,7 @@ default_params:
   n_input: 1_000_000
   repeats: 10
   exec_type: 2 # 0:serial/1:std::sort/2:parallel
-  policy: naive # serial/naive/workfirst
+  policy: naive # serial/naive/workfirst/workfirst_lazy
   cache_size: 32
   verify: 0
   cutoff_i: 64

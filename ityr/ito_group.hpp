@@ -106,4 +106,68 @@ public:
   }
 };
 
+template <typename P, size_t MaxTasks, bool SpawnLastTask>
+class ito_group_workfirst_lazy {
+  using iro = typename P::template iro_t<P>;
+
+  madm::uth::thread<void> tasks_[MaxTasks];
+  bool all_synched_ = true;
+  uint64_t initial_rank;
+  size_t n_ = 0;
+
+public:
+  ito_group_workfirst_lazy() { initial_rank = P::rank(); }
+
+  template <typename F, typename... Args>
+  void run(F f, Args... args) {
+    iro::poll();
+
+    assert(n_ < MaxTasks);
+    if (SpawnLastTask || n_ < MaxTasks - 1) {
+      typename iro::release_handler rh;
+      iro::release_lazy(&rh);
+
+      auto p_th = &tasks_[n_];
+      new (p_th) madm::uth::thread<void>{};
+      bool synched = p_th->spawn_aux(f, std::make_tuple(args...),
+        [=] (bool parent_popped) {
+          // on-die callback
+          if (!parent_popped) {
+            iro::release();
+          }
+        });
+      if (!synched) {
+        iro::acquire(rh);
+      }
+      all_synched_ &= synched;
+      n_++;
+    } else {
+      f(args...);
+    }
+
+    iro::poll();
+  }
+
+  void wait() {
+    bool blocked = false;
+    for (size_t i = 0; i < n_; i++) {
+      iro::poll();
+      tasks_[i].join_aux(0, [&blocked] {
+        // on-block callback
+        if (!blocked) {
+          iro::release();
+          blocked = true;
+        }
+      });
+    }
+    if (initial_rank != P::rank() || !all_synched_ || blocked) {
+      // FIXME: (all_synched && blocked) is true only for root tasks
+      iro::acquire();
+    }
+    n_ = 0;
+
+    iro::poll();
+  }
+};
+
 }
