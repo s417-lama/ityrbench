@@ -44,14 +44,14 @@ private:
         uint64_t acc = lgr.stat_acc_[k.index()];
         uint64_t acc_total = lgr.t_end_ - lgr.t_begin_;
         uint64_t count = lgr.stat_count_[k.index()];
-        printf("(Rank %3d) %-23s : %10.6f %% ( %15ld ns / %15ld ns ) count: %8ld\n",
-               rank, k.str(), (double)acc / acc_total * 100, acc, acc_total, count);
+        printf("(Rank %3d) %-23s : %10.6f %% ( %15ld ns / %15ld ns ) count: %8ld ave: %8ld ns\n",
+               rank, k.str(), (double)acc / acc_total * 100, acc, acc_total, count, count == 0 ? 0 : (acc / count));
       } else {
         uint64_t acc = lgr.stat_acc_total_[k.index()];
         uint64_t acc_total = (lgr.t_end_ - lgr.t_begin_) * lgr.n_ranks_;
         uint64_t count = lgr.stat_count_total_[k.index()];
-        printf("  %-23s : %10.6f %% ( %15ld ns / %15ld ns ) count: %8ld\n",
-               k.str(), (double)acc / acc_total * 100, acc, acc_total, count);
+        printf("  %-23s : %10.6f %% ( %15ld ns / %15ld ns ) count: %8ld ave: %8ld ns\n",
+               k.str(), (double)acc / acc_total * 100, acc, acc_total, count, count == 0 ? 0 : (acc / count));
       }
     }
   }
