@@ -23,6 +23,12 @@ struct my_pcas_policy : pcas::policy_default {
   using wallclock_t = typename ParentPolicy::wallclock_t;
   template <typename P>
   using logger_impl_t = typename ParentPolicy::template logger_impl_t<P>;
+
+#ifndef ITYR_BLOCK_SIZE
+#define ITYR_BLOCK_SIZE 65536
+#endif
+  constexpr static uint64_t block_size = ITYR_BLOCK_SIZE;
+#undef ITYR_BLOCK_SIZE
 };
 
 template <typename P>
@@ -61,7 +67,11 @@ public:
 
   template <typename T>
   static global_ptr<T> malloc(uint64_t nelems) {
-    return pc().template malloc<T>(nelems);
+#ifndef ITYR_DIST_POLICY
+#define ITYR_DIST_POLICY cyclic
+#endif
+    return pc().template malloc<T, pcas::mem_mapper::ITYR_DIST_POLICY>(nelems);
+#undef ITYR_DIST_POLICY
   }
 
   template <typename T>
@@ -85,8 +95,8 @@ public:
   }
 
   template <typename T>
-  static void checkin(T* raw_ptr) {
-    pc().checkin(raw_ptr);
+  static void checkin(T* raw_ptr, uint64_t nelems) {
+    pc().checkin(raw_ptr, nelems);
   }
 
   static void logger_clear() {
@@ -137,7 +147,7 @@ public:
   template <access_mode Mode, typename T>
   static auto checkout(global_ptr<T> ptr, uint64_t nelems) { return ptr; }
   template <typename T>
-  static void checkin(T* raw_ptr) {}
+  static void checkin(T* raw_ptr, uint64_t nelems) {}
 
   static void logger_clear() {}
   static void logger_flush(uint64_t t_begin, uint64_t t_end) {}

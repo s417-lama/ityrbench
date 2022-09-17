@@ -129,7 +129,7 @@ public:
     assert(i < n_);
     auto p = my_ityr::iro::checkout<my_ityr::iro::access_mode::read>(ptr_ + i, 1);
     T ret = *p;
-    my_ityr::iro::checkin(p);
+    my_ityr::iro::checkin(p, 1);
     /* T ret; */
     /* my_ityr::iro::get(ptr_ + i, &ret, 1); */
     return ret;
@@ -156,7 +156,7 @@ public:
       for (size_t j = 0; j < b; j++) {
         f(const_cast<const T>(p[j]));
       }
-      my_ityr::iro::checkin(p);
+      my_ityr::iro::checkin(p, b);
     }
   }
 
@@ -168,7 +168,7 @@ public:
       for (size_t j = 0; j < b; j++) {
         f(p[j]);
       }
-      my_ityr::iro::checkin(p);
+      my_ityr::iro::checkin(p, b);
     }
   }
 
@@ -181,7 +181,7 @@ public:
       for (size_t j = 0; j < b; j++) {
         acc = f(acc, p[j]);
       }
-      my_ityr::iro::checkin(p);
+      my_ityr::iro::checkin(p, b);
     }
     return acc;
   }
@@ -193,7 +193,7 @@ public:
   }
 
   void checkin(raw_span<T> s) const {
-    my_ityr::iro::checkin(&s[0]);
+    my_ityr::iro::checkin(&s[0], s.size());
   }
 
   friend void copy(this_t dest, this_t src) {
@@ -203,8 +203,8 @@ public:
       auto d = my_ityr::iro::checkout<my_ityr::iro::access_mode::write>(dest.ptr_ + i, b);
       auto s = my_ityr::iro::checkout<my_ityr::iro::access_mode::read >(src.ptr_  + i, b);
       std::memcpy(d, s, sizeof(T) * b);
-      my_ityr::iro::checkin(d);
-      my_ityr::iro::checkin(s);
+      my_ityr::iro::checkin(d, b);
+      my_ityr::iro::checkin(s, b);
     }
   }
 };
