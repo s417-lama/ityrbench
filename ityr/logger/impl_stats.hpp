@@ -125,6 +125,7 @@ public:
         print_stat_(0);
       }
     }
+    fflush(stdout);
 
     acc_init_();
   }

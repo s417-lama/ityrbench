@@ -5,6 +5,7 @@
 
 #include "ityr/util.hpp"
 #include "ityr/ito_group.hpp"
+#include "ityr/ito_pattern.hpp"
 #include "ityr/logger/logger.hpp"
 
 namespace ityr {
@@ -190,6 +191,8 @@ public:
   template <size_t MaxTasks, bool SpawnLastTask = false>
   using ito_group = typename P::template ito_group_t<P, MaxTasks, SpawnLastTask>;
 
+  using ito_pattern = typename P::template ito_pattern_t<P>;
+
   using iro = typename P::template iro_t<P>;
 
   using wallclock = typename P::wallclock_t;
@@ -209,6 +212,9 @@ public:
   }
 
   static void barrier() { return P::barrier(); }
+
+  template <typename... Args>
+  static auto parallel_invoke(Args&&... args) { return ito_pattern::parallel_invoke(std::forward<Args>(args)...); }
 };
 
 // Serial
@@ -217,6 +223,9 @@ public:
 struct ityr_policy_serial {
   template <typename P, size_t MaxTasks, bool SpawnLastTask>
   using ito_group_t = ito_group_serial<P, MaxTasks, SpawnLastTask>;
+
+  template <typename P>
+  using ito_pattern_t = ito_pattern_serial<P>;
 
   template <typename P>
   using iro_t = iro_dummy<P>;
@@ -244,6 +253,9 @@ struct ityr_policy_serial {
 struct ityr_policy_naive {
   template <typename P, size_t MaxTasks, bool SpawnLastTask>
   using ito_group_t = ito_group_naive<P, MaxTasks, SpawnLastTask>;
+
+  template <typename P>
+  using ito_pattern_t = ito_pattern_naive<P>;
 
   template <typename P>
   using iro_t = iro_pcas_default<P>;

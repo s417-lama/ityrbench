@@ -88,11 +88,13 @@ public:
     }
   }
 
-  template <typename Acc, typename F>
-  Acc reduce(Acc init, F f) {
+  template <typename Acc, typename ReduceOp, typename TransformOp>
+  Acc reduce(Acc         init,
+             ReduceOp    reduce_op,
+             TransformOp transform_op) {
     Acc acc = init;
     for (size_t i = 0; i < n_; i++) {
-      acc = f(acc, ptr_[i]);
+      acc = reduce_op(acc, transform_op(ptr_[i]));
     }
     return acc;
   }
@@ -114,6 +116,7 @@ class gptr_span {
   using ptr_t = my_ityr::iro::global_ptr<T>;
   ptr_t ptr_;
   size_t n_;
+
 public:
   using element_type = T;
 
@@ -172,18 +175,30 @@ public:
     }
   }
 
-  template <typename Acc, typename F>
-  Acc reduce(Acc init, F f) {
-    Acc acc = init;
-    for (size_t i = 0; i < n_; i += BlockSize / sizeof(T)) {
-      size_t b = std::min(n_ - i, BlockSize / sizeof(T));
-      auto p = my_ityr::iro::checkout<my_ityr::iro::access_mode::read>(ptr_ + i, b);
-      for (size_t j = 0; j < b; j++) {
-        acc = f(acc, p[j]);
+  template <typename Acc, typename ReduceOp, typename TransformOp>
+  Acc reduce(Acc         init,
+             ReduceOp    reduce_op,
+             TransformOp transform_op) const {
+    if (n_ * sizeof(T) <= BlockSize) {
+      Acc acc = init;
+      auto p = my_ityr::iro::checkout<my_ityr::iro::access_mode::read>(ptr_, n_);
+      for (size_t j = 0; j < n_; j++) {
+        acc = reduce_op(acc, transform_op(p[j]));
       }
-      my_ityr::iro::checkin(p, b);
+      my_ityr::iro::checkin(p, n_);
+      return acc;
+    } else {
+      /* auto [s1, s2] = divide_two(); */
+      auto sdiv = divide_two();
+      auto s1 = sdiv.first;
+      auto s2 = sdiv.second;
+      auto [acc1, acc2] =
+        my_ityr::parallel_invoke(
+          [=]() { return s1.reduce(init, reduce_op, transform_op); },
+          [=]() { return s2.reduce(init, reduce_op, transform_op); }
+        );
+      return reduce_op(acc1, acc2);
     }
-    return acc;
   }
 
   template <my_ityr::iro::access_mode Mode>
@@ -387,10 +402,14 @@ void cilkmerge(Span s1, Span s2, Span dest) {
 
   /* cilkmerge(s11, s21, dest1); */
   /* cilkmerge(s12, s22, dest2); */
-  my_ityr::ito_group<2> tg;
-  tg.run(cilkmerge<Span>, s11, s21, dest1);
-  tg.run(cilkmerge<Span>, s12, s22, dest2);
-  tg.wait();
+  /* my_ityr::ito_group<2> tg; */
+  /* tg.run(cilkmerge<Span>, s11, s21, dest1); */
+  /* tg.run(cilkmerge<Span>, s12, s22, dest2); */
+  /* tg.wait(); */
+  my_ityr::parallel_invoke(
+    cilkmerge<Span>, s11, s21, dest1,
+    cilkmerge<Span>, s12, s22, dest2
+  );
 }
 
 template <typename Span>
@@ -421,23 +440,33 @@ void cilksort(Span a, Span b) {
   /* cilksort<Span>(a2, b2); */
   /* cilksort<Span>(a3, b3); */
   /* cilksort<Span>(a4, b4); */
-  {
-    my_ityr::ito_group<4> tg;
-    tg.run(cilksort<Span>, a1, b1);
-    tg.run(cilksort<Span>, a2, b2);
-    tg.run(cilksort<Span>, a3, b3);
-    tg.run(cilksort<Span>, a4, b4);
-    tg.wait();
-  }
+  /* { */
+  /*   my_ityr::ito_group<4> tg; */
+  /*   tg.run(cilksort<Span>, a1, b1); */
+  /*   tg.run(cilksort<Span>, a2, b2); */
+  /*   tg.run(cilksort<Span>, a3, b3); */
+  /*   tg.run(cilksort<Span>, a4, b4); */
+  /*   tg.wait(); */
+  /* } */
+  my_ityr::parallel_invoke(
+    cilksort<Span>, a1, b1,
+    cilksort<Span>, a2, b2,
+    cilksort<Span>, a3, b3,
+    cilksort<Span>, a4, b4
+  );
 
   /* cilkmerge(a1, a2, b12); */
   /* cilkmerge(a3, a4, b34); */
-  {
-    my_ityr::ito_group<2> tg;
-    tg.run(cilkmerge<Span>, a1, a2, b12);
-    tg.run(cilkmerge<Span>, a3, a4, b34);
-    tg.wait();
-  }
+  /* { */
+  /*   my_ityr::ito_group<2> tg; */
+  /*   tg.run(cilkmerge<Span>, a1, a2, b12); */
+  /*   tg.run(cilkmerge<Span>, a3, a4, b34); */
+  /*   tg.wait(); */
+  /* } */
+  my_ityr::parallel_invoke(
+    cilkmerge<Span>, a1, a2, b12,
+    cilkmerge<Span>, a3, a4, b34
+  );
 
   cilkmerge(b12, b34, a);
 }
@@ -494,14 +523,22 @@ void init_array(Span s) {
 
 template <typename Span>
 bool check_sorted(Span s) {
-  using acc_type = std::pair<bool, typename Span::element_type>;
-  acc_type init{true, s[0]};
-  auto ret = s.reduce(init, [=](auto acc, const typename Span::element_type& e) {
-    auto prev_e = acc.second;
-    if (prev_e > e) return acc_type{false    , e};
-    else            return acc_type{acc.first, e};
-  });
-  return ret.first;
+  using T = typename Span::element_type;
+  struct acc_type {
+    bool is_init;
+    bool success;
+    T first;
+    T last;
+  };
+  acc_type init{true, true, T{}, T{}};
+  auto ret = s.reduce(init, [](auto l, auto r) {
+    if (l.is_init) return r;
+    if (r.is_init) return l;
+    if (!l.success || !r.success) return acc_type{false, false, l.first, r.last};
+    else if (l.last > r.first) return acc_type{false, false, l.first, r.last};
+    else return acc_type{false, true, l.first, r.last};
+  }, [](const T& e) { return acc_type{false, true, e, e}; });
+  return ret.success;
 }
 
 template <typename Span>
@@ -555,10 +592,15 @@ void run(Span a, Span b) {
 
     if (my_rank == 0) {
       if (verify_result) {
-        if (!check_sorted(a)) {
-          printf("check failed.\n");
-          fflush(stdout);
+        uint64_t t0 = my_ityr::wallclock::get_time();
+        bool success = check_sorted(a);
+        uint64_t t1 = my_ityr::wallclock::get_time();
+        if (success) {
+          printf("Check succeeded. (%ld ns)\n", t1 - t0);
+        } else {
+          printf("\x1b[31mCheck FAILED.\x1b[39m\n");
         }
+        fflush(stdout);
       }
     }
 
