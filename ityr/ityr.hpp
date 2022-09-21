@@ -213,6 +213,21 @@ public:
 
   static void barrier() { return P::barrier(); }
 
+  template <typename Fn, typename... Args>
+  static auto root_spawn(Fn&& f, Args&&... args) {
+    using ret_t = std::invoke_result_t<Fn, Args...>;
+    iro::release();
+    madm::uth::thread<ret_t> th(std::forward<Fn>(f), std::forward<Args>(args)...);
+    if constexpr (std::is_void_v<ret_t>) {
+      th.join();
+      iro::acquire();
+    } else {
+      auto&& ret = th.join();
+      iro::acquire();
+      return ret;
+    }
+  }
+
   template <typename... Args>
   static auto parallel_invoke(Args&&... args) { return ito_pattern::parallel_invoke(std::forward<Args>(args)...); }
 };
@@ -291,6 +306,9 @@ struct ityr_policy_naive {
 struct ityr_policy_workfirst : ityr_policy_naive {
   template <typename P, size_t MaxTasks, bool SpawnLastTask>
   using ito_group_t = ito_group_workfirst<P, MaxTasks, SpawnLastTask>;
+
+  template <typename P>
+  using ito_pattern_t = ito_pattern_workfirst<P>;
 };
 
 // Work-first fence elimination + lazy release
@@ -299,6 +317,9 @@ struct ityr_policy_workfirst : ityr_policy_naive {
 struct ityr_policy_workfirst_lazy : ityr_policy_naive {
   template <typename P, size_t MaxTasks, bool SpawnLastTask>
   using ito_group_t = ito_group_workfirst_lazy<P, MaxTasks, SpawnLastTask>;
+
+  template <typename P>
+  using ito_pattern_t = ito_pattern_workfirst_lazy<P>;
 };
 
 // Policy selection

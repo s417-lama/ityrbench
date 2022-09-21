@@ -192,6 +192,8 @@ public:
       auto sdiv = divide_two();
       auto s1 = sdiv.first;
       auto s2 = sdiv.second;
+      /* auto acc1 = s1.reduce(init, reduce_op, transform_op); */
+      /* auto acc2 = s2.reduce(init, reduce_op, transform_op); */
       auto [acc1, acc2] =
         my_ityr::parallel_invoke(
           [=]() { return s1.reduce(init, reduce_op, transform_op); },
@@ -507,9 +509,7 @@ void init_array(Span s) {
   std::mt19937 r(counter++);
 
   if (exec_type == exec_t::Parallel) {
-    my_ityr::ito_group<1, true> tg;
-    tg.run([=] { init_array_aux(s, r); });
-    tg.wait();
+    my_ityr::root_spawn([=] { init_array_aux(s, r); });
   } else {
     s.map([&](typename Span::element_type& e) {
       set_random_elem(e, r);
@@ -565,9 +565,7 @@ void run(Span a, Span b) {
           break;
         }
         case exec_t::Parallel: {
-          my_ityr::ito_group<1, true> tg;
-          tg.run([=]() { cilksort(a, b); });
-          tg.wait();
+          my_ityr::root_spawn([=]() { cilksort(a, b); });
           break;
         }
       }
@@ -592,8 +590,9 @@ void run(Span a, Span b) {
 
     if (my_rank == 0) {
       if (verify_result) {
+        // FIXME: special treatment for root task
         uint64_t t0 = my_ityr::wallclock::get_time();
-        bool success = check_sorted(a);
+        bool success = my_ityr::root_spawn([=]() { return check_sorted(a); });
         uint64_t t1 = my_ityr::wallclock::get_time();
         if (success) {
           printf("Check succeeded. (%ld ns)\n", t1 - t0);
