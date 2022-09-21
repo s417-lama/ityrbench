@@ -17,7 +17,7 @@ default_params:
       machines: [ito-a]
     - value: 6
       machines: [local]
-  elem_type: float
+  elem_type: int
   n_input: 1_000_000
   repeats: 10
   exec_type: 2 # 0:serial/1:std::sort/2:parallel
@@ -25,7 +25,8 @@ default_params:
   dist_policy: cyclic # block/cyclic
   cache_size: 32 # MB
   block_size: 65536 # bytes
-  verify: 0
+  max_dirty: 64
+  verify: 1
   cutoff_i: 64
   cutoff_m: 16384
   cutoff_q: 16384
@@ -90,12 +91,12 @@ build:
     MPICXX=$MPICXX CFLAGS=$CFLAGS make cilksort.out
 
 run:
-  depend_params: [nodes, cores, n_input, repeats, exec_type, cache_size, verify, cutoff_i, cutoff_m, cutoff_q, logger]
+  depend_params: [nodes, cores, n_input, repeats, exec_type, cache_size, max_dirty, verify, cutoff_i, cutoff_m, cutoff_q, logger]
   script: |
     source common.bash
     n_nodes=$(echo $KOCHI_PARAM_NODES | cut -f 1 -d ":" | sed 's/x/*/g' | bc)
     # export PCAS_ENABLE_SHARED_MEMORY=0 # for debug
-    export PCAS_MAX_DIRTY_CACHE_BLOCKS=16
+    export PCAS_MAX_DIRTY_CACHE_BLOCKS=$KOCHI_PARAM_MAX_DIRTY
     export PCAS_PREFETCH_BLOCKS=0
     ityr_mpirun $((n_nodes * KOCHI_PARAM_CORES)) $KOCHI_PARAM_CORES ./cilksort.out \
       -n $KOCHI_PARAM_N_INPUT \

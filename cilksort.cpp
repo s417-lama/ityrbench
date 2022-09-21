@@ -249,7 +249,7 @@ std::string to_str(T x) {
 }
 
 #ifndef ITYR_BENCH_ELEM_TYPE
-#define ITYR_BENCH_ELEM_TYPE float
+#define ITYR_BENCH_ELEM_TYPE int
 #endif
 
 using elem_t = ITYR_BENCH_ELEM_TYPE;
