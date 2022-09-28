@@ -157,6 +157,7 @@ class ito_pattern_workfirst {
 
     template <typename RetVal, typename Fn, typename ArgsTuple>
     auto parallel_invoke_impl(Fn&& f, ArgsTuple&& args) {
+      iro::poll();
       if constexpr (std::is_void_v<RetVal>) {
         std::apply(f, args);
         return std::make_tuple(empty{});
@@ -168,6 +169,8 @@ class ito_pattern_workfirst {
 
     template <typename RetVal, typename Fn, typename ArgsTuple, typename... Rest>
     auto parallel_invoke_impl(Fn&& f, ArgsTuple&& args, Rest... r) {
+      iro::poll();
+
       auto th = madm::uth::thread<RetVal>{};
       bool synched = th.spawn_aux(f, args,
         [=] (bool parent_popped) {
@@ -183,6 +186,8 @@ class ito_pattern_workfirst {
       all_synched &= synched;
 
       auto&& ret_rest = parallel_invoke(std::forward<Rest>(r)...);
+
+      iro::poll();
 
       if constexpr (std::is_void_v<RetVal>) {
         th.join_aux(0, [&] {
@@ -211,6 +216,8 @@ class ito_pattern_workfirst {
 public:
   template <typename... Args>
   static auto parallel_invoke(Args&&... args) {
+    iro::poll();
+
     auto initial_rank = P::rank();
     iro::release();
     inner_state s;
@@ -218,6 +225,8 @@ public:
     if (initial_rank != P::rank() || !s.all_synched) {
       iro::acquire();
     }
+
+    iro::poll();
     return ret;
   }
 

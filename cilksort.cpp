@@ -99,6 +99,8 @@ public:
     return acc;
   }
 
+  void willread() const {}
+
   template <my_ityr::iro::access_mode Mode>
   raw_span<T> checkout() const { return *this; }
 
@@ -201,6 +203,10 @@ public:
         );
       return reduce_op(acc1, acc2);
     }
+  }
+
+  void willread() const {
+    my_ityr::iro::willread(ptr_, n_);
   }
 
   template <my_ityr::iro::access_mode Mode>
@@ -375,7 +381,13 @@ void cilkmerge(Span s1, Span s2, Span dest) {
     copy(dest, s1);
     return;
   }
-  if (s1.size() < cutoff_merge) {
+
+  /* if (s1.size() * sizeof(elem_t) < 4 * 65536) { */
+  /*   s1.willread(); */
+  /*   s2.willread(); */
+  /* } */
+
+  if (s1.size() <= cutoff_merge) {
     auto ev = my_ityr::logger::record<my_ityr::logger_kind::Merge>();
 
     auto s1_ = s1.template checkout<my_ityr::iro::access_mode::read>();
@@ -418,7 +430,7 @@ template <typename Span>
 void cilksort(Span a, Span b) {
   assert(a.size() == b.size());
 
-  if (a.size() < cutoff_quick) {
+  if (a.size() <= cutoff_quick) {
     auto ev = my_ityr::logger::record<my_ityr::logger_kind::Quicksort>();
 
     auto a_ = a.template checkout<my_ityr::iro::access_mode::read_write>();
@@ -429,6 +441,11 @@ void cilksort(Span a, Span b) {
     a.checkin(a_);
     return;
   }
+
+  /* if (a.size() * sizeof(elem_t) < 4 * 65536) { */
+  /*   a.willread(); */
+  /*   b.willread(); */
+  /* } */
 
   auto [a12, a34] = a.divide_two();
   auto [b12, b34] = b.divide_two();
@@ -489,7 +506,7 @@ set_random_elem(T& e, Rng& r) {
 
 template <typename Span, typename Rng>
 void init_array_aux(Span s, Rng r) {
-  if (s.size() < cutoff_quick) {
+  if (s.size() <= cutoff_quick) {
     s.map([&](typename Span::element_type& e) {
       set_random_elem(e, r);
     });

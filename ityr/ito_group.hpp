@@ -65,6 +65,8 @@ public:
 
   template <typename F, typename... Args>
   void run(F f, Args... args) {
+    iro::poll();
+
     assert(n_ < MaxTasks);
     if (SpawnLastTask || n_ < MaxTasks - 1) {
       auto p_th = &tasks_[n_];
@@ -85,11 +87,14 @@ public:
     } else {
       f(args...);
     }
+
+    iro::poll();
   }
 
   void wait() {
     bool blocked = false;
     for (size_t i = 0; i < n_; i++) {
+      iro::poll();
       tasks_[i].join_aux(0, [&blocked] {
         // on-block callback
         if (!blocked) {
@@ -103,6 +108,8 @@ public:
       iro::acquire();
     }
     n_ = 0;
+
+    iro::poll();
   }
 };
 

@@ -25,7 +25,10 @@ default_params:
   dist_policy: cyclic # block/cyclic
   cache_size: 32 # MB
   block_size: 65536 # bytes
-  max_dirty: 64
+  max_dirty: 64 # num_blocks
+  nocache: 0
+  shared_mem: 1
+  write_through: 0
   verify: 1
   cutoff_i: 64
   cutoff_m: 16384
@@ -75,7 +78,7 @@ batches:
         dest: ${batch_name}/nodes_${nodes}_n_${n_input}_p_${policy}_${duplicate}.out
 
 build:
-  depend_params: [elem_type, policy, dist_policy, block_size, logger]
+  depend_params: [elem_type, policy, dist_policy, block_size, nocache, logger]
   script: |
     source common.bash
 
@@ -86,18 +89,23 @@ build:
     CFLAGS="$CFLAGS -DITYR_LOGGER_IMPL=impl_$KOCHI_PARAM_LOGGER"
     CFLAGS="$CFLAGS -DITYR_DIST_POLICY=$KOCHI_PARAM_DIST_POLICY"
     CFLAGS="$CFLAGS -DITYR_BLOCK_SIZE=$KOCHI_PARAM_BLOCK_SIZE"
+    CFLAGS="$CFLAGS -DITYR_IRO_DISABLE_CACHE=$KOCHI_PARAM_NOCACHE"
 
     make clean
     MPICXX=$MPICXX CFLAGS=$CFLAGS make cilksort.out
 
 run:
-  depend_params: [nodes, cores, n_input, repeats, exec_type, cache_size, max_dirty, verify, cutoff_i, cutoff_m, cutoff_q, logger]
+  depend_params: [nodes, cores, n_input, repeats, exec_type, cache_size, max_dirty, shared_mem, write_through, verify, cutoff_i, cutoff_m, cutoff_q, logger]
   script: |
     source common.bash
     n_nodes=$(echo $KOCHI_PARAM_NODES | cut -f 1 -d ":" | sed 's/x/*/g' | bc)
-    # export PCAS_ENABLE_SHARED_MEMORY=0 # for debug
+    export PCAS_ENABLE_SHARED_MEMORY=$KOCHI_PARAM_SHARED_MEM
+    export PCAS_ENABLE_WRITE_THROUGH=$KOCHI_PARAM_WRITE_THROUGH
     export PCAS_MAX_DIRTY_CACHE_BLOCKS=$KOCHI_PARAM_MAX_DIRTY
     export PCAS_PREFETCH_BLOCKS=0
+    # export XOS_MMM_L_PAGING_POLICY=demand:demand:demand
+    export XOS_MMM_L_HPAGE_TYPE=none
+    export UTOFU_SWAP_PROTECT=1
     ityr_mpirun $((n_nodes * KOCHI_PARAM_CORES)) $KOCHI_PARAM_CORES ./cilksort.out \
       -n $KOCHI_PARAM_N_INPUT \
       -r $KOCHI_PARAM_REPEATS \
