@@ -387,7 +387,7 @@ void cilkmerge(Span s1, Span s2, Span dest) {
   /*   s2.willread(); */
   /* } */
 
-  if (s1.size() <= cutoff_merge) {
+  if (dest.size() <= cutoff_merge) {
     auto ev = my_ityr::logger::record<my_ityr::logger_kind::Merge>();
 
     auto s1_ = s1.template checkout<my_ityr::iro::access_mode::read>();

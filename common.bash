@@ -15,9 +15,6 @@ STDOUT_FILE=mpirun_out.txt
 
 case $KOCHI_MACHINE in
   ito-a)
-    cores=36
-    nodes=$PJM_VNODES
-
     ityr_mpirun() {
       local n_processes=$1
       local n_processes_per_node=$2
@@ -35,8 +32,9 @@ case $KOCHI_MACHINE in
     }
     ;;
   wisteria-o)
-    cores=48
-    nodes=$PJM_NODE
+    # export XOS_MMM_L_PAGING_POLICY=demand:demand:demand
+    export XOS_MMM_L_HPAGE_TYPE=none
+    export UTOFU_SWAP_PROTECT=1
 
     ityr_mpirun() {
       local n_processes=$1
@@ -94,9 +92,6 @@ case $KOCHI_MACHINE in
     }
     ;;
   *)
-    cores=6
-    nodes=1
-
     ityr_mpirun() {
       local n_processes=$1
       local n_processes_per_node=$2

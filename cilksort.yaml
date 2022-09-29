@@ -20,19 +20,17 @@ default_params:
   elem_type: int
   n_input: 1_000_000
   repeats: 10
-  exec_type: 2 # 0:serial/1:std::sort/2:parallel
-  policy: naive # serial/naive/workfirst/workfirst_lazy
-  dist_policy: cyclic # block/cyclic
-  cache_size: 32 # MB
-  block_size: 65536 # bytes
-  max_dirty: 64 # num_blocks
-  nocache: 0
-  shared_mem: 1
-  write_through: 0
   verify: 1
   cutoff_i: 64
-  cutoff_m: 16384
   cutoff_q: 16384
+  cutoff_m: "`$cutoff_q * 4`"
+  exec_type: 2 # 0:serial/1:std::sort/2:parallel
+  cache_policy: writeback_lazy # serial/nocache/writethrough/writeback/writeback_lazy
+  dist_policy: cyclic # block/cyclic
+  cache_size: 128 # MB
+  block_size: 65536 # bytes
+  max_dirty: 0.2 # ratio
+  shared_mem: 1
   logger: dummy # dummy/trace/stats
 
 default_name: cilksort
@@ -45,8 +43,9 @@ batches:
       nodes: 1
       cores: 1
       exec_type: [0, 1] # serial, std_sort
-      n_input: [10_000_000, 100_000_000, 1_000_000_000]
-      policy: serial
+      n_input: 1_000_000_000
+      repeats: 11
+      cache_policy: serial
     duplicates: 1
     artifacts:
       - type: stdout
@@ -57,55 +56,112 @@ batches:
         src: mpirun_out.txt
         dest: ${batch_name}/n_${n_input}_exec_${exec_type}_${duplicate}.out
 
-  scaling:
+  scale1G:
     name: cilksort_${batch_name}
     params:
       nodes:
-        - value: [1, 2, 2x3, 2x3x2, 3x4x3, 6x6x4, 8x9x8]
+        - value: [1, 2, 2x3, 2x3x2, 3x4x3, 6x6x4]
+        # - value: [1, 2, 2x3, 2x3x2, 3x4x3, 6x6x4, 8x9x8]
           machines: [wisteria-o]
         - value: [1, 2, 4, 8, 16]
           machines: [ito-a]
-      n_input: [10_000_000, 100_000_000, 1_000_000_000]
-      policy: [naive, workfirst]
+      n_input: 1_000_000_000
+      repeats: 11
+      cache_policy: [nocache, writethrough, writeback, writeback_lazy]
       logger: stats
     artifacts:
       - type: stdout
-        dest: ${batch_name}/nodes_${nodes}_n_${n_input}_p_${policy}_${duplicate}.log
+        dest: ${batch_name}/nodes_${nodes}_p_${cache_policy}_${duplicate}.log
       - type: stats
-        dest: ${batch_name}/nodes_${nodes}_n_${n_input}_p_${policy}_${duplicate}.stats
+        dest: ${batch_name}/nodes_${nodes}_p_${cache_policy}_${duplicate}.stats
       - type: file
         src: mpirun_out.txt
-        dest: ${batch_name}/nodes_${nodes}_n_${n_input}_p_${policy}_${duplicate}.out
+        dest: ${batch_name}/nodes_${nodes}_p_${cache_policy}_${duplicate}.out
+
+  scale10G:
+    name: cilksort_${batch_name}
+    params:
+      nodes:
+        - value: [2x3x2, 3x4x3, 6x6x4]
+        # - value: [2x3x2, 3x4x3, 6x6x4, 8x9x8]
+          machines: [wisteria-o]
+      n_input: 10_000_000_000
+      repeats: 11
+      cache_policy: [nocache, writethrough, writeback, writeback_lazy]
+      logger: stats
+    artifacts:
+      - type: stdout
+        dest: ${batch_name}/nodes_${nodes}_p_${cache_policy}_${duplicate}.log
+      - type: stats
+        dest: ${batch_name}/nodes_${nodes}_p_${cache_policy}_${duplicate}.stats
+      - type: file
+        src: mpirun_out.txt
+        dest: ${batch_name}/nodes_${nodes}_p_${cache_policy}_${duplicate}.out
+
+  granularity:
+    name: cilksort_${batch_name}
+    params:
+      nodes:
+        - value: 2x3x2
+          machines: [wisteria-o]
+      n_input: 1_000_000_000
+      repeats: 11
+      cutoff_q: [256, 1024, 4096, 16384, 65536]
+      max_dirty: [0.05, 0.1, 0.2, 0.5, 1.0]
+      logger: stats
+    artifacts:
+      - type: stdout
+        dest: ${batch_name}/nodes_${nodes}_p_${cache_policy}_${duplicate}.log
+      - type: stats
+        dest: ${batch_name}/nodes_${nodes}_p_${cache_policy}_${duplicate}.stats
+      - type: file
+        src: mpirun_out.txt
+        dest: ${batch_name}/nodes_${nodes}_p_${cache_policy}_${duplicate}.out
 
 build:
-  depend_params: [elem_type, policy, dist_policy, block_size, nocache, logger]
+  depend_params: [elem_type, cache_policy, dist_policy, block_size, logger]
   script: |
     source common.bash
 
     CFLAGS=${CFLAGS:-""}
     CFLAGS="$CFLAGS -DNDEBUG"
     CFLAGS="$CFLAGS -DITYR_BENCH_ELEM_TYPE=$KOCHI_PARAM_ELEM_TYPE"
-    CFLAGS="$CFLAGS -DITYR_POLICY=ityr_policy_$KOCHI_PARAM_POLICY"
     CFLAGS="$CFLAGS -DITYR_LOGGER_IMPL=impl_$KOCHI_PARAM_LOGGER"
     CFLAGS="$CFLAGS -DITYR_DIST_POLICY=$KOCHI_PARAM_DIST_POLICY"
     CFLAGS="$CFLAGS -DITYR_BLOCK_SIZE=$KOCHI_PARAM_BLOCK_SIZE"
-    CFLAGS="$CFLAGS -DITYR_IRO_DISABLE_CACHE=$KOCHI_PARAM_NOCACHE"
+
+    case $KOCHI_PARAM_CACHE_POLICY in
+      serial)         CFLAGS="$CFLAGS -DITYR_POLICY=ityr_policy_serial" ;;
+      nocache)        CFLAGS="$CFLAGS -DITYR_POLICY=ityr_policy_workfirst -DITYR_IRO_DISABLE_CACHE=1" ;;
+      writethrough)   CFLAGS="$CFLAGS -DITYR_POLICY=ityr_policy_workfirst" ;;
+      writeback)      CFLAGS="$CFLAGS -DITYR_POLICY=ityr_policy_workfirst" ;;
+      writeback_lazy) CFLAGS="$CFLAGS -DITYR_POLICY=ityr_policy_workfirst_lazy" ;;
+      *)              echo "Unknown cache policy ($KOCHI_PARAM_CACHE_POLICY)"; exit 1 ;;
+    esac
 
     make clean
     MPICXX=$MPICXX CFLAGS=$CFLAGS make cilksort.out
 
 run:
-  depend_params: [nodes, cores, n_input, repeats, exec_type, cache_size, max_dirty, shared_mem, write_through, verify, cutoff_i, cutoff_m, cutoff_q, logger]
+  depend_params: [nodes, cores, n_input, repeats, verify, cutoff_i, cutoff_m, cutoff_q, exec_type, cache_policy, cache_size, max_dirty, shared_mem, logger]
   script: |
     source common.bash
-    n_nodes=$(echo $KOCHI_PARAM_NODES | cut -f 1 -d ":" | sed 's/x/*/g' | bc)
+
     export PCAS_ENABLE_SHARED_MEMORY=$KOCHI_PARAM_SHARED_MEM
-    export PCAS_ENABLE_WRITE_THROUGH=$KOCHI_PARAM_WRITE_THROUGH
-    export PCAS_MAX_DIRTY_CACHE_BLOCKS=$KOCHI_PARAM_MAX_DIRTY
+    export PCAS_MAX_DIRTY_CACHE_SIZE=$(bc <<< "$KOCHI_PARAM_CACHE_SIZE * 2^20 * $KOCHI_PARAM_MAX_DIRTY / 1")
     export PCAS_PREFETCH_BLOCKS=0
-    # export XOS_MMM_L_PAGING_POLICY=demand:demand:demand
-    export XOS_MMM_L_HPAGE_TYPE=none
-    export UTOFU_SWAP_PROTECT=1
+
+    case $KOCHI_PARAM_CACHE_POLICY in
+      serial)         ;;
+      nocache)        ;;
+      writethrough)   export PCAS_ENABLE_WRITE_THROUGH=1 ;;
+      writeback)      ;;
+      writeback_lazy) ;;
+      *)              echo "Unknown cache policy ($KOCHI_PARAM_CACHE_POLICY)"; exit 1 ;;
+    esac
+
+    export MADM_STACK_SIZE=$((4 * 1024 * 1024))
+    n_nodes=$(echo $KOCHI_PARAM_NODES | cut -f 1 -d ":" | sed 's/x/*/g' | bc)
     ityr_mpirun $((n_nodes * KOCHI_PARAM_CORES)) $KOCHI_PARAM_CORES ./cilksort.out \
       -n $KOCHI_PARAM_N_INPUT \
       -r $KOCHI_PARAM_REPEATS \
