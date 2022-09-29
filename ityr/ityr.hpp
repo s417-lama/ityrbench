@@ -324,19 +324,7 @@ public:
   static void barrier() { return P::barrier(); }
 
   template <typename Fn, typename... Args>
-  static auto root_spawn(Fn&& f, Args&&... args) {
-    using ret_t = std::invoke_result_t<Fn, Args...>;
-    iro::release();
-    madm::uth::thread<ret_t> th(std::forward<Fn>(f), std::forward<Args>(args)...);
-    if constexpr (std::is_void_v<ret_t>) {
-      th.join();
-      iro::acquire();
-    } else {
-      auto&& ret = th.join();
-      iro::acquire();
-      return ret;
-    }
-  }
+  static auto root_spawn(Fn&& f, Args&&... args) { return P::template root_spawn<P>(std::forward<Fn>(f), std::forward<Args>(args)...); }
 
   template <typename... Args>
   static auto parallel_invoke(Args&&... args) { return ito_pattern::parallel_invoke(std::forward<Args>(args)...); }
@@ -366,8 +354,11 @@ struct ityr_policy_serial {
 
   static uint64_t n_ranks() { return 1; }
 
-  template <typename F, typename... Args>
-  static void main(F f, Args... args) { f(args...); }
+  template <typename Fn, typename... Args>
+  static void main(Fn&& f, Args&&... args) { f(std::forward<Args>(args)...); }
+
+  template <typename P, typename Fn, typename... Args>
+  static auto root_spawn(Fn&& f, Args&&... args) { return f(std::forward<Args>(args)...); }
 
   static void barrier() {};
 };
@@ -411,9 +402,25 @@ struct ityr_policy_naive {
     return madm::uth::get_n_procs();
   }
 
-  template <typename F, typename... Args>
-  static void main(F f, Args... args) {
-    madm::uth::start(f, args...);
+  template <typename Fn, typename... Args>
+  static void main(Fn&& f, Args&&... args) {
+    madm::uth::start(std::forward<Fn>(f), std::forward<Args>(args)...);
+  }
+
+  template <typename P, typename Fn, typename... Args>
+  static auto root_spawn(Fn&& f, Args&&... args) {
+    using iro = typename P::template iro_t<P>;
+    using ret_t = std::invoke_result_t<Fn, Args...>;
+    iro::release();
+    madm::uth::thread<ret_t> th(std::forward<Fn>(f), std::forward<Args>(args)...);
+    if constexpr (std::is_void_v<ret_t>) {
+      th.join();
+      iro::acquire();
+    } else {
+      auto&& ret = th.join();
+      iro::acquire();
+      return ret;
+    }
   }
 
   static void barrier() {
