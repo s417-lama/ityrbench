@@ -72,4 +72,15 @@ inline void set_segv_handler() {
   }
 }
 
+inline void set_abrt_handler() {
+  struct sigaction sa;
+  sa.sa_flags   = 0;
+  sa.sa_handler = segv_handler;
+  sigemptyset(&sa.sa_mask);
+  if (sigaction(SIGABRT, &sa, NULL) == -1) {
+    printf("sigacton for SIGABRT failed.\n");
+    exit(1);
+  }
+}
+
 }

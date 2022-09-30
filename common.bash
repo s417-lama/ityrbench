@@ -39,56 +39,59 @@ case $KOCHI_MACHINE in
     ityr_mpirun() {
       local n_processes=$1
       local n_processes_per_node=$2
-      if [[ $PJM_ENVIRONMENT == INTERACT ]]; then
-        of_opt=""
-      else
-        of_opt="-of $STDOUT_FILE"
-      fi
-      mpirun $of_opt -n $n_processes \
-        --vcoordfile <(
-          np=0
-          if [[ -z ${PJM_NODE_Y+x} ]]; then
-            # 1D
-            for x in $(seq 1 $PJM_NODE_X); do
-              for i in $(seq 1 $n_processes_per_node); do
-                echo "($((x-1)))"
-                if (( ++np >= n_processes )); then
-                  break
-                fi
-              done
-            done
-          elif [[ -z ${PJM_NODE_Z+x} ]]; then
-            # 2D
-            for x in $(seq 1 $PJM_NODE_X); do
-              for y in $(seq 1 $PJM_NODE_Y); do
+      (
+        if [[ $PJM_ENVIRONMENT == INTERACT ]]; then
+          tee_cmd="tee $STDOUT_FILE"
+          of_opt=""
+        else
+          export PLE_MPI_STD_EMPTYFILE=off # do not create empty stdout/err files
+          tee_cmd="cat"
+          of_opt="-of-proc $STDOUT_FILE"
+          trap "compgen -G ${STDOUT_FILE}.* && tail -n +1 \$(ls ${STDOUT_FILE}.* -v) | tee $STDOUT_FILE && rm ${STDOUT_FILE}.*" EXIT
+        fi
+        mpirun $of_opt -n $n_processes \
+          --vcoordfile <(
+            np=0
+            if [[ -z ${PJM_NODE_Y+x} ]]; then
+              # 1D
+              for x in $(seq 1 $PJM_NODE_X); do
                 for i in $(seq 1 $n_processes_per_node); do
-                  echo "($((x-1)),$((y-1)))"
+                  echo "($((x-1)))"
                   if (( ++np >= n_processes )); then
-                    break 2
+                    break
                   fi
                 done
               done
-            done
-          else
-            # 3D
-            for x in $(seq 1 $PJM_NODE_X); do
-              for y in $(seq 1 $PJM_NODE_Y); do
-                for z in $(seq 1 $PJM_NODE_Z); do
+            elif [[ -z ${PJM_NODE_Z+x} ]]; then
+              # 2D
+              for x in $(seq 1 $PJM_NODE_X); do
+                for y in $(seq 1 $PJM_NODE_Y); do
                   for i in $(seq 1 $n_processes_per_node); do
-                    echo "($((x-1)),$((y-1)),$((z-1)))"
+                    echo "($((x-1)),$((y-1)))"
                     if (( ++np >= n_processes )); then
-                      break 3
+                      break 2
                     fi
                   done
                 done
               done
-            done
-          fi
-        ) \
-        $KOCHI_INSTALL_PREFIX_MASSIVETHREADS_DM/bin/madm_disable_aslr "${@:3}" | tee $STDOUT_FILE
-      if [[ $PJM_ENVIRONMENT == BATCH ]]; then
-        cat $STDOUT_FILE
-      fi
+            else
+              # 3D
+              for x in $(seq 1 $PJM_NODE_X); do
+                for y in $(seq 1 $PJM_NODE_Y); do
+                  for z in $(seq 1 $PJM_NODE_Z); do
+                    for i in $(seq 1 $n_processes_per_node); do
+                      echo "($((x-1)),$((y-1)),$((z-1)))"
+                      if (( ++np >= n_processes )); then
+                        break 3
+                      fi
+                    done
+                  done
+                done
+              done
+            fi
+          ) \
+          $KOCHI_INSTALL_PREFIX_MASSIVETHREADS_DM/bin/madm_disable_aslr "${@:3}" | $tee_cmd
+      )
     }
     ;;
   *)
