@@ -32,8 +32,6 @@ case $KOCHI_MACHINE in
     }
     ;;
   wisteria-o)
-    # export XOS_MMM_L_PAGING_POLICY=demand:demand:demand
-    export XOS_MMM_L_HPAGE_TYPE=none
     export UTOFU_SWAP_PROTECT=1
 
     ityr_mpirun() {

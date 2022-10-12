@@ -14,15 +14,15 @@ machines:
         module load odyssey > /dev/null
         export MPICC=mpifccpx
         export MPICXX=mpiFCCpx
-        export FCCpx_ENV="-Nclang"
-        export fccpx_ENV="-Nclang"
+        export fccpx_ENV="-Nclang -Knolargepage"
+        export FCCpx_ENV="-Nclang -Knolargepage"
         module load cmake/3.22.2
       on_machine: |
         . /work/gc64/c64050/venv/odyssey/bin/activate
         export MPICC=mpifcc
         export MPICXX=mpiFCC
-        export FCC_ENV="-Nclang"
-        export fcc_ENV="-Nclang"
+        export fcc_ENV="-Nclang -Knolargepage"
+        export FCC_ENV="-Nclang -Knolargepage"
         module load cmake/3.22.2
 
   ito-a:
@@ -184,6 +184,27 @@ dependencies:
     script:
       - mkdir -p $KOCHI_INSTALL_PREFIX/include
       - cp backward.hpp $KOCHI_INSTALL_PREFIX/include/
+
+  jemalloc:
+    recipes:
+      - name: v5.3.0
+        envs:
+          JEMALLOC_VERSION: 5.3.0
+          CONFIGURE_OPTS: ""
+      - name: v5.3.0_prof
+        envs:
+          JEMALLOC_VERSION: 5.3.0
+          CONFIGURE_OPTS: --enable-prof
+    script:
+      - wget https://github.com/jemalloc/jemalloc/releases/download/${JEMALLOC_VERSION}/jemalloc-${JEMALLOC_VERSION}.tar.bz2
+      - tar xvf jemalloc-${JEMALLOC_VERSION}.tar.bz2
+      - cd jemalloc-${JEMALLOC_VERSION}/
+      - if [[ $KOCHI_MACHINE == wisteria-o ]]; then
+      -   CONFIGURE_OPTS="${CONFIGURE_OPTS:+$CONFIGURE_OPTS} CC=fccpx CXX=FCCpx --host=aarch64-linux-gnu --with-lg-page=16"
+      - fi
+      - ./configure --prefix=$KOCHI_INSTALL_PREFIX $CONFIGURE_OPTS
+      - make -j
+      - make install
 
   # experimental
   itoyori:
