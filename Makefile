@@ -1,5 +1,5 @@
 UTH_PATH     := ${KOCHI_INSTALL_PREFIX_MASSIVETHREADS_DM}
-UTH_CXXFLAGS := -I$(UTH_PATH)/include -fno-stack-protector -Wno-register
+UTH_CXXFLAGS := -I$(UTH_PATH)/include -fno-stack-protector -Wno-register -Wl,-export-dynamic
 UTH_LDFLAGS  := -L$(UTH_PATH)/lib -luth -lmcomm
 
 PCAS_PATH     := ${KOCHI_INSTALL_PREFIX_PCAS}

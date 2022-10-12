@@ -124,19 +124,18 @@ build:
   script: |
     source common.bash
 
-    CFLAGS=${CFLAGS:-""}
-    CFLAGS="$CFLAGS -DNDEBUG"
-    CFLAGS="$CFLAGS -DITYR_BENCH_ELEM_TYPE=$KOCHI_PARAM_ELEM_TYPE"
-    CFLAGS="$CFLAGS -DITYR_LOGGER_IMPL=impl_$KOCHI_PARAM_LOGGER"
-    CFLAGS="$CFLAGS -DITYR_DIST_POLICY=$KOCHI_PARAM_DIST_POLICY"
-    CFLAGS="$CFLAGS -DITYR_BLOCK_SIZE=$KOCHI_PARAM_BLOCK_SIZE"
+    CFLAGS="${CFLAGS:+$CFLAGS} -DNDEBUG"
+    CFLAGS="${CFLAGS:+$CFLAGS} -DITYR_BENCH_ELEM_TYPE=$KOCHI_PARAM_ELEM_TYPE"
+    CFLAGS="${CFLAGS:+$CFLAGS} -DITYR_LOGGER_IMPL=impl_$KOCHI_PARAM_LOGGER"
+    CFLAGS="${CFLAGS:+$CFLAGS} -DITYR_DIST_POLICY=$KOCHI_PARAM_DIST_POLICY"
+    CFLAGS="${CFLAGS:+$CFLAGS} -DITYR_BLOCK_SIZE=$KOCHI_PARAM_BLOCK_SIZE"
 
     case $KOCHI_PARAM_CACHE_POLICY in
-      serial)         CFLAGS="$CFLAGS -DITYR_POLICY=ityr_policy_serial" ;;
-      nocache)        CFLAGS="$CFLAGS -DITYR_POLICY=ityr_policy_workfirst -DITYR_IRO_DISABLE_CACHE=1" ;;
-      writethrough)   CFLAGS="$CFLAGS -DITYR_POLICY=ityr_policy_workfirst" ;;
-      writeback)      CFLAGS="$CFLAGS -DITYR_POLICY=ityr_policy_workfirst" ;;
-      writeback_lazy) CFLAGS="$CFLAGS -DITYR_POLICY=ityr_policy_workfirst_lazy" ;;
+      serial)         CFLAGS="${CFLAGS:+$CFLAGS} -DITYR_POLICY=ityr_policy_serial" ;;
+      nocache)        CFLAGS="${CFLAGS:+$CFLAGS} -DITYR_POLICY=ityr_policy_workfirst -DITYR_IRO_DISABLE_CACHE=1" ;;
+      writethrough)   CFLAGS="${CFLAGS:+$CFLAGS} -DITYR_POLICY=ityr_policy_workfirst" ;;
+      writeback)      CFLAGS="${CFLAGS:+$CFLAGS} -DITYR_POLICY=ityr_policy_workfirst" ;;
+      writeback_lazy) CFLAGS="${CFLAGS:+$CFLAGS} -DITYR_POLICY=ityr_policy_workfirst_lazy" ;;
       *)              echo "Unknown cache policy ($KOCHI_PARAM_CACHE_POLICY)"; exit 1 ;;
     esac
 
@@ -163,6 +162,7 @@ run:
 
     export MADM_STACK_SIZE=$((4 * 1024 * 1024))
     n_nodes=$(echo $KOCHI_PARAM_NODES | cut -f 1 -d ":" | sed 's/x/*/g' | bc)
+
     ityr_mpirun $((n_nodes * KOCHI_PARAM_CORES)) $KOCHI_PARAM_CORES ./cilksort.out \
       -n $KOCHI_PARAM_N_INPUT \
       -r $KOCHI_PARAM_REPEATS \
@@ -172,4 +172,24 @@ run:
       -i $KOCHI_PARAM_CUTOFF_I \
       -m $KOCHI_PARAM_CUTOFF_M \
       -q $KOCHI_PARAM_CUTOFF_Q
+
+    # jeprof_wrap() {
+    #   # FILEPATH=jeprof.${PMIX_RANK}.out
+    #   FILEPATH=/work/gc64/c64050/jeprof/cilksort.${PMIX_RANK}
+    #   export MALLOC_CONF="prof:true,lg_prof_interval:30,prof_prefix:$FILEPATH"
+    #   export LD_PRELOAD=/work/gc64/c64050/opt/odyssey/jemalloc/5.3.0/lib/libjemalloc.so
+    #   "$@"
+    # }
+    # export -f jeprof_wrap
+
+    # ityr_mpirun $((n_nodes * KOCHI_PARAM_CORES)) $KOCHI_PARAM_CORES bash -c "jeprof_wrap ./cilksort.out \
+    #   -n $KOCHI_PARAM_N_INPUT \
+    #   -r $KOCHI_PARAM_REPEATS \
+    #   -e $KOCHI_PARAM_EXEC_TYPE \
+    #   -c $KOCHI_PARAM_CACHE_SIZE \
+    #   -v $KOCHI_PARAM_VERIFY \
+    #   -i $KOCHI_PARAM_CUTOFF_I \
+    #   -m $KOCHI_PARAM_CUTOFF_M \
+    #   -q $KOCHI_PARAM_CUTOFF_Q"
+
     if [[ $KOCHI_PARAM_LOGGER == trace ]]; then run_trace_viewer; fi

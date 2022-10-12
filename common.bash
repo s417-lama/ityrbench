@@ -1,5 +1,5 @@
 #!/bin/bash
-set -euo pipefail
+[[ -z "$PS1" ]] && set -euo pipefail
 
 MPICXX=${MPICXX:-mpicxx}
 
@@ -28,7 +28,7 @@ case $KOCHI_MACHINE in
         --mca plm_rsh_agent pjrsh \
         --hostfile $PJM_O_NODEINF \
         --mca osc_ucx_acc_single_intrinsic true \
-        $KOCHI_INSTALL_PREFIX_MASSIVETHREADS_DM/bin/madm_disable_aslr "${@:3}" | $OUTPUT_CMD
+        setarch $(uname -m) --addr-no-randomize "${@:3}" | $OUTPUT_CMD
     }
     ;;
   wisteria-o)
@@ -90,7 +90,7 @@ case $KOCHI_MACHINE in
               done
             fi
           ) \
-          $KOCHI_INSTALL_PREFIX_MASSIVETHREADS_DM/bin/madm_disable_aslr "${@:3}" | $tee_cmd
+          setarch $(uname -m) --addr-no-randomize "${@:3}" | $tee_cmd
       )
     }
     ;;
@@ -99,7 +99,7 @@ case $KOCHI_MACHINE in
       local n_processes=$1
       local n_processes_per_node=$2
       mpirun -n $n_processes -N $n_processes_per_node \
-        $KOCHI_INSTALL_PREFIX_MASSIVETHREADS_DM/bin/madm_disable_aslr "${@:3}"
+        setarch $(uname -m) --addr-no-randomize "${@:3}"
     }
     ;;
 esac
