@@ -132,11 +132,11 @@ public:
 
   constexpr T operator[](size_t i) const {
     assert(i < n_);
-    auto p = my_ityr::iro::checkout<my_ityr::iro::access_mode::read>(ptr_ + i, 1);
-    T ret = *p;
-    my_ityr::iro::checkin(p, 1);
-    /* T ret; */
-    /* my_ityr::iro::get(ptr_ + i, &ret, 1); */
+    /* auto p = my_ityr::iro::checkout<my_ityr::iro::access_mode::read>(ptr_ + i, 1); */
+    /* T ret = *p; */
+    /* my_ityr::iro::checkin(p, 1); */
+    T ret;
+    my_ityr::iro::get(ptr_ + i, &ret, 1);
     return ret;
   }
 
@@ -729,6 +729,8 @@ int real_main(int argc, char **argv) {
     free(array);
     free(buf);
   }
+
+  my_ityr::iro::fini();
 
   return 0;
 }

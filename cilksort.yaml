@@ -111,7 +111,6 @@ batches:
       repeats: 11
       cutoff_q: [256, 1024, 4096, 16384, 65536]
       max_dirty: [0.05, 0.1, 0.2, 0.5, 1.0]
-      logger: stats
     duplicates: 1
     artifacts:
       - type: stdout
@@ -130,7 +129,7 @@ build:
     CFLAGS="${CFLAGS:+$CFLAGS} -DNDEBUG"
     CFLAGS="${CFLAGS:+$CFLAGS} -DITYR_BENCH_ELEM_TYPE=$KOCHI_PARAM_ELEM_TYPE"
     CFLAGS="${CFLAGS:+$CFLAGS} -DITYR_LOGGER_IMPL=impl_$KOCHI_PARAM_LOGGER"
-    CFLAGS="${CFLAGS:+$CFLAGS} -DITYR_DIST_POLICY=$KOCHI_PARAM_DIST_POLICY"
+    CFLAGS="${CFLAGS:+$CFLAGS} -DITYR_DIST_POLICY=pcas::mem_mapper::$KOCHI_PARAM_DIST_POLICY"
     CFLAGS="${CFLAGS:+$CFLAGS} -DITYR_BLOCK_SIZE=$KOCHI_PARAM_BLOCK_SIZE"
 
     case $KOCHI_PARAM_CACHE_POLICY in

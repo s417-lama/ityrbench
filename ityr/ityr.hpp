@@ -1,5 +1,7 @@
 #pragma once
 
+#include <optional>
+
 #include "uth.h"
 #include "pcas/pcas.hpp"
 
@@ -19,6 +21,10 @@ using ityr_logger_impl_t = logger::ITYR_LOGGER_IMPL<P>;
 
 #undef ITYR_LOGGER_IMPL
 
+#ifndef ITYR_DIST_POLICY
+#define ITYR_DIST_POLICY pcas::mem_mapper::cyclic
+#endif
+
 template <typename ParentPolicy>
 struct my_pcas_policy : pcas::policy_default {
   using wallclock_t = typename ParentPolicy::wallclock_t;
@@ -36,6 +42,16 @@ template <typename P>
 class iro_pcas_default {
   using my_pcas = pcas::pcas_if<my_pcas_policy<P>>;
 
+  static std::optional<my_pcas>& get_instance() {
+    static std::optional<my_pcas> instance;
+    return instance;
+  }
+
+  static my_pcas& pc() {
+    assert(get_instance().has_value());
+    return *get_instance();
+  }
+
 public:
   template <typename T>
   using global_ptr = pcas::global_ptr<T>;
@@ -43,7 +59,13 @@ public:
   using release_handler = pcas::release_handler;
 
   static void init(size_t cache_size) {
-    pc(cache_size);
+    assert(!get_instance().has_value());
+    get_instance().emplace(cache_size);
+  }
+
+  static void fini() {
+    assert(get_instance().has_value());
+    get_instance().reset();
   }
 
   static void release() {
@@ -68,11 +90,7 @@ public:
 
   template <typename T>
   static global_ptr<T> malloc(uint64_t nelems) {
-#ifndef ITYR_DIST_POLICY
-#define ITYR_DIST_POLICY cyclic
-#endif
-    return pc().template malloc<T, pcas::mem_mapper::ITYR_DIST_POLICY>(nelems);
-#undef ITYR_DIST_POLICY
+    return pc().template malloc<T, ITYR_DIST_POLICY>(nelems);
   }
 
   template <typename T>
@@ -82,17 +100,17 @@ public:
 
   template <typename T>
   static void get(global_ptr<T> from_ptr, T* to_ptr, uint64_t nelems) {
-    return pc().get(from_ptr, to_ptr, nelems);
+    pc().get(from_ptr, to_ptr, nelems);
   }
 
   template <typename T>
   static void put(const T* from_ptr, global_ptr<T> to_ptr, uint64_t nelems) {
-    return pc().put(from_ptr, to_ptr, nelems);
+    pc().put(from_ptr, to_ptr, nelems);
   }
 
   template <typename T>
   static void willread(global_ptr<T> ptr, uint64_t nelems) {
-    return pc().willread(ptr, nelems);
+    pc().willread(ptr, nelems);
   }
 
   template <access_mode Mode, typename T>
@@ -116,17 +134,21 @@ public:
   static void logger_flush_and_print_stat(uint64_t t_begin, uint64_t t_end) {
     my_pcas::logger::flush_and_print_stat(t_begin, t_end);
   }
-
-private:
-  static my_pcas& pc(size_t cache_size = 0) {
-    static my_pcas g_pc(cache_size);
-    return g_pc;
-  }
 };
 
 template <typename P>
 class iro_pcas_nocache {
   using my_pcas = pcas::pcas_if<my_pcas_policy<P>>;
+
+  static std::optional<my_pcas>& get_instance() {
+    static std::optional<my_pcas> instance;
+    return instance;
+  }
+
+  static my_pcas& pc() {
+    assert(get_instance().has_value());
+    return *get_instance();
+  }
 
 public:
   template <typename T>
@@ -135,7 +157,13 @@ public:
   using release_handler = pcas::release_handler;
 
   static void init(size_t cache_size) {
-    pc(cache_size);
+    assert(!get_instance().has_value());
+    get_instance().emplace(cache_size);
+  }
+
+  static void fini() {
+    assert(get_instance().has_value());
+    get_instance().reset();
   }
 
   static void release() {}
@@ -150,11 +178,7 @@ public:
 
   template <typename T>
   static global_ptr<T> malloc(uint64_t nelems) {
-#ifndef ITYR_DIST_POLICY
-#define ITYR_DIST_POLICY cyclic
-#endif
-    return pc().template malloc<T, pcas::mem_mapper::ITYR_DIST_POLICY>(nelems);
-#undef ITYR_DIST_POLICY
+    return pc().template malloc<T, ITYR_DIST_POLICY>(nelems);
   }
 
   template <typename T>
@@ -164,12 +188,12 @@ public:
 
   template <typename T>
   static void get(global_ptr<T> from_ptr, T* to_ptr, uint64_t nelems) {
-    return pc().get(from_ptr, to_ptr, nelems);
+    pc().get_nocache(from_ptr, to_ptr, nelems);
   }
 
   template <typename T>
   static void put(const T* from_ptr, global_ptr<T> to_ptr, uint64_t nelems) {
-    return pc().put(from_ptr, to_ptr, nelems);
+    pc().put_nocache(from_ptr, to_ptr, nelems);
   }
 
   template <typename T>
@@ -192,7 +216,7 @@ public:
     auto key = std::make_pair(raw_ptr, nelems);
     auto& che = checkout_entries()[key];
     if (che.mode != access_mode::read) {
-      pc().put((uint8_t*)raw_ptr, che.ptr, nelems * sizeof(T));
+      put((uint8_t*)raw_ptr, che.ptr, nelems * sizeof(T));
     }
     checkout_entries().erase(key);
     std::free(raw_ptr);
@@ -211,11 +235,6 @@ public:
   }
 
 private:
-  static my_pcas& pc(size_t cache_size = 0) {
-    static my_pcas g_pc(cache_size);
-    return g_pc;
-  }
-
   struct checkout_entry {
     global_ptr<uint8_t> ptr;
     access_mode         mode;
@@ -236,6 +255,7 @@ public:
   using release_handler = int;
 
   static void init(size_t cache_size) {}
+  static void fini() {}
 
   static void release() {}
   static void release_lazy(release_handler*) {}
@@ -461,5 +481,7 @@ struct ityr_policy_workfirst_lazy : ityr_policy_naive {
 using ityr_policy = ITYR_POLICY;
 
 #undef ITYR_POLICY
+
+#undef ITYR_DIST_POLICY
 
 }
