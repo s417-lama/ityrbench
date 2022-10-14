@@ -98,8 +98,9 @@ public:
     pc().free(ptr);
   }
 
-  template <typename T>
-  static void get(global_ptr<T> from_ptr, T* to_ptr, uint64_t nelems) {
+  template <typename ConstT, typename T>
+  static std::enable_if_t<std::is_same_v<std::remove_const_t<ConstT>, T>>
+  get(global_ptr<ConstT> from_ptr, T* to_ptr, uint64_t nelems) {
     pc().get(from_ptr, to_ptr, nelems);
   }
 
@@ -186,8 +187,9 @@ public:
     pc().free(ptr);
   }
 
-  template <typename T>
-  static void get(global_ptr<T> from_ptr, T* to_ptr, uint64_t nelems) {
+  template <typename ConstT, typename T>
+  static std::enable_if_t<std::is_same_v<std::remove_const_t<ConstT>, T>>
+  get(global_ptr<ConstT> from_ptr, T* to_ptr, uint64_t nelems) {
     pc().get_nocache(from_ptr, to_ptr, nelems);
   }
 
@@ -200,25 +202,30 @@ public:
   static void willread(global_ptr<T>, uint64_t) {}
 
   template <access_mode Mode, typename T>
-  static auto checkout(global_ptr<T> ptr, uint64_t nelems) {
-    T* ret = (T*)std::malloc(nelems * sizeof(T));
+  static std::conditional_t<Mode == access_mode::read, const T*, T*>
+  checkout(global_ptr<T> ptr, uint64_t nelems) {
+    // If T is const, then it cannot be checked out with write access mode
+    static_assert(!std::is_const_v<T> || Mode == access_mode::read);
+
+    uint64_t size = nelems * sizeof(T);
+    auto ret = (std::remove_const_t<T>*)std::malloc(size + sizeof(global_ptr<uint8_t>));
     if (Mode != access_mode::write) {
       get(ptr, ret, nelems);
     }
-    checkout_entries()[std::make_pair(ret, nelems)] = (checkout_entry){
-      .ptr = static_cast<global_ptr<uint8_t>>(ptr), .mode = Mode
-    };
+    *((global_ptr<uint8_t>*)((uint8_t*)ret + size)) = global_ptr<uint8_t>(ptr);
     return ret;
   }
 
   template <typename T>
+  static void checkin(const T* raw_ptr, uint64_t) {
+    std::free(const_cast<T*>(raw_ptr));
+  }
+
+  template <typename T>
   static void checkin(T* raw_ptr, uint64_t nelems) {
-    auto key = std::make_pair(raw_ptr, nelems);
-    auto& che = checkout_entries()[key];
-    if (che.mode != access_mode::read) {
-      put((uint8_t*)raw_ptr, che.ptr, nelems * sizeof(T));
-    }
-    checkout_entries().erase(key);
+    uint64_t size = nelems * sizeof(T);
+    global_ptr<uint8_t> ptr = *((global_ptr<uint8_t>*)((uint8_t*)raw_ptr + size));
+    put((uint8_t*)raw_ptr, ptr, size);
     std::free(raw_ptr);
   }
 
@@ -233,17 +240,6 @@ public:
   static void logger_flush_and_print_stat(uint64_t t_begin, uint64_t t_end) {
     my_pcas::logger::flush_and_print_stat(t_begin, t_end);
   }
-
-private:
-  struct checkout_entry {
-    global_ptr<uint8_t> ptr;
-    access_mode         mode;
-  };
-  static std::map<std::pair<void*, uint64_t>, checkout_entry>& checkout_entries() {
-    static std::map<std::pair<void*, uint64_t>, checkout_entry> g_checkouts;
-    return g_checkouts;
-  }
-
 };
 
 template <typename P>
@@ -268,10 +264,15 @@ public:
   template <typename T>
   static void free(global_ptr<T> ptr) { std::free(ptr); }
 
+  template <typename ConstT, typename T>
+  static std::enable_if_t<std::is_same_v<std::remove_const_t<ConstT>, T>>
+  get(global_ptr<ConstT> from_ptr, T* to_ptr, uint64_t nelems) {
+    std::memcpy(to_ptr, from_ptr, nelems * sizeof(T));
+  }
   template <typename T>
-  static void get(global_ptr<T> from_ptr, T* to_ptr, uint64_t nelems) {}
-  template <typename T>
-  static void put(const T* from_ptr, global_ptr<T> to_ptr, uint64_t nelems) {}
+  static void put(const T* from_ptr, global_ptr<T> to_ptr, uint64_t nelems) {
+    std::memcpy(to_ptr, from_ptr, nelems * sizeof(T));
+  }
 
   template <typename T>
   static void willread(global_ptr<T> ptr, uint64_t nelems) {}
