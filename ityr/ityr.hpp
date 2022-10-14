@@ -338,8 +338,7 @@ public:
 
   template <typename F, typename... Args>
   static void main(F f, Args... args) {
-    set_segv_handler();
-    set_abrt_handler();
+    set_signal_handlers();
     P::main(f, args...);
   }
 

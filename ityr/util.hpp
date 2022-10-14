@@ -53,34 +53,31 @@ inline void print_backtrace() {
   p.object = true;
   p.color_mode = backward::ColorMode::always;
   p.address = true;
-  p.print(st, stderr);
+  p.print(st, stdout);
 }
 
-inline void segv_handler(int sig) {
+inline void signal_handler(int sig) {
+  printf("Signal %d received.\n", sig);
   print_backtrace();
   exit(1);
 }
 
-inline void set_segv_handler() {
+inline void set_signal_handler(int sig) {
   struct sigaction sa;
   sa.sa_flags   = 0;
-  sa.sa_handler = segv_handler;
+  sa.sa_handler = signal_handler;
   sigemptyset(&sa.sa_mask);
-  if (sigaction(SIGSEGV, &sa, NULL) == -1) {
-    printf("sigacton for SIGSEGV failed.\n");
+  if (sigaction(sig, &sa, NULL) == -1) {
+    perror("sigacton");
     exit(1);
   }
 }
 
-inline void set_abrt_handler() {
-  struct sigaction sa;
-  sa.sa_flags   = 0;
-  sa.sa_handler = segv_handler;
-  sigemptyset(&sa.sa_mask);
-  if (sigaction(SIGABRT, &sa, NULL) == -1) {
-    printf("sigacton for SIGABRT failed.\n");
-    exit(1);
-  }
+inline void set_signal_handlers() {
+  set_signal_handler(SIGSEGV);
+  set_signal_handler(SIGABRT);
+  set_signal_handler(SIGBUS);
+  set_signal_handler(SIGTERM);
 }
 
 }

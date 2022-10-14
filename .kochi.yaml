@@ -107,17 +107,22 @@ dependencies:
         branch: ityr
         script:
           - CFLAGS="${CFLAGS:+$CFLAGS} -O3 -g -Wall"
-          - CCFLAGS="$CFLAGS" CXXFLAGS="$CFLAGS" ./configure MPICC=$MPICC MPICXX=$MPICXX $host_opt $polling_opt --with-comm-layer=mpi3 --prefix=$KOCHI_INSTALL_PREFIX
+          - CCFLAGS="$CFLAGS" CXXFLAGS="$CFLAGS" ./configure MPICC=$MPICC MPICXX=$MPICXX $CONFIGURE_OPTS --with-comm-layer=mpi3 --prefix=$KOCHI_INSTALL_PREFIX
       - name: develop
         git: ../massivethreads-dm
         current_state: true
         script:
           - CFLAGS="${CFLAGS:+$CFLAGS} -O3 -g -Wall"
-          - CCFLAGS="$CFLAGS" CXXFLAGS="$CFLAGS" ./configure MPICC=$MPICC MPICXX=$MPICXX $host_opt $polling_opt --with-comm-layer=mpi3 --prefix=$KOCHI_INSTALL_PREFIX
-    before_script:
-      - $MPICXX --version
-      - if [[ $KOCHI_MACHINE == wisteria-o ]]; then host_opt="--host=aarch64"; else host_opt=""; fi
-      - if [[ $KOCHI_MACHINE == local ]]; then polling_opt="--enable-polling"; else polling_opt=""; fi
+          - CCFLAGS="$CFLAGS" CXXFLAGS="$CFLAGS" ./configure MPICC=$MPICC MPICXX=$MPICXX $CONFIGURE_OPTS --with-comm-layer=mpi3 --prefix=$KOCHI_INSTALL_PREFIX
+    before_script: |
+      $MPICXX --version
+      if [[ $KOCHI_MACHINE == wisteria-o ]]; then
+        CFLAGS="${CFLAGS:+$CFLAGS} -DMADI_NULLIFY_PARENT_STACK=1"
+        CONFIGURE_OPTS="${CONFIGURE_OPTS:+$CONFIGURE_OPTS} --host=aarch64"
+      fi
+      if [[ $KOCHI_MACHINE == local ]]; then
+        CONFIGURE_OPTS="${CONFIGURE_OPTS:+$CONFIGURE_OPTS} --enable-polling"
+      fi
     after_script:
       - make -j
       - make install
