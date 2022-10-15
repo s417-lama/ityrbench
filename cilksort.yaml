@@ -25,13 +25,13 @@ default_params:
   verify: 1
   cutoff_i: 64
   cutoff_q: 16384
-  cutoff_m: "`$cutoff_q * 4`"
+  cutoff_m: $cutoff_q
   exec_type: 2 # 0:serial/1:std::sort/2:parallel
   cache_policy: writeback_lazy # serial/nocache/writethrough/writeback/writeback_lazy
   dist_policy: cyclic # block/cyclic
   cache_size: 128 # MB
   block_size: 65536 # bytes
-  max_dirty: 0.2 # ratio
+  max_dirty: $cache_size # MB
   shared_mem: 1
   logger: dummy # dummy/trace/stats
   allocator: jemalloc # sys/jemalloc
@@ -107,11 +107,10 @@ batches:
       nodes:
         - value: 2x3x2:torus
           machines: [wisteria-o]
-      n_input: 10_000_000_000
+      n_input: 1_000_000_000
       repeats: 11
-      cutoff_q: [256, 1024, 4096, 16384, 65536]
-      max_dirty: [0.05, 0.1, 0.2, 0.5, 1.0]
-    duplicates: 1
+      cutoff_q: [64, 256, 1024, 4096, 16384, 65536]
+      cache_policy: [nocache, writethrough, writeback, writeback_lazy]
     artifacts:
       - type: stdout
         dest: ${batch_name}/nodes_${nodes}_p_${cache_policy}_${duplicate}.log
@@ -150,7 +149,7 @@ run:
     source common.bash
 
     export PCAS_ENABLE_SHARED_MEMORY=$KOCHI_PARAM_SHARED_MEM
-    export PCAS_MAX_DIRTY_CACHE_SIZE=$(bc <<< "$KOCHI_PARAM_CACHE_SIZE * 2^20 * $KOCHI_PARAM_MAX_DIRTY / 1")
+    export PCAS_MAX_DIRTY_CACHE_SIZE=$(bc <<< "$KOCHI_PARAM_MAX_DIRTY * 2^20 / 1")
     export PCAS_PREFETCH_BLOCKS=0
 
     case $KOCHI_PARAM_CACHE_POLICY in
