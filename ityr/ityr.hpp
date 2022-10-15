@@ -36,6 +36,12 @@ struct my_pcas_policy : pcas::policy_default {
 #endif
   constexpr static uint64_t block_size = ITYR_BLOCK_SIZE;
 #undef ITYR_BLOCK_SIZE
+
+#ifndef ITYR_ENABLE_WRITE_THROUGH
+#define ITYR_ENABLE_WRITE_THROUGH 0
+#endif
+  constexpr static bool enable_write_through = ITYR_ENABLE_WRITE_THROUGH;
+#undef ITYR_ENABLE_WRITE_THROUGH
 };
 
 template <typename P>
@@ -138,7 +144,7 @@ public:
 };
 
 template <typename P>
-class iro_pcas_nocache {
+class iro_pcas_getput {
   using my_pcas = pcas::pcas_if<my_pcas_policy<P>>;
 
   static std::optional<my_pcas>& get_instance() {
@@ -187,16 +193,30 @@ public:
     pc().free(ptr);
   }
 
+#ifndef ITYR_IRO_DISABLE_CACHE
+#define ITYR_IRO_DISABLE_CACHE 0
+#endif
+
   template <typename ConstT, typename T>
   static std::enable_if_t<std::is_same_v<std::remove_const_t<ConstT>, T>>
   get(global_ptr<ConstT> from_ptr, T* to_ptr, uint64_t nelems) {
+#if ITYR_IRO_DISABLE_CACHE
     pc().get_nocache(from_ptr, to_ptr, nelems);
+#else
+    pc().get(from_ptr, to_ptr, nelems);
+#endif
   }
 
   template <typename T>
   static void put(const T* from_ptr, global_ptr<T> to_ptr, uint64_t nelems) {
+#if ITYR_IRO_DISABLE_CACHE
     pc().put_nocache(from_ptr, to_ptr, nelems);
+#else
+    pc().put(from_ptr, to_ptr, nelems);
+#endif
   }
+
+#undef ITYR_IRO_DISABLE_CACHE
 
   template <typename T>
   static void willread(global_ptr<T>, uint64_t) {}
@@ -394,19 +414,19 @@ struct ityr_policy_naive {
   template <typename P>
   using ito_pattern_t = ito_pattern_naive<P>;
 
-#ifndef ITYR_IRO_DISABLE_CACHE
-#define ITYR_IRO_DISABLE_CACHE 0
+#ifndef ITYR_IRO_GETPUT
+#define ITYR_IRO_GETPUT 0
 #endif
 
-#if ITYR_IRO_DISABLE_CACHE
+#if ITYR_IRO_GETPUT
   template <typename P>
-  using iro_t = iro_pcas_nocache<P>;
+  using iro_t = iro_pcas_getput<P>;
 #else
   template <typename P>
   using iro_t = iro_pcas_default<P>;
 #endif
 
-#undef ITYR_IRO_DISABLE_CACHE
+#undef ITYR_IRO_GETPUT
 
   using wallclock_t = wallclock_madm;
 

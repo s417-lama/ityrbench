@@ -27,7 +27,7 @@ default_params:
   cutoff_q: 16384
   cutoff_m: $cutoff_q
   exec_type: 2 # 0:serial/1:std::sort/2:parallel
-  cache_policy: writeback_lazy # serial/nocache/writethrough/writeback/writeback_lazy
+  cache_policy: writeback_lazy # serial/nocache/writethrough/writeback/writeback_lazy/getput
   dist_policy: cyclic # block/cyclic
   cache_size: 128 # MB
   block_size: 65536 # bytes
@@ -133,10 +133,11 @@ build:
 
     case $KOCHI_PARAM_CACHE_POLICY in
       serial)         CFLAGS="${CFLAGS:+$CFLAGS} -DITYR_POLICY=ityr_policy_serial" ;;
-      nocache)        CFLAGS="${CFLAGS:+$CFLAGS} -DITYR_POLICY=ityr_policy_workfirst -DITYR_IRO_DISABLE_CACHE=1" ;;
-      writethrough)   CFLAGS="${CFLAGS:+$CFLAGS} -DITYR_POLICY=ityr_policy_workfirst" ;;
+      nocache)        CFLAGS="${CFLAGS:+$CFLAGS} -DITYR_POLICY=ityr_policy_workfirst -DITYR_IRO_GETPUT=1 -DITYR_IRO_DISABLE_CACHE=1" ;;
+      writethrough)   CFLAGS="${CFLAGS:+$CFLAGS} -DITYR_POLICY=ityr_policy_workfirst -DITYR_ENABLE_WRITE_THROUGH=1" ;;
       writeback)      CFLAGS="${CFLAGS:+$CFLAGS} -DITYR_POLICY=ityr_policy_workfirst" ;;
       writeback_lazy) CFLAGS="${CFLAGS:+$CFLAGS} -DITYR_POLICY=ityr_policy_workfirst_lazy" ;;
+      getput)         CFLAGS="${CFLAGS:+$CFLAGS} -DITYR_POLICY=ityr_policy_workfirst_lazy -DITYR_IRO_GETPUT=1" ;;
       *)              echo "Unknown cache policy ($KOCHI_PARAM_CACHE_POLICY)"; exit 1 ;;
     esac
 
@@ -144,22 +145,13 @@ build:
     MPICXX=$MPICXX CFLAGS=$CFLAGS make cilksort.out
 
 run:
-  depend_params: [nodes, cores, n_input, repeats, verify, cutoff_i, cutoff_m, cutoff_q, exec_type, cache_policy, cache_size, max_dirty, shared_mem, logger, allocator]
+  depend_params: [nodes, cores, n_input, repeats, verify, cutoff_i, cutoff_m, cutoff_q, exec_type, cache_size, max_dirty, shared_mem, logger, allocator]
   script: |
     source common.bash
 
     export PCAS_ENABLE_SHARED_MEMORY=$KOCHI_PARAM_SHARED_MEM
     export PCAS_MAX_DIRTY_CACHE_SIZE=$(bc <<< "$KOCHI_PARAM_MAX_DIRTY * 2^20 / 1")
     export PCAS_PREFETCH_BLOCKS=0
-
-    case $KOCHI_PARAM_CACHE_POLICY in
-      serial)         ;;
-      nocache)        ;;
-      writethrough)   export PCAS_ENABLE_WRITE_THROUGH=1 ;;
-      writeback)      ;;
-      writeback_lazy) ;;
-      *)              echo "Unknown cache policy ($KOCHI_PARAM_CACHE_POLICY)"; exit 1 ;;
-    esac
 
     export MADM_STACK_SIZE=$((4 * 1024 * 1024))
     n_nodes=$(echo $KOCHI_PARAM_NODES | cut -f 1 -d ":" | sed 's/x/*/g' | bc)
