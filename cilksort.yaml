@@ -113,12 +113,12 @@ batches:
       cache_policy: [nocache, writethrough, writeback, writeback_lazy]
     artifacts:
       - type: stdout
-        dest: ${batch_name}/nodes_${nodes}_p_${cache_policy}_${duplicate}.log
+        dest: ${batch_name}/c_${cutoff_q}_p_${cache_policy}_${duplicate}.log
       - type: stats
-        dest: ${batch_name}/nodes_${nodes}_p_${cache_policy}_${duplicate}.stats
+        dest: ${batch_name}/c_${cutoff_q}_p_${cache_policy}_${duplicate}.stats
       - type: file
         src: mpirun_out.txt
-        dest: ${batch_name}/nodes_${nodes}_p_${cache_policy}_${duplicate}.out
+        dest: ${batch_name}/c_${cutoff_q}_p_${cache_policy}_${duplicate}.out
 
 build:
   depend_params: [elem_type, cache_policy, dist_policy, block_size, logger]
