@@ -45,8 +45,13 @@ struct my_pcas_policy : pcas::policy_default {
 };
 
 template <typename P>
-class iro_pcas_default {
+struct iro_pcas_default {
   using my_pcas = pcas::pcas_if<my_pcas_policy<P>>;
+
+  template <typename T>
+  using global_ptr = pcas::global_ptr<T>;
+  using access_mode = pcas::access_mode;
+  using release_handler = pcas::release_handler;
 
   static std::optional<my_pcas>& get_instance() {
     static std::optional<my_pcas> instance;
@@ -57,12 +62,6 @@ class iro_pcas_default {
     assert(get_instance().has_value());
     return *get_instance();
   }
-
-public:
-  template <typename T>
-  using global_ptr = pcas::global_ptr<T>;
-  using access_mode = pcas::access_mode;
-  using release_handler = pcas::release_handler;
 
   static void init(size_t cache_size) {
     assert(!get_instance().has_value());
@@ -144,82 +143,33 @@ public:
 };
 
 template <typename P>
-class iro_pcas_getput {
-  using my_pcas = pcas::pcas_if<my_pcas_policy<P>>;
-
-  static std::optional<my_pcas>& get_instance() {
-    static std::optional<my_pcas> instance;
-    return instance;
-  }
-
-  static my_pcas& pc() {
-    assert(get_instance().has_value());
-    return *get_instance();
-  }
-
-public:
+struct iro_pcas_nocache : public iro_pcas_default<P> {
+  using base_t = iro_pcas_default<P>;
   template <typename T>
-  using global_ptr = pcas::global_ptr<T>;
-  using access_mode = pcas::access_mode;
-  using release_handler = pcas::release_handler;
+  using global_ptr = typename base_t::template global_ptr<T>;
+  using access_mode = typename base_t::access_mode;
+  using release_handler = typename base_t::release_handler;
 
-  static void init(size_t cache_size) {
-    assert(!get_instance().has_value());
-    get_instance().emplace(cache_size);
-  }
-
-  static void fini() {
-    assert(get_instance().has_value());
-    get_instance().reset();
-  }
+  using base_t::pc;
 
   static void release() {}
-
   static void release_lazy(release_handler*) {}
-
   static void acquire() {}
-
   static void acquire(release_handler) {}
-
   static void poll() {}
-
   template <typename T>
-  static global_ptr<T> malloc(uint64_t nelems) {
-    return pc().template malloc<T, ITYR_DIST_POLICY>(nelems);
-  }
-
-  template <typename T>
-  static void free(global_ptr<T> ptr) {
-    pc().free(ptr);
-  }
-
-#ifndef ITYR_IRO_DISABLE_CACHE
-#define ITYR_IRO_DISABLE_CACHE 0
-#endif
+  static void willread(global_ptr<T>, uint64_t) {}
 
   template <typename ConstT, typename T>
   static std::enable_if_t<std::is_same_v<std::remove_const_t<ConstT>, T>>
   get(global_ptr<ConstT> from_ptr, T* to_ptr, uint64_t nelems) {
-#if ITYR_IRO_DISABLE_CACHE
     pc().get_nocache(from_ptr, to_ptr, nelems);
-#else
-    pc().get(from_ptr, to_ptr, nelems);
-#endif
   }
 
   template <typename T>
   static void put(const T* from_ptr, global_ptr<T> to_ptr, uint64_t nelems) {
-#if ITYR_IRO_DISABLE_CACHE
     pc().put_nocache(from_ptr, to_ptr, nelems);
-#else
-    pc().put(from_ptr, to_ptr, nelems);
-#endif
   }
-
-#undef ITYR_IRO_DISABLE_CACHE
-
-  template <typename T>
-  static void willread(global_ptr<T>, uint64_t) {}
 
   template <access_mode Mode, typename T>
   static std::conditional_t<Mode == access_mode::read, const T*, T*>
@@ -248,17 +198,45 @@ public:
     put((uint8_t*)raw_ptr, ptr, size);
     std::free(raw_ptr);
   }
+};
 
-  static void logger_clear() {
-    my_pcas::logger::clear();
+template <typename P>
+struct iro_pcas_getput : public iro_pcas_default<P> {
+  using base_t = iro_pcas_default<P>;
+  template <typename T>
+  using global_ptr = typename base_t::template global_ptr<T>;
+  using access_mode = typename base_t::access_mode;
+  using release_handler = typename base_t::release_handler;
+
+  using base_t::get;
+  using base_t::put;
+
+  template <access_mode Mode, typename T>
+  static std::conditional_t<Mode == access_mode::read, const T*, T*>
+  checkout(global_ptr<T> ptr, uint64_t nelems) {
+    // If T is const, then it cannot be checked out with write access mode
+    static_assert(!std::is_const_v<T> || Mode == access_mode::read);
+
+    uint64_t size = nelems * sizeof(T);
+    auto ret = (std::remove_const_t<T>*)std::malloc(size + sizeof(global_ptr<uint8_t>));
+    if (Mode != access_mode::write) {
+      get(ptr, ret, nelems);
+    }
+    *((global_ptr<uint8_t>*)((uint8_t*)ret + size)) = global_ptr<uint8_t>(ptr);
+    return ret;
   }
 
-  static void logger_flush(uint64_t t_begin, uint64_t t_end) {
-    my_pcas::logger::flush(t_begin, t_end);
+  template <typename T>
+  static void checkin(const T* raw_ptr, uint64_t) {
+    std::free(const_cast<T*>(raw_ptr));
   }
 
-  static void logger_flush_and_print_stat(uint64_t t_begin, uint64_t t_end) {
-    my_pcas::logger::flush_and_print_stat(t_begin, t_end);
+  template <typename T>
+  static void checkin(T* raw_ptr, uint64_t nelems) {
+    uint64_t size = nelems * sizeof(T);
+    global_ptr<uint8_t> ptr = *((global_ptr<uint8_t>*)((uint8_t*)raw_ptr + size));
+    put((uint8_t*)raw_ptr, ptr, size);
+    std::free(raw_ptr);
   }
 };
 
@@ -414,11 +392,17 @@ struct ityr_policy_naive {
   template <typename P>
   using ito_pattern_t = ito_pattern_naive<P>;
 
+#ifndef ITYR_IRO_DISABLE_CACHE
+#define ITYR_IRO_DISABLE_CACHE 0
+#endif
 #ifndef ITYR_IRO_GETPUT
 #define ITYR_IRO_GETPUT 0
 #endif
 
-#if ITYR_IRO_GETPUT
+#if ITYR_IRO_DISABLE_CACHE
+  template <typename P>
+  using iro_t = iro_pcas_nocache<P>;
+#elif ITYR_IRO_GETPUT
   template <typename P>
   using iro_t = iro_pcas_getput<P>;
 #else
@@ -426,6 +410,7 @@ struct ityr_policy_naive {
   using iro_t = iro_pcas_default<P>;
 #endif
 
+#undef ITYR_IRO_DISABLE_CACHE
 #undef ITYR_IRO_GETPUT
 
   using wallclock_t = wallclock_madm;
