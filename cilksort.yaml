@@ -9,6 +9,8 @@ depends:
     recipe: v1.6
   - name: jemalloc
     recipe: v5.3.0
+  - name: boost
+    recipe: v1.80.0
 
 default_params:
   nodes: 1
@@ -169,6 +171,20 @@ run:
       -i $KOCHI_PARAM_CUTOFF_I \
       -m $KOCHI_PARAM_CUTOFF_M \
       -q $KOCHI_PARAM_CUTOFF_Q
+
+    # if [[ -z "${PS1+x}" ]]; then
+    #   echo "Use kochi interact."
+    #   exit 1
+    # fi
+    # MPIEXEC=mpitx ityr_mpirun $((n_nodes * KOCHI_PARAM_CORES)) $KOCHI_PARAM_CORES lldb -- ./cilksort.out \
+    #   -n $KOCHI_PARAM_N_INPUT \
+    #   -r $KOCHI_PARAM_REPEATS \
+    #   -e $KOCHI_PARAM_EXEC_TYPE \
+    #   -c $KOCHI_PARAM_CACHE_SIZE \
+    #   -v $KOCHI_PARAM_VERIFY \
+    #   -i $KOCHI_PARAM_CUTOFF_I \
+    #   -m $KOCHI_PARAM_CUTOFF_M \
+    #   -q $KOCHI_PARAM_CUTOFF_Q
 
     # jeprof_wrap() {
     #   # FILEPATH=jeprof.${PMIX_RANK}.out

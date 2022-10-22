@@ -18,6 +18,7 @@ machines:
         export FCCpx_ENV="-Nclang -Knolargepage"
         module load cmake/3.22.2
       on_machine: |
+        export PATH="/work/gc64/c64050/opt/odyssey/tmux/3.3a/bin:$PATH"
         . /work/gc64/c64050/venv/odyssey/bin/activate
         export MPICC=mpifcc
         export MPICXX=mpiFCC
@@ -210,6 +211,23 @@ dependencies:
       - ./configure --prefix=$KOCHI_INSTALL_PREFIX $CONFIGURE_OPTS
       - make -j
       - make install
+
+  boost:
+    recipes:
+      - name: v1.80.0
+        envs:
+          BOOST_VERSION: 1.80.0
+    script: |
+      BOOST_NAME=boost_$(sed 's/\./_/g' <<< $BOOST_VERSION)
+      wget -q https://boostorg.jfrog.io/artifactory/main/release/${BOOST_VERSION}/source/${BOOST_NAME}.tar.bz2
+      tar xf ${BOOST_NAME}.tar.bz2
+      cd ${BOOST_NAME}/
+      ./bootstrap.sh --prefix=$KOCHI_INSTALL_PREFIX
+      if [[ $KOCHI_MACHINE == wisteria-o ]]; then
+        echo "using clang : fcc : FCCpx ;" > user-config.jam
+        toolset=clang-fcc
+      fi
+      ./b2 --user-config=user-config.jam toolset=$toolset pch=off -j $(nproc) install
 
   # experimental
   itoyori:

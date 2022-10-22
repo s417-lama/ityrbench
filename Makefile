@@ -1,3 +1,6 @@
+SHELL=/bin/bash
+.SHELLFLAGS = -eu -o pipefail -c
+
 UTH_PATH     := ${KOCHI_INSTALL_PREFIX_MASSIVETHREADS_DM}
 UTH_CXXFLAGS := -I$(UTH_PATH)/include -fno-stack-protector -Wno-register -Wl,-export-dynamic
 UTH_LDFLAGS  := -L$(UTH_PATH)/lib -luth -lmcomm
@@ -13,8 +16,13 @@ BACKWARD_PATH     := ${KOCHI_INSTALL_PREFIX_BACKWARD_CPP}
 BACKWARD_CXXFLAGS := -I$(BACKWARD_PATH)/include
 BACKWARD_LDFLAGS  := -lbfd
 
-CXXFLAGS := $(UTH_CXXFLAGS) $(PCAS_CXXFLAGS) $(LIBUNWIND_CXXFLAGS) $(BACKWARD_CXXFLAGS) -I. -std=c++17 -O3 -g -Wall $(CXXFLAGS) $(CFLAGS)
-LDFLAGS  := $(UTH_LDFLAGS) $(LIBUNWIND_LDFLAGS) $(BACKWARD_LDFLAGS) -lpthread -lm -ldl
+# TODO: remove it when boost dependency is removed
+BOOST_PATH     := ${KOCHI_INSTALL_PREFIX_BOOST}
+BOOST_CXXFLAGS := -I$(BOOST_PATH)/include
+BOOST_LDFLAGS  := -L$(BOOST_PATH)/lib -Wl,-R$(BOOST_PATH)/lib -lboost_container
+
+CXXFLAGS := $(UTH_CXXFLAGS) $(PCAS_CXXFLAGS) $(LIBUNWIND_CXXFLAGS) $(BACKWARD_CXXFLAGS) $(BOOST_CXXFLAGS) -I. -std=c++17 -O3 -g -Wall $(CXXFLAGS) $(CFLAGS)
+LDFLAGS  := $(UTH_LDFLAGS) $(LIBUNWIND_LDFLAGS) $(BACKWARD_LDFLAGS) $(BOOST_LDFLAGS) -lpthread -lm -ldl
 
 MPICXX := $(or ${MPICXX},mpicxx)
 

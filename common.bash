@@ -1,9 +1,10 @@
 #!/bin/bash
-[[ -z "$PS1" ]] && set -euo pipefail
+[[ -z "${PS1+x}" ]] && set -euo pipefail
 
 MPICXX=${MPICXX:-mpicxx}
+MPIEXEC=${MPIEXEC:-mpiexec}
 
-mpirun --version || true
+$MPIEXEC --version || true
 $MPICXX --version
 
 export MADM_RUN__=1
@@ -24,11 +25,11 @@ case $KOCHI_MACHINE in
       else
         OUTPUT_CMD=cat
       fi
-      mpirun -n $n_processes -N $n_processes_per_node \
+      $MPIEXEC -n $n_processes -N $n_processes_per_node \
         --mca plm_rsh_agent pjrsh \
         --hostfile $PJM_O_NODEINF \
         --mca osc_ucx_acc_single_intrinsic true \
-        setarch $(uname -m) --addr-no-randomize "${@:3}" | $OUTPUT_CMD
+        -- setarch $(uname -m) --addr-no-randomize "${@:3}" | $OUTPUT_CMD
     }
     ;;
   wisteria-o)
@@ -47,48 +48,49 @@ case $KOCHI_MACHINE in
           of_opt="-of-proc $STDOUT_FILE"
           trap "compgen -G ${STDOUT_FILE}.* && tail -n +1 \$(ls ${STDOUT_FILE}.* -v) | tee $STDOUT_FILE && rm ${STDOUT_FILE}.*" EXIT
         fi
-        mpirun $of_opt -n $n_processes \
-          --vcoordfile <(
-            np=0
-            if [[ -z ${PJM_NODE_Y+x} ]]; then
-              # 1D
-              for x in $(seq 1 $PJM_NODE_X); do
+        vcoordfile=$(mktemp)
+        trap "rm -f $vcoordfile" EXIT
+        np=0
+        if [[ -z ${PJM_NODE_Y+x} ]]; then
+          # 1D
+          for x in $(seq 1 $PJM_NODE_X); do
+            for i in $(seq 1 $n_processes_per_node); do
+              echo "($((x-1)))" >> $vcoordfile
+              if (( ++np >= n_processes )); then
+                break
+              fi
+            done
+          done
+        elif [[ -z ${PJM_NODE_Z+x} ]]; then
+          # 2D
+          for x in $(seq 1 $PJM_NODE_X); do
+            for y in $(seq 1 $PJM_NODE_Y); do
+              for i in $(seq 1 $n_processes_per_node); do
+                echo "($((x-1)),$((y-1)))" >> $vcoordfile
+                if (( ++np >= n_processes )); then
+                  break 2
+                fi
+              done
+            done
+          done
+        else
+          # 3D
+          for x in $(seq 1 $PJM_NODE_X); do
+            for y in $(seq 1 $PJM_NODE_Y); do
+              for z in $(seq 1 $PJM_NODE_Z); do
                 for i in $(seq 1 $n_processes_per_node); do
-                  echo "($((x-1)))"
+                  echo "($((x-1)),$((y-1)),$((z-1)))" >> $vcoordfile
                   if (( ++np >= n_processes )); then
-                    break
+                    break 3
                   fi
                 done
               done
-            elif [[ -z ${PJM_NODE_Z+x} ]]; then
-              # 2D
-              for x in $(seq 1 $PJM_NODE_X); do
-                for y in $(seq 1 $PJM_NODE_Y); do
-                  for i in $(seq 1 $n_processes_per_node); do
-                    echo "($((x-1)),$((y-1)))"
-                    if (( ++np >= n_processes )); then
-                      break 2
-                    fi
-                  done
-                done
-              done
-            else
-              # 3D
-              for x in $(seq 1 $PJM_NODE_X); do
-                for y in $(seq 1 $PJM_NODE_Y); do
-                  for z in $(seq 1 $PJM_NODE_Z); do
-                    for i in $(seq 1 $n_processes_per_node); do
-                      echo "($((x-1)),$((y-1)),$((z-1)))"
-                      if (( ++np >= n_processes )); then
-                        break 3
-                      fi
-                    done
-                  done
-                done
-              done
-            fi
-          ) \
-          setarch $(uname -m) --addr-no-randomize "${@:3}" | $tee_cmd
+            done
+          done
+        fi
+        $MPIEXEC $of_opt -n $n_processes \
+          --vcoordfile $vcoordfile \
+          -- setarch $(uname -m) --addr-no-randomize "${@:3}" | $tee_cmd
       )
     }
     ;;
@@ -96,8 +98,8 @@ case $KOCHI_MACHINE in
     ityr_mpirun() {
       local n_processes=$1
       local n_processes_per_node=$2
-      mpirun -n $n_processes -N $n_processes_per_node \
-        setarch $(uname -m) --addr-no-randomize "${@:3}"
+      $MPIEXEC -n $n_processes -N $n_processes_per_node \
+        -- setarch $(uname -m) --addr-no-randomize "${@:3}"
     }
     ;;
 esac
