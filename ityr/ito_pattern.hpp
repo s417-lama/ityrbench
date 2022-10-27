@@ -5,6 +5,8 @@
 
 #include "uth.h"
 
+#include "ityr/iro.hpp"
+
 #define ITYR_CONCAT(a, b) a##b
 
 #define ITYR_FORLOOP_0(op, arg) op(0, arg)
@@ -61,10 +63,58 @@
 
 namespace ityr {
 
+template <typename Iterator>
+using iterator_diff_t = typename std::iterator_traits<Iterator>::difference_type;
+
+template <typename P>
+class ito_pattern_if {
+  using impl = typename P::template ito_pattern_impl_t<P>;
+
+public:
+  template <typename Fn, typename... Args>
+  static auto root_spawn(Fn&& f, Args&&... args) {
+    return impl::root_spawn(std::forward<Fn>(f), std::forward<Args>(args)...);
+  }
+
+  template <typename... Args>
+  static auto parallel_invoke(Args&&... args) {
+    return impl::parallel_invoke(std::forward<Args>(args)...);
+  };
+
+  template <typename ForwardIterator, typename Fn>
+  static void parallel_for(ForwardIterator                  first,
+                           ForwardIterator                  last,
+                           Fn&&                             f,
+                           iterator_diff_t<ForwardIterator> cutoff = {1}) {
+    impl::parallel_for(first, last, std::forward<Fn>(f), cutoff);
+  }
+
+  template <typename ForwardIterator, typename T, typename ReduceOp>
+  static T parallel_reduce(ForwardIterator                  first,
+                           ForwardIterator                  last,
+                           T                                init,
+                           ReduceOp                         reduce,
+                           iterator_diff_t<ForwardIterator> cutoff = {1}) {
+    auto transform = [](typename ForwardIterator::value_type&& v) { return std::forward(v); };
+    return impl::parallel_reduce(first, last, init, reduce, transform, cutoff);
+  }
+
+  template <typename ForwardIterator, typename T, typename ReduceOp, typename TransformOp>
+  static T parallel_reduce(ForwardIterator                  first,
+                           ForwardIterator                  last,
+                           T                                init,
+                           ReduceOp                         reduce,
+                           TransformOp                      transform,
+                           iterator_diff_t<ForwardIterator> cutoff = {1}) {
+    return impl::parallel_reduce(first, last, init, reduce, transform, cutoff);
+  }
+};
+
 template <typename P>
 class ito_pattern_serial {
+  using iro = typename P::iro_t;
 
-  struct inner_state {
+  struct parallel_invoke_inner_state {
     template <typename RetVal, typename Fn, typename ArgsTuple, typename... Rest>
     auto parallel_invoke_impl(Fn&& f, ArgsTuple&& args, Rest... r) {
       if constexpr (std::is_void_v<RetVal>) {
@@ -80,19 +130,47 @@ class ito_pattern_serial {
   };
 
 public:
+  template <typename Fn, typename... Args>
+  static auto root_spawn(Fn&& f, Args&&... args) {
+    return f(std::forward<Args>(args)...);
+  }
+
   template <typename... Args>
   static auto parallel_invoke(Args&&... args) {
-    inner_state s;
+    parallel_invoke_inner_state s;
     return s.parallel_invoke(std::forward<Args>(args)...);
   }
 
+  template <typename ForwardIterator, typename Fn>
+  static void parallel_for(ForwardIterator                  first,
+                           ForwardIterator                  last,
+                           Fn&&                             f,
+                           iterator_diff_t<ForwardIterator> cutoff [[maybe_unused]]) {
+    for (ForwardIterator it = first; it != last; it++) {
+      std::forward<Fn>(f)(*it);
+    }
+  }
+
+  template <typename ForwardIterator, typename T, typename ReduceOp, typename TransformOp>
+  static T parallel_reduce(ForwardIterator                  first,
+                           ForwardIterator                  last,
+                           T                                init,
+                           ReduceOp                         reduce,
+                           TransformOp                      transform,
+                           iterator_diff_t<ForwardIterator> cutoff [[maybe_unused]]) {
+    T acc = init;
+    for (ForwardIterator it = first; it != last; it++) {
+      acc = reduce(acc, transform(*it));
+    }
+    return acc;
+  }
 };
 
 template <typename P>
 class ito_pattern_naive {
-  using iro = typename P::template iro_t<P>;
+  using iro = typename P::iro_t;
 
-  struct inner_state {
+  struct parallel_invoke_inner_state {
     template <typename RetVal, typename Fn, typename ArgsTuple>
     auto parallel_invoke_impl(Fn&& f, ArgsTuple&& args) {
       if constexpr (std::is_void_v<RetVal>) {
@@ -136,22 +214,102 @@ class ito_pattern_naive {
   };
 
 public:
+  template <typename Fn, typename... Args>
+  static auto root_spawn(Fn&& f, Args&&... args) {
+    using ret_t = std::invoke_result_t<Fn, Args...>;
+    iro::release();
+    madm::uth::thread<ret_t> th(std::forward<Fn>(f), std::forward<Args>(args)...);
+    if constexpr (std::is_void_v<ret_t>) {
+      th.join();
+      iro::acquire();
+    } else {
+      auto&& ret = th.join();
+      iro::acquire();
+      return ret;
+    }
+  }
+
   template <typename... Args>
   static auto parallel_invoke(Args&&... args) {
     iro::release();
-    inner_state s;
+    parallel_invoke_inner_state s;
     auto ret = s.parallel_invoke(std::forward<Args>(args)...);
     iro::acquire();
     return ret;
+  }
+
+  template <typename ForwardIterator, typename Fn>
+  static void parallel_for(ForwardIterator                  first,
+                           ForwardIterator                  last,
+                           Fn&&                             f,
+                           iterator_diff_t<ForwardIterator> cutoff) {
+    auto d = std::distance(first, last);
+    if (d <= cutoff) {
+      for (ForwardIterator it = first; it != last; it++) {
+        std::forward<Fn>(f)(*it);
+      }
+    } else {
+      auto mid = std::next(first, d / 2);
+
+      iro::release();
+      auto th = madm::uth::thread<void>{[=] {
+        iro::acquire();
+        parallel_for(first, mid, f, cutoff);
+        iro::release();
+      }};
+      iro::acquire();
+
+      parallel_for(mid, last, std::forward<Fn>(f), cutoff);
+
+      iro::release();
+      th.join();
+      iro::acquire();
+    }
+  }
+
+  template <typename ForwardIterator, typename T, typename ReduceOp, typename TransformOp>
+  static T parallel_reduce(ForwardIterator                  first,
+                           ForwardIterator                  last,
+                           T                                init,
+                           ReduceOp                         reduce,
+                           TransformOp                      transform,
+                           iterator_diff_t<ForwardIterator> cutoff) {
+    auto d = std::distance(first, last);
+    if (d <= cutoff) {
+      T acc = init;
+      for (ForwardIterator it = first; it != last; it++) {
+        acc = reduce(acc, transform(*it));
+      }
+      return acc;
+    } else {
+      auto mid = std::next(first, d / 2);
+
+      iro::release();
+      auto th = madm::uth::thread<T>{[=] {
+        iro::acquire();
+        T ret = parallel_for(first, mid, init, reduce, transform, cutoff);
+        iro::release();
+        return ret;
+      }};
+      iro::acquire();
+
+      T acc2 = parallel_for(mid, last, init, reduce, transform, cutoff);
+
+      iro::release();
+      T acc1 = th.join();
+      iro::acquire();
+
+      return reduce(acc1, acc2);
+    }
   }
 
 };
 
 template <typename P>
 class ito_pattern_workfirst {
-  using iro = typename P::template iro_t<P>;
+  using iro = typename P::iro_t;
 
-  struct inner_state {
+  struct parallel_invoke_inner_state {
     bool all_synched = true;
     bool blocked = false;
 
@@ -213,14 +371,127 @@ class ito_pattern_workfirst {
     ITYR_PARALLEL_INVOKE_DEF(8, parallel_invoke_impl)
   };
 
+  template <typename ForwardIterator, typename Fn>
+  static bool parallel_for_impl(ForwardIterator                  first,
+                                ForwardIterator                  last,
+                                Fn&&                             f,
+                                iterator_diff_t<ForwardIterator> cutoff) {
+    iro::poll();
+
+    auto d = std::distance(first, last);
+    if (d <= cutoff) {
+      for (ForwardIterator it = first; it != last; it++) {
+        std::forward<Fn>(f)(*it);
+      }
+      return true;
+    } else {
+      auto mid = std::next(first, d / 2);
+
+      auto th = madm::uth::thread<void>{};
+      bool synched = th.spawn_aux(
+        parallel_for_impl<ForwardIterator, Fn>,
+        std::make_tuple(first, mid, std::forward<Fn>(f), cutoff),
+        [=] (bool parent_popped) {
+          // on-die callback
+          if (!parent_popped) {
+            iro::release();
+          }
+        }
+      );
+      if (!synched) {
+        iro::acquire();
+      }
+
+      synched &= parallel_for_impl(mid, last, std::forward<Fn>(f), cutoff);
+
+      th.join_aux(0, [&] {
+        // on-block callback
+        iro::release();
+      });
+
+      return synched;
+    }
+  }
+
+  template <typename ForwardIterator, typename T, typename ReduceOp, typename TransformOp, bool TopLevel>
+  static std::conditional_t<TopLevel, std::tuple<T, bool>, T>
+  parallel_reduce_impl(ForwardIterator                  first,
+                       ForwardIterator                  last,
+                       T                                init,
+                       ReduceOp                         reduce,
+                       TransformOp                      transform,
+                       iterator_diff_t<ForwardIterator> cutoff) {
+    iro::poll();
+
+    auto d = std::distance(first, last);
+    if (d <= cutoff) {
+      T acc = init;
+      for (ForwardIterator *it = first; *it != last; it++) {
+        acc = reduce(acc, transform(*it));
+      }
+      if constexpr (TopLevel) {
+        return {acc, true};
+      } else {
+        return acc;
+      }
+    } else {
+      auto mid = std::next(first, d / 2);
+
+      auto th = madm::uth::thread<T>{};
+      bool synched = th.spawn_aux(
+        parallel_reduce_impl<ForwardIterator, T, ReduceOp, TransformOp, false>,
+        std::make_tuple(first, mid, init, reduce, transform, cutoff),
+        [=] (bool parent_popped) {
+          // on-die callback
+          if (!parent_popped) {
+            iro::release();
+          }
+        }
+      );
+      if (!synched) {
+        iro::acquire();
+      }
+
+      auto ret2 = parallel_reduce_impl<TopLevel>(mid, last, init, reduce, transform, cutoff);
+
+      auto acc1 = th.join_aux(0, [&] {
+        // on-block callback
+        iro::release();
+      });
+
+      if constexpr (TopLevel) {
+        auto [acc2, synched2] = ret2;
+        return {reduce(acc1, acc2), synched & synched2};
+      } else {
+        T acc2 = ret2;
+        return reduce(acc1, acc2);
+      }
+    }
+  }
+
 public:
+  template <typename Fn, typename... Args>
+  static auto root_spawn(Fn&& f, Args&&... args) {
+    using ret_t = std::invoke_result_t<Fn, Args...>;
+    iro::release();
+    madm::uth::thread<ret_t> th(std::forward<Fn>(f), std::forward<Args>(args)...);
+    if constexpr (std::is_void_v<ret_t>) {
+      th.join();
+      iro::acquire();
+    } else {
+      auto&& ret = th.join();
+      iro::acquire();
+      return ret;
+    }
+  }
+
   template <typename... Args>
   static auto parallel_invoke(Args&&... args) {
     iro::poll();
 
     auto initial_rank = P::rank();
     iro::release();
-    inner_state s;
+    parallel_invoke_inner_state s;
     auto ret = s.parallel_invoke(std::forward<Args>(args)...);
     if (initial_rank != P::rank() || !s.all_synched) {
       iro::acquire();
@@ -230,13 +501,49 @@ public:
     return ret;
   }
 
+  template <typename ForwardIterator, typename Fn>
+  static void parallel_for(ForwardIterator                  first,
+                           ForwardIterator                  last,
+                           Fn&&                             f,
+                           iterator_diff_t<ForwardIterator> cutoff) {
+    iro::poll();
+
+    iro::release();
+    bool synched = parallel_for_impl(first, last, std::forward<Fn>(f), cutoff);
+    if (!synched) {
+      iro::acquire();
+    }
+
+    iro::poll();
+  }
+
+  template <typename ForwardIterator, typename T, typename ReduceOp, typename TransformOp>
+  static T parallel_reduce(ForwardIterator                  first,
+                           ForwardIterator                  last,
+                           T                                init,
+                           ReduceOp                         reduce,
+                           TransformOp                      transform,
+                           iterator_diff_t<ForwardIterator> cutoff) {
+    iro::poll();
+
+    iro::release();
+    auto [ret, synched] = parallel_reduce_impl<true>(first, last, init, reduce, transform, cutoff);
+    if (!synched) {
+      iro::acquire();
+    }
+
+    iro::poll();
+
+    return ret;
+  }
+
 };
 
 template <typename P>
 class ito_pattern_workfirst_lazy {
-  using iro = typename P::template iro_t<P>;
+  using iro = typename P::iro_t;
 
-  struct inner_state {
+  struct parallel_invoke_inner_state {
     typename iro::release_handler rh;
     bool all_synched = true;
     bool blocked = false;
@@ -299,13 +606,128 @@ class ito_pattern_workfirst_lazy {
     ITYR_PARALLEL_INVOKE_DEF(8, parallel_invoke_impl)
   };
 
+  template <typename ForwardIterator, typename Fn>
+  static bool parallel_for_impl(ForwardIterator                  first,
+                                ForwardIterator                  last,
+                                Fn&&                             f,
+                                iterator_diff_t<ForwardIterator> cutoff,
+                                typename iro::release_handler    rh) {
+    iro::poll();
+
+    auto d = std::distance(first, last);
+    if (d <= cutoff) {
+      for (ForwardIterator *it = first; *it != last; it++) {
+        std::forward(f)(*it);
+      }
+      return true;
+    } else {
+      auto mid = std::next(first, d / 2);
+
+      auto th = madm::uth::thread<void>{};
+      bool synched = th.spawn_aux(
+        parallel_for_impl<ForwardIterator, Fn>,
+        std::make_tuple(first, mid, std::forward(f), cutoff, rh),
+        [=] (bool parent_popped) {
+          // on-die callback
+          if (!parent_popped) {
+            iro::release();
+          }
+        }
+      );
+      if (!synched) {
+        iro::acquire(rh);
+      }
+
+      synched &= parallel_for_impl(mid, last, std::forward(f), cutoff, rh);
+
+      th.join_aux(0, [&] {
+        // on-block callback
+        iro::release();
+      });
+
+      return synched;
+    }
+  }
+
+  template <typename ForwardIterator, typename T, typename ReduceOp, typename TransformOp, bool TopLevel>
+  static std::conditional_t<TopLevel, std::tuple<T, bool>, T>
+  parallel_reduce_impl(ForwardIterator                  first,
+                       ForwardIterator                  last,
+                       T                                init,
+                       ReduceOp                         reduce,
+                       TransformOp                      transform,
+                       iterator_diff_t<ForwardIterator> cutoff,
+                       typename iro::release_handler    rh) {
+    iro::poll();
+
+    auto d = std::distance(first, last);
+    if (d <= cutoff) {
+      T acc = init;
+      for (ForwardIterator *it = first; *it != last; it++) {
+        acc = reduce(acc, transform(*it));
+      }
+      if constexpr (TopLevel) {
+        return {acc, true};
+      } else {
+        return acc;
+      }
+    } else {
+      auto mid = std::next(first, d / 2);
+
+      auto th = madm::uth::thread<T>{};
+      bool synched = th.spawn_aux(
+        parallel_reduce_impl<ForwardIterator, T, ReduceOp, TransformOp, false>,
+        std::make_tuple(first, mid, init, reduce, transform, cutoff, rh),
+        [=] (bool parent_popped) {
+          // on-die callback
+          if (!parent_popped) {
+            iro::release();
+          }
+        }
+      );
+      if (!synched) {
+        iro::acquire(rh);
+      }
+
+      auto ret2 = parallel_reduce_impl<TopLevel>(mid, last, init, reduce, transform, cutoff);
+
+      auto acc1 = th.join_aux(0, [&] {
+        // on-block callback
+        iro::release();
+      });
+
+      if constexpr (TopLevel) {
+        auto [acc2, synched2] = ret2;
+        return {reduce(acc1, acc2), synched & synched2};
+      } else {
+        T acc2 = ret2;
+        return reduce(acc1, acc2);
+      }
+    }
+  }
+
 public:
+  template <typename Fn, typename... Args>
+  static auto root_spawn(Fn&& f, Args&&... args) {
+    using ret_t = std::invoke_result_t<Fn, Args...>;
+    iro::release();
+    madm::uth::thread<ret_t> th(std::forward<Fn>(f), std::forward<Args>(args)...);
+    if constexpr (std::is_void_v<ret_t>) {
+      th.join();
+      iro::acquire();
+    } else {
+      auto&& ret = th.join();
+      iro::acquire();
+      return ret;
+    }
+  }
+
   template <typename... Args>
   static auto parallel_invoke(Args&&... args) {
     iro::poll();
 
     auto initial_rank = P::rank();
-    inner_state s;
+    parallel_invoke_inner_state s;
     iro::release_lazy(&s.rh);
     auto ret = s.parallel_invoke(std::forward<Args>(args)...);
     if (initial_rank != P::rank() || !s.all_synched) {
@@ -316,6 +738,52 @@ public:
     return ret;
   }
 
+  template <typename ForwardIterator, typename Fn>
+  static void parallel_for(ForwardIterator                  first,
+                           ForwardIterator                  last,
+                           Fn&&                             f,
+                           iterator_diff_t<ForwardIterator> cutoff) {
+    iro::poll();
+
+    typename iro::release_handler rh;
+    iro::release_lazy(&rh);
+    bool synched = parallel_for_impl(first, last, std::forward<Fn>(f), cutoff, rh);
+    if (!synched) {
+      iro::acquire();
+    }
+
+    iro::poll();
+  }
+
+  template <typename ForwardIterator, typename T, typename ReduceOp, typename TransformOp>
+  static T parallel_reduce(ForwardIterator                  first,
+                           ForwardIterator                  last,
+                           T                                init,
+                           ReduceOp                         reduce,
+                           TransformOp                      transform,
+                           iterator_diff_t<ForwardIterator> cutoff) {
+    iro::poll();
+
+    typename iro::release_handler rh;
+    iro::release_lazy(&rh);
+    auto [ret, synched] = parallel_reduce_impl<true>(first, last, init, reduce, transform, cutoff, rh);
+    if (!synched) {
+      iro::acquire();
+    }
+
+    iro::poll();
+
+    return ret;
+  }
+
+};
+
+struct ito_pattern_policy_default {
+  template <typename P_>
+  using ito_pattern_impl_t = ito_pattern_serial<P_>;
+  using iro_t = iro_if<iro_policy_default>;
+  static uint64_t rank() { return 0; }
+  static uint64_t n_ranks() { return 1; }
 };
 
 }

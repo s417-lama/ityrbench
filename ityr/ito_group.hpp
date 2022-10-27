@@ -2,22 +2,39 @@
 
 #include "uth.h"
 
+#include "ityr/iro.hpp"
+
 namespace ityr {
+
+template <typename P, size_t MaxTasks, bool SpawnLastTask>
+class ito_group_if {
+  typename P::template ito_group_impl_t<P, MaxTasks, SpawnLastTask> impl_;
+
+public:
+  ito_group_if() : impl_() {}
+
+  template <typename Fn, typename... Args>
+  void run(Fn&& f, Args&&... args) { impl_.run(std::forward<Fn>(f), std::forward<Args>(args)...); }
+
+  void wait() { impl_.wait(); }
+};
 
 template <typename P, size_t MaxTasks, bool SpawnLastTask>
 class ito_group_serial {
 public:
   ito_group_serial() {}
 
-  template <typename F, typename... Args>
-  void run(F f, Args... args) { f(args...); }
+  template <typename Fn, typename... Args>
+  void run(Fn&& f, Args&&... args) {
+    std::forward<Fn>(f)(std::forward<Args>(args)...);
+  }
 
   void wait() {}
 };
 
 template <typename P, size_t MaxTasks, bool SpawnLastTask>
 class ito_group_naive {
-  using iro = typename P::template iro_t<P>;
+  using iro = typename P::iro_t;
 
   madm::uth::thread<void> tasks_[MaxTasks];
   size_t n_ = 0;
@@ -25,8 +42,8 @@ class ito_group_naive {
 public:
   ito_group_naive() {}
 
-  template <typename F, typename... Args>
-  void run(F f, Args... args) {
+  template <typename Fn, typename... Args>
+  void run(Fn&& f, Args&&... args) {
     assert(n_ < MaxTasks);
     if (SpawnLastTask || n_ < MaxTasks - 1) {
       iro::release();
@@ -37,7 +54,7 @@ public:
       }};
       iro::acquire();
     } else {
-      f(args...);
+      std::forward<Fn>(f)(std::forward<Args>(args)...);
     }
   }
 
@@ -53,7 +70,7 @@ public:
 
 template <typename P, size_t MaxTasks, bool SpawnLastTask>
 class ito_group_workfirst {
-  using iro = typename P::template iro_t<P>;
+  using iro = typename P::iro_t;
 
   madm::uth::thread<void> tasks_[MaxTasks];
   bool all_synched_ = true;
@@ -63,8 +80,8 @@ class ito_group_workfirst {
 public:
   ito_group_workfirst() { initial_rank = P::rank(); }
 
-  template <typename F, typename... Args>
-  void run(F f, Args... args) {
+  template <typename Fn, typename... Args>
+  void run(Fn&& f, Args&&... args) {
     iro::poll();
 
     assert(n_ < MaxTasks);
@@ -72,7 +89,8 @@ public:
       auto p_th = &tasks_[n_];
       iro::release();
       new (p_th) madm::uth::thread<void>{};
-      bool synched = p_th->spawn_aux(f, std::make_tuple(args...),
+      bool synched = p_th->spawn_aux(std::forward<Fn>(f),
+        std::make_tuple(std::forward<Args>(args)...),
         [=] (bool parent_popped) {
           // on-die callback
           if (!parent_popped) {
@@ -85,7 +103,7 @@ public:
       all_synched_ &= synched;
       n_++;
     } else {
-      f(args...);
+      std::forward<Fn>(f)(std::forward<Args>(args)...);
     }
 
     iro::poll();
@@ -115,7 +133,7 @@ public:
 
 template <typename P, size_t MaxTasks, bool SpawnLastTask>
 class ito_group_workfirst_lazy {
-  using iro = typename P::template iro_t<P>;
+  using iro = typename P::iro_t;
 
   madm::uth::thread<void> tasks_[MaxTasks];
   bool all_synched_ = true;
@@ -125,8 +143,8 @@ class ito_group_workfirst_lazy {
 public:
   ito_group_workfirst_lazy() { initial_rank = P::rank(); }
 
-  template <typename F, typename... Args>
-  void run(F f, Args... args) {
+  template <typename Fn, typename... Args>
+  void run(Fn&& f, Args&&... args) {
     iro::poll();
 
     assert(n_ < MaxTasks);
@@ -136,7 +154,8 @@ public:
 
       auto p_th = &tasks_[n_];
       new (p_th) madm::uth::thread<void>{};
-      bool synched = p_th->spawn_aux(f, std::make_tuple(args...),
+      bool synched = p_th->spawn_aux(std::forward<Fn>(f),
+        std::make_tuple(std::forward<Args>(args)...),
         [=] (bool parent_popped) {
           // on-die callback
           if (!parent_popped) {
@@ -149,7 +168,7 @@ public:
       all_synched_ &= synched;
       n_++;
     } else {
-      f(args...);
+      std::forward<Fn>(f)(std::forward<Args>(args)...);
     }
 
     iro::poll();
@@ -175,6 +194,14 @@ public:
 
     iro::poll();
   }
+};
+
+struct ito_group_policy_default {
+  template <typename P_, size_t MaxTasks, bool SpawnLastTask>
+  using ito_group_impl_t = ito_group_serial<P_, MaxTasks, SpawnLastTask>;
+  using iro_t = iro_if<iro_policy_default>;
+  static uint64_t rank() { return 0; }
+  static uint64_t n_ranks() { return 1; }
 };
 
 }

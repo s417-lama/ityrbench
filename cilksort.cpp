@@ -671,7 +671,7 @@ int real_main(int argc, char **argv) {
   if (my_rank == 0) {
     setlocale(LC_NUMERIC, "en_US.UTF-8");
     printf("=============================================================\n"
-           "[Cliksort]\n"
+           "[Cilksort]\n"
            "Element type:                  %s (%ld bytes)\n"
            "# of processes:                %d\n"
            "N (Input size):                %ld\n"
