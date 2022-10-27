@@ -225,9 +225,9 @@ dependencies:
       ./bootstrap.sh --prefix=$KOCHI_INSTALL_PREFIX
       if [[ $KOCHI_MACHINE == wisteria-o ]]; then
         echo "using clang : fcc : FCCpx ;" > user-config.jam
-        toolset=clang-fcc
+        CONFIGURE_OPTS="${CONFIGURE_OPTS:+$CONFIGURE_OPTS} --user-config=user-config.jam toolset=clang-fcc pch=off"
       fi
-      ./b2 --user-config=user-config.jam toolset=$toolset pch=off -j $(nproc) install
+      ./b2 ${CONFIGURE_OPTS:+$CONFIGURE_OPTS} -j $(nproc) install
 
   # experimental
   itoyori:
