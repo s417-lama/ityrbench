@@ -8,6 +8,7 @@
 #include "ityr/util.hpp"
 #include "ityr/wallclock.hpp"
 #include "ityr/iro.hpp"
+#include "ityr/iro_ref.hpp"
 #include "ityr/ito_group.hpp"
 #include "ityr/ito_pattern.hpp"
 #include "ityr/logger/logger.hpp"
@@ -22,6 +23,9 @@ class ityr_if {
   struct iro_policy : public iro_policy_default {
     template <typename P_>
     using iro_impl_t = typename P::template iro_t<P_>;
+    struct iro_ref_policy { using iro_t = iro_if<iro_policy>; };
+    template <typename GPtrT>
+    using global_ref = iro_ref<iro_ref_policy, GPtrT>;
     using wallclock_t = typename P::wallclock_t;
     template <typename P_>
     using logger_impl_t = typename P::template logger_impl_t<P_>;
@@ -85,6 +89,16 @@ public:
   template <typename... Args>
   static auto parallel_invoke(Args&&... args) {
     return ito_pattern::parallel_invoke(std::forward<Args>(args)...);
+  }
+
+  template <typename... Args>
+  static auto parallel_for(Args&&... args) {
+    return ito_pattern::parallel_for(std::forward<Args>(args)...);
+  }
+
+  template <typename... Args>
+  static auto parallel_reduce(Args&&... args) {
+    return ito_pattern::parallel_reduce(std::forward<Args>(args)...);
   }
 };
 

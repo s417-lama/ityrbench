@@ -139,15 +139,9 @@ public:
   constexpr T* begin() const noexcept { return nullptr; }
   constexpr T* end()   const noexcept { return nullptr; }
 
-  // FIXME: T& should be returned?
-  constexpr T operator[](size_t i) const {
+  constexpr typename ptr_t::reference operator[](size_t i) const {
     assert(i < n_);
-    /* auto p = my_ityr::iro::checkout<my_ityr::iro::access_mode::read>(ptr_ + i, 1); */
-    /* T ret = *p; */
-    /* my_ityr::iro::checkin(p, 1); */
-    std::remove_const_t<T> ret;
-    my_ityr::iro::get(ptr_ + i, &ret, 1);
-    return ret;
+    return ptr_[i];
   }
 
   constexpr this_t subspan(size_t offset, size_t count) const {
@@ -421,7 +415,7 @@ void cilkmerge(Span<const T> s1, Span<const T> s2, Span<T> dest) {
   {
     auto ev = my_ityr::logger::record<my_ityr::logger_kind::BinarySearch>();
     split1 = (s1.size() + 1) / 2;
-    split2 = binary_search(s2, s1[split1 - 1]);
+    split2 = binary_search(s2, T(s1[split1 - 1]));
   }
 
   auto [s11  , s12  ] = s1.divide(split1);

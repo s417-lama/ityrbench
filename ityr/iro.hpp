@@ -2,6 +2,7 @@
 
 #include "pcas/pcas.hpp"
 
+#include "ityr/iro_ref.hpp"
 #include "ityr/wallclock.hpp"
 #include "ityr/logger/impl_dummy.hpp"
 
@@ -109,6 +110,8 @@ public:
 
 template <typename P>
 struct my_pcas_policy : public pcas::policy_default {
+  template <typename GPtrT>
+  using global_ref = typename P::template global_ref<GPtrT>;
   using wallclock_t = typename P::wallclock_t;
   template <typename P_>
   using logger_impl_t = typename P::template logger_impl_t<P_>;
@@ -139,7 +142,7 @@ class iro_pcas_default : public pcas::pcas_if<my_pcas_policy<P>> {
 
 public:
   template <typename T>
-  using global_ptr = pcas::global_ptr<T>;
+  using global_ptr = typename base_t::template global_ptr<T>;
   using access_mode = pcas::access_mode;
   using release_handler = pcas::release_handler;
 

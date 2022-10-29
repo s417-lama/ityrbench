@@ -132,7 +132,7 @@ class ito_pattern_serial {
 public:
   template <typename Fn, typename... Args>
   static auto root_spawn(Fn&& f, Args&&... args) {
-    return f(std::forward<Args>(args)...);
+    return std::forward<Fn>(f)(std::forward<Args>(args)...);
   }
 
   template <typename... Args>
