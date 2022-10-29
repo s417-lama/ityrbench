@@ -26,7 +26,7 @@ case $KOCHI_MACHINE in
         OUTPUT_CMD=cat
       fi
       $MPIEXEC -n $n_processes -N $n_processes_per_node \
-        --mca plm_rsh_agent pjrsh \
+        --mca prte_ssh_agent pjrsh \
         --hostfile $PJM_O_NODEINF \
         --mca osc_ucx_acc_single_intrinsic true \
         -- setarch $(uname -m) --addr-no-randomize "${@:3}" | $OUTPUT_CMD

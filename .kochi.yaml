@@ -46,29 +46,33 @@ machines:
         exit 1
       fi
       echo "$KOCHI_WORKER_LAUNCH_CMD" | pjsub -j -o /dev/null -L rscunit=ito-a,rscgrp=$rscgrp,vnode=$KOCHI_ALLOC_NODE_SPEC,vnode-core=36,elapse=${KOCHI_ALLOC_TIME_LIMIT:-6:00:00}
-    load_env_script:
-      - module load python/3.6.2
-      - . ~/venv/ito-a/bin/activate
-      - module load gcc/10.2.0
-      - export MPICC=mpicc
-      - export MPICXX=mpicxx
-      - module load cmake/3.18.2
+    load_env_script: |
+      module load python/3.6.2
+      . ~/venv/ito-a/bin/activate
+      export PATH=$HOME/opt/gcc/11.2.0/bin:$PATH
+      export LD_LIBRARY_PATH=$HOME/opt/gcc/11.2.0/lib64:$LD_LIBRARY_PATH
+      export MPICC=mpicc
+      export MPICXX=mpicxx
+      module load cmake/3.18.2
 
 dependencies:
   ucx:
     recipes:
       - name: v1.11.0
-        before_script: UCX_VERSION=1.11.0
-      - name: v1.12.1
-        before_script: UCX_VERSION=1.12.1
+        before_script: UCX_VERSION=1.11.0 CONFIGURE_OPTS="--disable-logging --disable-debug --disable-assertions --disable-params-check"
+      - name: v1.13.1
+        before_script: UCX_VERSION=1.13.1 CONFIGURE_OPTS="--disable-logging --disable-debug --disable-assertions --disable-params-check"
+      - name: v1.11.0-debug
+        before_script: UCX_VERSION=1.11.0 CONFIGURE_OPTS="--enable-debug --enable-debug-data" CFLAGS="${CFLAGS:+$CFLAGS} -O0"
+      - name: v1.13.1-debug
+        before_script: UCX_VERSION=1.13.1 CONFIGURE_OPTS="--enable-debug --enable-debug-data" CFLAGS="${CFLAGS:+$CFLAGS} -O0"
     script:
       - unset MPICC
       - unset MPICXX
       - wget https://github.com/openucx/ucx/releases/download/v${UCX_VERSION}/ucx-${UCX_VERSION}.tar.gz
       - tar xvf ucx-${UCX_VERSION}.tar.gz
       - cd ucx-${UCX_VERSION}/
-      - ./contrib/configure-release --prefix=$KOCHI_INSTALL_PREFIX
-      # - ./contrib/configure-devel --prefix=$KOCHI_INSTALL_PREFIX
+      - ./configure ${CFLAGS:+CFLAGS="$CFLAGS"} --prefix=$KOCHI_INSTALL_PREFIX ${CONFIGURE_OPTS:+$CONFIGURE_OPTS}
       - make -j
       - make install
 
@@ -80,17 +84,29 @@ dependencies:
     recipes:
       - name:   v5.0.0rc7
         branch: v5.0.0rc7
-      - name:   v5.0.x
-        branch: v5.0.x
+      - name:   v5.0.0rc9
+        branch: v5.0.0rc9
         depends:
           - name: ucx
-            recipe: v1.12.1
+            recipe: v1.13.1
+      - name:   v5.0.0rc7-debug
+        branch: v5.0.0rc7
+        before_script: CONFIGURE_OPTS="--enable-debug" CFLAGS="${CFLAGS:+$CFLAGS} -O0"
+        depends:
+          - name: ucx
+            recipe: v1.11.0-debug
+      - name:   v5.0.0rc9-debug
+        branch: v5.0.0rc9
+        before_script: CONFIGURE_OPTS="--enable-debug" CFLAGS="${CFLAGS:+$CFLAGS} -O0"
+        depends:
+          - name: ucx
+            recipe: v1.13.1-debug
     script:
       - ./autogen.pl
       - mkdir build
       - cd build/
       - CFLAGS="${CFLAGS:+$CFLAGS} -g"
-      - ../configure CFLAGS="$CFLAGS" --prefix=$KOCHI_INSTALL_PREFIX --with-ucx=$KOCHI_INSTALL_PREFIX_UCX --disable-man-pages --with-pmix=internal --with-hwloc=internal --with-libevent=internal --without-hcoll
+      - ../configure ${CFLAGS:+CFLAGS="$CFLAGS"} --prefix=$KOCHI_INSTALL_PREFIX --with-ucx=$KOCHI_INSTALL_PREFIX_UCX --disable-man-pages --with-pmix=internal --with-hwloc=internal --with-libevent=internal --without-hcoll ${CONFIGURE_OPTS:+$CONFIGURE_OPTS}
       - make -j
       - make install
     activate_script:
@@ -102,7 +118,10 @@ dependencies:
     depends:
       - name: openmpi
         recipe: v5.0.0rc7
-        machines: [ito-a, local]
+        machines: [local]
+      - name: openmpi
+        recipe: v5.0.0rc9
+        machines: [ito-a]
     recipes:
       - name: release
         branch: ityr
@@ -133,7 +152,10 @@ dependencies:
     depends:
       - name: openmpi
         recipe: v5.0.0rc7
-        machines: [ito-a, local]
+        machines: [local]
+      - name: openmpi
+        recipe: v5.0.0rc9
+        machines: [ito-a]
     recipes:
       - name: release
         branch: master
@@ -237,7 +259,10 @@ dependencies:
     depends:
       - name: openmpi
         recipe: v5.0.0rc7
-        machines: [ito-a, local]
+        machines: [local]
+      - name: openmpi
+        recipe: v5.0.0rc9
+        machines: [ito-a]
     recipes:
       - name: develop
     script:
