@@ -413,7 +413,7 @@ class ito_pattern_workfirst {
     }
   }
 
-  template <typename ForwardIterator, typename T, typename ReduceOp, typename TransformOp, bool TopLevel>
+  template <bool TopLevel, typename ForwardIterator, typename T, typename ReduceOp, typename TransformOp>
   static std::conditional_t<TopLevel, std::tuple<T, bool>, T>
   parallel_reduce_impl(ForwardIterator                  first,
                        ForwardIterator                  last,
@@ -426,7 +426,7 @@ class ito_pattern_workfirst {
     auto d = std::distance(first, last);
     if (d <= cutoff) {
       T acc = init;
-      for (ForwardIterator *it = first; *it != last; it++) {
+      for (ForwardIterator it = first; it != last; it++) {
         acc = reduce(acc, transform(*it));
       }
       if constexpr (TopLevel) {
@@ -439,7 +439,7 @@ class ito_pattern_workfirst {
 
       auto th = madm::uth::thread<T>{};
       bool synched = th.spawn_aux(
-        parallel_reduce_impl<ForwardIterator, T, ReduceOp, TransformOp, false>,
+        parallel_reduce_impl<false, ForwardIterator, T, ReduceOp, TransformOp>,
         std::make_tuple(first, mid, init, reduce, transform, cutoff),
         [=] (bool parent_popped) {
           // on-die callback
@@ -616,7 +616,7 @@ class ito_pattern_workfirst_lazy {
 
     auto d = std::distance(first, last);
     if (d <= cutoff) {
-      for (ForwardIterator *it = first; *it != last; it++) {
+      for (ForwardIterator it = first; it != last; it++) {
         std::forward(f)(*it);
       }
       return true;
@@ -649,7 +649,7 @@ class ito_pattern_workfirst_lazy {
     }
   }
 
-  template <typename ForwardIterator, typename T, typename ReduceOp, typename TransformOp, bool TopLevel>
+  template <bool TopLevel, typename ForwardIterator, typename T, typename ReduceOp, typename TransformOp>
   static std::conditional_t<TopLevel, std::tuple<T, bool>, T>
   parallel_reduce_impl(ForwardIterator                  first,
                        ForwardIterator                  last,
@@ -663,7 +663,7 @@ class ito_pattern_workfirst_lazy {
     auto d = std::distance(first, last);
     if (d <= cutoff) {
       T acc = init;
-      for (ForwardIterator *it = first; *it != last; it++) {
+      for (ForwardIterator it = first; it != last; it++) {
         acc = reduce(acc, transform(*it));
       }
       if constexpr (TopLevel) {
@@ -676,7 +676,7 @@ class ito_pattern_workfirst_lazy {
 
       auto th = madm::uth::thread<T>{};
       bool synched = th.spawn_aux(
-        parallel_reduce_impl<ForwardIterator, T, ReduceOp, TransformOp, false>,
+        parallel_reduce_impl<false, ForwardIterator, T, ReduceOp, TransformOp>,
         std::make_tuple(first, mid, init, reduce, transform, cutoff, rh),
         [=] (bool parent_popped) {
           // on-die callback
@@ -689,7 +689,7 @@ class ito_pattern_workfirst_lazy {
         iro::acquire(rh);
       }
 
-      auto ret2 = parallel_reduce_impl<TopLevel>(mid, last, init, reduce, transform, cutoff);
+      auto ret2 = parallel_reduce_impl<TopLevel>(mid, last, init, reduce, transform, cutoff, rh);
 
       auto acc1 = th.join_aux(0, [&] {
         // on-block callback

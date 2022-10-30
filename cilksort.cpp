@@ -81,7 +81,7 @@ public:
   template <typename F>
   void for_each(F f) const {
     for (size_t i = 0; i < n_; i++) {
-      f(const_cast<const T>(ptr_[i]));
+      f(const_cast<const T&>(ptr_[i]));
     }
   }
 
@@ -135,11 +135,10 @@ public:
   constexpr ptr_t data() const noexcept { return ptr_; }
   constexpr size_t size() const noexcept { return n_; }
 
-  // FIXME
-  constexpr T* begin() const noexcept { return nullptr; }
-  constexpr T* end()   const noexcept { return nullptr; }
+  constexpr ptr_t begin() const noexcept { return ptr_; }
+  constexpr ptr_t end()   const noexcept { return ptr_ + n_; }
 
-  constexpr typename ptr_t::reference operator[](size_t i) const {
+  constexpr auto operator[](size_t i) const {
     assert(i < n_);
     return ptr_[i];
   }
@@ -163,7 +162,7 @@ public:
       size_t b = std::min(n_ - i, BlockSize / sizeof(T));
       auto p = my_ityr::iro::checkout<my_ityr::iro::access_mode::read>(ptr_ + i, b);
       for (size_t j = 0; j < b; j++) {
-        f(const_cast<const T>(p[j]));
+        f(const_cast<const T&>(p[j]));
       }
       my_ityr::iro::checkin(p, b);
     }
@@ -185,28 +184,7 @@ public:
   Acc reduce(Acc         init,
              ReduceOp    reduce_op,
              TransformOp transform_op) const {
-    if (n_ * sizeof(T) <= BlockSize) {
-      Acc acc = init;
-      auto p = my_ityr::iro::checkout<my_ityr::iro::access_mode::read>(ptr_, n_);
-      for (size_t j = 0; j < n_; j++) {
-        acc = reduce_op(acc, transform_op(p[j]));
-      }
-      my_ityr::iro::checkin(p, n_);
-      return acc;
-    } else {
-      /* auto [s1, s2] = divide_two(); */
-      auto sdiv = divide_two();
-      auto s1 = sdiv.first;
-      auto s2 = sdiv.second;
-      /* auto acc1 = s1.reduce(init, reduce_op, transform_op); */
-      /* auto acc2 = s2.reduce(init, reduce_op, transform_op); */
-      auto [acc1, acc2] =
-        my_ityr::parallel_invoke(
-          [=]() { return s1.reduce(init, reduce_op, transform_op); },
-          [=]() { return s2.reduce(init, reduce_op, transform_op); }
-        );
-      return reduce_op(acc1, acc2);
-    }
+    return my_ityr::parallel_reduce(ptr_, ptr_ + n_, init, reduce_op, transform_op, BlockSize);
   }
 
   void willread() const {

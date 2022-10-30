@@ -27,14 +27,17 @@ LDFLAGS  := $(UTH_LDFLAGS) $(LIBUNWIND_LDFLAGS) $(BACKWARD_LDFLAGS) $(BOOST_LDFL
 MPICXX := $(or ${MPICXX},mpicxx)
 
 SRCS := $(wildcard ./*.cpp)
-HEADERS := $(wildcard **/*.hpp)
+HEADERS := $(wildcard ./ityr/**/*.hpp)
 
-MAIN_TARGETS := $(patsubst %.cpp,%.out,$(SRCS))
+MAIN_TARGETS := $(patsubst %.cpp,%.out,$(SRCS)) uts.out
 
-all: $(MAIN_TARGETS) $(LIB_TARGETS)
+all: $(MAIN_TARGETS)
 
 %.out: %.cpp $(HEADERS)
 	$(MPICXX) $(CXXFLAGS) -o $@ $< $(LDFLAGS)
 
+uts.out: uts/uts.c uts/rng/brg_sha1.c uts/main.cc $(HEADERS)
+	$(CXX) $(CXXFLAGS) -DBRG_RNG=1 -o $@ $^ $(LDFLAGS)
+
 clean:
-	rm -rf $(MAIN_TARGETS) $(LIB_TARGETS)
+	rm -rf $(MAIN_TARGETS)
