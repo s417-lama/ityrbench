@@ -66,6 +66,25 @@ namespace ityr {
 template <typename Iterator>
 using iterator_diff_t = typename std::iterator_traits<Iterator>::difference_type;
 
+template <typename P, typename P::iro_t::access_mode Mode,
+          typename ForwardIterator, typename Fn>
+inline void for_each_serial(ForwardIterator first,
+                            ForwardIterator last,
+                            Fn              f) {
+  if constexpr (pcas::is_global_ptr_v<ForwardIterator>) {
+    auto d = std::distance(first, last);
+    auto first_ = P::iro_t::template checkout<Mode>(first, d);
+    for (auto p = first_; p < first_ + d; p++) {
+      f(*p);
+    }
+    P::iro_t::checkin(first_, d);
+  } else {
+    for (ForwardIterator it = first; it != last; it++) {
+      f(*it);
+    }
+  }
+}
+
 template <typename P>
 class ito_pattern_if {
   using impl = typename P::template ito_pattern_impl_t<P>;
@@ -84,9 +103,9 @@ public:
   template <typename ForwardIterator, typename Fn>
   static void parallel_for(ForwardIterator                  first,
                            ForwardIterator                  last,
-                           Fn&&                             f,
+                           Fn                               f,
                            iterator_diff_t<ForwardIterator> cutoff = {1}) {
-    impl::parallel_for(first, last, std::forward<Fn>(f), cutoff);
+    impl::parallel_for(first, last, f, cutoff);
   }
 
   template <typename ForwardIterator, typename T, typename ReduceOp>
@@ -144,11 +163,9 @@ public:
   template <typename ForwardIterator, typename Fn>
   static void parallel_for(ForwardIterator                  first,
                            ForwardIterator                  last,
-                           Fn&&                             f,
+                           Fn                               f,
                            iterator_diff_t<ForwardIterator> cutoff [[maybe_unused]]) {
-    for (ForwardIterator it = first; it != last; it++) {
-      std::forward<Fn>(f)(*it);
-    }
+    for_each_serial<P, iro::access_mode::read_write>(first, last, f);
   }
 
   template <typename ForwardIterator, typename T, typename ReduceOp, typename TransformOp>
@@ -159,9 +176,9 @@ public:
                            TransformOp                      transform,
                            iterator_diff_t<ForwardIterator> cutoff [[maybe_unused]]) {
     T acc = init;
-    for (ForwardIterator it = first; it != last; it++) {
-      acc = reduce(acc, transform(*it));
-    }
+    for_each_serial<P, iro::access_mode::read>(first, last, [&](auto&& v) {
+      acc = reduce(acc, transform(std::forward<decltype(v)>(v)));
+    });
     return acc;
   }
 };
@@ -241,13 +258,11 @@ public:
   template <typename ForwardIterator, typename Fn>
   static void parallel_for(ForwardIterator                  first,
                            ForwardIterator                  last,
-                           Fn&&                             f,
+                           Fn                               f,
                            iterator_diff_t<ForwardIterator> cutoff) {
     auto d = std::distance(first, last);
     if (d <= cutoff) {
-      for (ForwardIterator it = first; it != last; it++) {
-        std::forward<Fn>(f)(*it);
-      }
+      for_each_serial<P, iro::access_mode::read_write>(first, last, f);
     } else {
       auto mid = std::next(first, d / 2);
 
@@ -277,9 +292,9 @@ public:
     auto d = std::distance(first, last);
     if (d <= cutoff) {
       T acc = init;
-      for (ForwardIterator it = first; it != last; it++) {
-        acc = reduce(acc, transform(*it));
-      }
+      for_each_serial<P, iro::access_mode::read>(first, last, [&](auto&& v) {
+        acc = reduce(acc, transform(std::forward<decltype(v)>(v)));
+      });
       return acc;
     } else {
       auto mid = std::next(first, d / 2);
@@ -374,15 +389,13 @@ class ito_pattern_workfirst {
   template <typename ForwardIterator, typename Fn>
   static bool parallel_for_impl(ForwardIterator                  first,
                                 ForwardIterator                  last,
-                                Fn&&                             f,
+                                Fn                               f,
                                 iterator_diff_t<ForwardIterator> cutoff) {
     iro::poll();
 
     auto d = std::distance(first, last);
     if (d <= cutoff) {
-      for (ForwardIterator it = first; it != last; it++) {
-        std::forward<Fn>(f)(*it);
-      }
+      for_each_serial<P, iro::access_mode::read_write>(first, last, f);
       return true;
     } else {
       auto mid = std::next(first, d / 2);
@@ -426,9 +439,9 @@ class ito_pattern_workfirst {
     auto d = std::distance(first, last);
     if (d <= cutoff) {
       T acc = init;
-      for (ForwardIterator it = first; it != last; it++) {
-        acc = reduce(acc, transform(*it));
-      }
+      for_each_serial<P, iro::access_mode::read>(first, last, [&](auto&& v) {
+        acc = reduce(acc, transform(std::forward<decltype(v)>(v)));
+      });
       if constexpr (TopLevel) {
         return {acc, true};
       } else {
@@ -504,7 +517,7 @@ public:
   template <typename ForwardIterator, typename Fn>
   static void parallel_for(ForwardIterator                  first,
                            ForwardIterator                  last,
-                           Fn&&                             f,
+                           Fn                               f,
                            iterator_diff_t<ForwardIterator> cutoff) {
     iro::poll();
 
@@ -609,16 +622,14 @@ class ito_pattern_workfirst_lazy {
   template <typename ForwardIterator, typename Fn>
   static bool parallel_for_impl(ForwardIterator                  first,
                                 ForwardIterator                  last,
-                                Fn&&                             f,
+                                Fn                               f,
                                 iterator_diff_t<ForwardIterator> cutoff,
                                 typename iro::release_handler    rh) {
     iro::poll();
 
     auto d = std::distance(first, last);
     if (d <= cutoff) {
-      for (ForwardIterator it = first; it != last; it++) {
-        std::forward(f)(*it);
-      }
+      for_each_serial<P, iro::access_mode::read_write>(first, last, f);
       return true;
     } else {
       auto mid = std::next(first, d / 2);
@@ -663,9 +674,9 @@ class ito_pattern_workfirst_lazy {
     auto d = std::distance(first, last);
     if (d <= cutoff) {
       T acc = init;
-      for (ForwardIterator it = first; it != last; it++) {
-        acc = reduce(acc, transform(*it));
-      }
+      for_each_serial<P, iro::access_mode::read>(first, last, [&](auto&& v) {
+        acc = reduce(acc, transform(std::forward<decltype(v)>(v)));
+      });
       if constexpr (TopLevel) {
         return {acc, true};
       } else {
@@ -741,7 +752,7 @@ public:
   template <typename ForwardIterator, typename Fn>
   static void parallel_for(ForwardIterator                  first,
                            ForwardIterator                  last,
-                           Fn&&                             f,
+                           Fn                               f,
                            iterator_diff_t<ForwardIterator> cutoff) {
     iro::poll();
 
