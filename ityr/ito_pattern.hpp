@@ -637,7 +637,7 @@ class ito_pattern_workfirst_lazy {
       auto th = madm::uth::thread<void>{};
       bool synched = th.spawn_aux(
         parallel_for_impl<ForwardIterator, Fn>,
-        std::make_tuple(first, mid, std::forward(f), cutoff, rh),
+        std::make_tuple(first, mid, f, cutoff, rh),
         [=] (bool parent_popped) {
           // on-die callback
           if (!parent_popped) {
@@ -649,7 +649,7 @@ class ito_pattern_workfirst_lazy {
         iro::acquire(rh);
       }
 
-      synched &= parallel_for_impl(mid, last, std::forward(f), cutoff, rh);
+      synched &= parallel_for_impl(mid, last, f, cutoff, rh);
 
       th.join_aux(0, [&] {
         // on-block callback

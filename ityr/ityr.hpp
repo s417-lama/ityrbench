@@ -7,6 +7,7 @@
 
 #include "ityr/util.hpp"
 #include "ityr/wallclock.hpp"
+#include "ityr/iterator.hpp"
 #include "ityr/iro.hpp"
 #include "ityr/iro_ref.hpp"
 #include "ityr/ito_group.hpp"
