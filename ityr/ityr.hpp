@@ -101,6 +101,11 @@ public:
   static auto parallel_reduce(Args&&... args) {
     return ito_pattern::parallel_reduce(std::forward<Args>(args)...);
   }
+
+  template <typename... Args>
+  static auto parallel_transform(Args&&... args) {
+    return ito_pattern::parallel_transform(std::forward<Args>(args)...);
+  }
 };
 
 // Serial
