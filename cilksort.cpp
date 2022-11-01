@@ -10,6 +10,10 @@
 
 #include "ityr/ityr.hpp"
 
+#ifndef ITYR_BENCH_USE_SEQ_STL
+#define ITYR_BENCH_USE_SEQ_STL 0
+#endif
+
 enum class kind_value {
   Init = 0,
   Quicksort,
@@ -260,6 +264,7 @@ size_t cutoff_insert = 64;
 size_t cutoff_merge  = 16 * 1024;
 size_t cutoff_quick  = 16 * 1024;
 
+#if !ITYR_BENCH_USE_SEQ_STL
 template <template<typename> typename Span, typename T>
 static inline T select_pivot(Span<const T> s) {
   // median of three values
@@ -296,9 +301,13 @@ std::pair<Span<T>, Span<T>> partition_seq(Span<T> s, T pivot) {
   }
   return s.divide(h + 1);
 }
+#endif
 
 template <template<typename> typename Span, typename T>
 void quicksort_seq(Span<T> s) {
+#if ITYR_BENCH_USE_SEQ_STL
+  std::sort(s.begin(), s.end());
+#else
   if (s.size() <= cutoff_insert) {
     insertion_sort(s);
   } else {
@@ -307,12 +316,16 @@ void quicksort_seq(Span<T> s) {
     quicksort_seq(s1);
     quicksort_seq(s2);
   }
+#endif
 }
 
 template <template<typename> typename Span, typename T>
 void merge_seq(Span<const T> s1, Span<const T> s2, Span<T> dest) {
   assert(s1.size() + s2.size() == dest.size());
 
+#if ITYR_BENCH_USE_SEQ_STL
+  std::merge(s1.begin(), s1.end(), s2.begin(), s2.end(), dest.begin());
+#else
   size_t d = 0;
   size_t l1 = 0;
   size_t l2 = 0;
@@ -340,10 +353,15 @@ void merge_seq(Span<const T> s1, Span<const T> s2, Span<T> dest) {
     Span src_r  = s1.subspan(l1, s1.size() - l1);
     copy(dest_r, src_r);
   }
+#endif
 }
 
 template <template<typename> typename Span, typename T>
 size_t binary_search(Span<const T> s, const T& v) {
+#if ITYR_BENCH_USE_SEQ_STL
+  auto it = std::lower_bound(s.begin(), s.end(), v);
+  return it - s.begin();
+#else
   size_t l = 0;
   size_t h = s.size();
   while (l < h) {
@@ -352,6 +370,7 @@ size_t binary_search(Span<const T> s, const T& v) {
     else           l = m + 1;
   }
   return h;
+#endif
 }
 
 template <template<typename> typename Span, typename T>
