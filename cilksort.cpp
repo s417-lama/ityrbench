@@ -8,6 +8,8 @@
 
 #include <mpi.h>
 
+#include "pcg_random.hpp"
+
 #include "ityr/ityr.hpp"
 
 #ifndef ITYR_BENCH_USE_SEQ_STL
@@ -117,12 +119,6 @@ public:
 };
 
 template <typename T>
-inline void copy(raw_span<T> dest, raw_span<const T> src) {
-  assert(dest.size() == src.size());
-  std::memcpy(dest.data(), src.data(), sizeof(T) * dest.size());
-}
-
-template <typename T>
 class gptr_span {
   using this_t = gptr_span<T>;
   using ptr_t = my_ityr::iro::global_ptr<T>;
@@ -205,22 +201,6 @@ public:
     my_ityr::iro::checkin(&s[0], s.size());
   }
 };
-
-template <typename T, uint64_t BlockSize = 65536>
-inline void copy(gptr_span<T> dest, gptr_span<const T> src) {
-  assert(dest.size() == src.size());
-  for (size_t i = 0; i < dest.size(); i += BlockSize / sizeof(T)) {
-    size_t b = std::min(dest.size() - i, BlockSize / sizeof(T));
-    auto d = dest.subspan(i, b);
-    auto s = src.subspan(i, b);
-
-    auto d_ = d.template checkout<my_ityr::iro::access_mode::write>();
-    auto s_ = s.template checkout<my_ityr::iro::access_mode::read>();
-    std::memcpy(d_.data(), s_.data(), sizeof(T) * b);
-    d.checkin(d_);
-    s.checkin(s_);
-  }
-}
 
 enum class exec_t {
   Serial = 0,
@@ -347,11 +327,11 @@ void merge_seq(Span<const T> s1, Span<const T> s2, Span<T> dest) {
   if (l1 >= s1.size()) {
     Span dest_r = dest.subspan(d, s2.size() - l2);
     Span src_r  = s2.subspan(l2, s2.size() - l2);
-    copy(dest_r, src_r);
+    std::copy(src_r.begin(), src_r.end(), dest_r.begin());
   } else {
     Span dest_r = dest.subspan(d, s1.size() - l1);
     Span src_r  = s1.subspan(l1, s1.size() - l1);
-    copy(dest_r, src_r);
+    std::copy(src_r.begin(), src_r.end(), dest_r.begin());
   }
 #endif
 }
@@ -382,8 +362,10 @@ void cilkmerge(Span<const T> s1, Span<const T> s2, Span<T> dest) {
     std::swap(s1, s2);
   }
   if (s2.size() == 0) {
+    // FIXME: trace for each leaf task
     auto ev = my_ityr::logger::record<my_ityr::logger_kind::Copy>();
-    copy(dest, s1);
+    my_ityr::parallel_transform(s1.begin(), s1.end(), dest.begin(),
+                                [](const auto& e) { return e; }, my_ityr::iro::block_size / sizeof(T));
     return;
   }
 
@@ -470,51 +452,36 @@ void cilksort(Span<T> a, Span<T> b) {
 }
 
 template <typename T, typename Rng>
-std::enable_if_t<std::is_integral_v<T>>
-set_random_elem(T& e, Rng& r) {
+std::enable_if_t<std::is_integral_v<T>, T>
+gen_random_elem(Rng& r) {
   static std::uniform_int_distribution<T> dist(0, std::numeric_limits<T>::max());
-  e = dist(r);
+  return dist(r);
 }
 
 template <typename T, typename Rng>
-std::enable_if_t<std::is_floating_point_v<T>>
-set_random_elem(T& e, Rng& r) {
+std::enable_if_t<std::is_floating_point_v<T>, T>
+gen_random_elem(Rng& r) {
   static std::uniform_real_distribution<T> dist(0, 1.0);
-  e = dist(r);
-}
-
-template <template<typename> typename Span, typename T, typename Rng>
-void init_array_aux(Span<T> s, Rng r) {
-  if (s.size() <= cutoff_quick) {
-    s.map([&](T& e) {
-      set_random_elem(e, r);
-    });
-  } else {
-    auto [s1, s2] = s.divide_two();
-    my_ityr::ito_group<2> tg;
-    tg.run(init_array_aux<Span, T, Rng>, s1, r);
-    r.discard(s1.size());
-    tg.run(init_array_aux<Span, T, Rng>, s2, r);
-    tg.wait();
-  }
+  return dist(r);
 }
 
 template <template<typename> typename Span, typename T>
 void init_array(Span<T> s) {
   static int counter = 0;
-  std::mt19937 r(counter++);
+  auto seed = counter++;
 
-  if (exec_type == exec_t::Parallel) {
-    my_ityr::root_spawn([=] { init_array_aux(s, r); });
-  } else {
-    s.map([&](T& e) {
-      set_random_elem(e, r);
-    });
-  }
+  my_ityr::root_spawn([=] {
+    my_ityr::parallel_transform(ityr::count_iterator<std::size_t>(0),
+                                ityr::count_iterator<std::size_t>(s.size()),
+                                s.begin(),
+                                [=](std::size_t i) {
+      pcg32 rng(seed, i);
+      return gen_random_elem<T>(rng);
+    }, my_ityr::iro::block_size / sizeof(T));
+  });
 
-  /* s.for_each([&](T& e) { */
-  /*   std::cout << e << std::endl; */
-  /* }); */
+  /* std::copy(s.begin(), s.end(), std::ostream_iterator<T>(std::cout, ",")); */
+  /* std::cout << std::endl; */
 }
 
 template <template<typename> typename Span, typename T>
@@ -540,7 +507,10 @@ template <template<typename> typename Span, typename T>
 void run(Span<T> a, Span<T> b) {
   for (int r = 0; r < n_repeats; r++) {
     if (my_rank == 0) {
+      uint64_t t0 = my_ityr::wallclock::get_time();
       init_array(a);
+      uint64_t t1 = my_ityr::wallclock::get_time();
+      printf("Array initialized. (%ld ns)\n", t1 - t0);
     }
 
     my_ityr::barrier();
@@ -587,6 +557,7 @@ void run(Span<T> a, Span<T> b) {
       if (verify_result) {
         // FIXME: special treatment for root task
         uint64_t t0 = my_ityr::wallclock::get_time();
+        /* bool success = std::is_sorted(a.begin(), a.end()); */
         bool success = my_ityr::root_spawn([=]() {
           return check_sorted(Span<const T>(a));
         });

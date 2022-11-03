@@ -9,6 +9,8 @@ depends:
     recipe: v1.6
   - name: jemalloc
     recipe: v5.3.0
+  - name: pcg
+    recipe: master
   - name: boost
     recipe: v1.80.0
 
@@ -37,6 +39,7 @@ default_params:
   shared_mem: 1
   logger: dummy # dummy/trace/stats
   allocator: jemalloc # sys/jemalloc
+  debugger: 0
 
 default_name: cilksort
 default_queue: node_${nodes}
@@ -147,7 +150,7 @@ build:
     MPICXX=$MPICXX CFLAGS=$CFLAGS make cilksort.out
 
 run:
-  depend_params: [nodes, cores, n_input, repeats, verify, cutoff_i, cutoff_m, cutoff_q, exec_type, cache_size, max_dirty, shared_mem, logger, allocator]
+  depend_params: [nodes, cores, n_input, repeats, verify, cutoff_i, cutoff_m, cutoff_q, exec_type, cache_size, max_dirty, shared_mem, logger, allocator, debugger]
   script: |
     source common.bash
 
@@ -162,29 +165,31 @@ run:
       export LD_PRELOAD=${KOCHI_INSTALL_PREFIX_JEMALLOC}/lib/libjemalloc.so${LD_PRELOAD:+:$LD_PRELOAD}
     fi
 
-    ityr_mpirun $((n_nodes * KOCHI_PARAM_CORES)) $KOCHI_PARAM_CORES ./cilksort.out \
-      -n $KOCHI_PARAM_N_INPUT \
-      -r $KOCHI_PARAM_REPEATS \
-      -e $KOCHI_PARAM_EXEC_TYPE \
-      -c $KOCHI_PARAM_CACHE_SIZE \
-      -v $KOCHI_PARAM_VERIFY \
-      -i $KOCHI_PARAM_CUTOFF_I \
-      -m $KOCHI_PARAM_CUTOFF_M \
-      -q $KOCHI_PARAM_CUTOFF_Q
-
-    # if [[ -z "${PS1+x}" ]]; then
-    #   echo "Use kochi interact."
-    #   exit 1
-    # fi
-    # MPIEXEC=mpitx ityr_mpirun $((n_nodes * KOCHI_PARAM_CORES)) $KOCHI_PARAM_CORES lldb -- ./cilksort.out \
-    #   -n $KOCHI_PARAM_N_INPUT \
-    #   -r $KOCHI_PARAM_REPEATS \
-    #   -e $KOCHI_PARAM_EXEC_TYPE \
-    #   -c $KOCHI_PARAM_CACHE_SIZE \
-    #   -v $KOCHI_PARAM_VERIFY \
-    #   -i $KOCHI_PARAM_CUTOFF_I \
-    #   -m $KOCHI_PARAM_CUTOFF_M \
-    #   -q $KOCHI_PARAM_CUTOFF_Q
+    if [[ $KOCHI_PARAM_DEBUGGER == 0 ]]; then
+      ityr_mpirun $((n_nodes * KOCHI_PARAM_CORES)) $KOCHI_PARAM_CORES ./cilksort.out \
+        -n $KOCHI_PARAM_N_INPUT \
+        -r $KOCHI_PARAM_REPEATS \
+        -e $KOCHI_PARAM_EXEC_TYPE \
+        -c $KOCHI_PARAM_CACHE_SIZE \
+        -v $KOCHI_PARAM_VERIFY \
+        -i $KOCHI_PARAM_CUTOFF_I \
+        -m $KOCHI_PARAM_CUTOFF_M \
+        -q $KOCHI_PARAM_CUTOFF_Q
+    else
+      if [[ -z "${PS1+x}" ]]; then
+        echo "Use kochi interact."
+        exit 1
+      fi
+      MPIEXEC=mpitx ityr_mpirun $((n_nodes * KOCHI_PARAM_CORES)) $KOCHI_PARAM_CORES gdb --args ./cilksort.out \
+        -n $KOCHI_PARAM_N_INPUT \
+        -r $KOCHI_PARAM_REPEATS \
+        -e $KOCHI_PARAM_EXEC_TYPE \
+        -c $KOCHI_PARAM_CACHE_SIZE \
+        -v $KOCHI_PARAM_VERIFY \
+        -i $KOCHI_PARAM_CUTOFF_I \
+        -m $KOCHI_PARAM_CUTOFF_M \
+        -q $KOCHI_PARAM_CUTOFF_Q
+    fi
 
     # jeprof_wrap() {
     #   # FILEPATH=jeprof.${PMIX_RANK}.out

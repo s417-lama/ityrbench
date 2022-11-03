@@ -30,8 +30,8 @@ public:
   this_t& operator++() { ++val_; return *this; }
   this_t& operator--() { --val_; return *this; }
 
-  this_t operator++(int) { this_t tmp(*this); val_++; return tmp;}
-  this_t operator--(int) { this_t tmp(*this); val_--; return tmp;}
+  this_t operator++(int) { this_t tmp(*this); val_++; return tmp; }
+  this_t operator--(int) { this_t tmp(*this); val_--; return tmp; }
 
   this_t operator+(difference_type diff) const { return val_ + diff; }
   this_t operator-(difference_type diff) const { return val_ - diff; }

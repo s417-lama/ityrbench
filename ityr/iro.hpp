@@ -28,6 +28,8 @@ public:
   using access_mode = typename impl_t::access_mode;
   using release_handler = typename impl_t::release_handler;
 
+  static constexpr uint64_t block_size = impl_t::block_size;
+
   static void init(size_t cache_size) {
     assert(!get_optional_instance().has_value());
     get_optional_instance().emplace(cache_size);

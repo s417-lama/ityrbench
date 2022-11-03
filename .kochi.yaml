@@ -25,6 +25,7 @@ machines:
         export fcc_ENV="-Nclang -Knolargepage"
         export FCC_ENV="-Nclang -Knolargepage"
         module load cmake/3.22.2
+        export PYTHONPATH="/usr/share/gcc-8/python:${PYTHONPATH:+$PYTHONPATH}" # workaround for gdb bug (module 'libstdcxx' not found)
 
   ito-a:
     login_host: ito
@@ -250,6 +251,14 @@ dependencies:
         CONFIGURE_OPTS="${CONFIGURE_OPTS:+$CONFIGURE_OPTS} --user-config=user-config.jam toolset=clang-fcc pch=off"
       fi
       ./b2 ${CONFIGURE_OPTS:+$CONFIGURE_OPTS} -j $(nproc) install
+
+  pcg:
+    git: https://github.com/imneme/pcg-cpp.git
+    recipes:
+      - name: master
+        branch: master
+    script:
+      - cp -r include/ $KOCHI_INSTALL_PREFIX/
 
   # experimental
   itoyori:
