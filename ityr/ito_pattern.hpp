@@ -193,7 +193,10 @@ public:
     return impl::parallel_transform(first, last, result, unary_op, cutoff);
   }
 
-  template <typename ForwardIterator1, typename ForwardIterator2, typename ForwardIteratorR, class BinaryOp>
+  // SFINAE for ambiguity in the default cutoff parameter above.
+  // The 'cutoff' parameter of the above function can match the 'binary_op' parameter here.
+  template <typename ForwardIterator1, typename ForwardIterator2, typename ForwardIteratorR, class BinaryOp,
+            std::enable_if_t<not std::is_convertible_v<BinaryOp, iterator_diff_t<ForwardIterator1>>, std::nullptr_t> = nullptr>
   static ForwardIteratorR parallel_transform(ForwardIterator1                  first1,
                                              ForwardIterator1                  last1,
                                              ForwardIterator2                  first2,
@@ -210,7 +213,7 @@ class ito_pattern_serial {
 
   struct parallel_invoke_inner_state {
     template <typename RetVal, typename Fn, typename ArgsTuple, typename... Rest>
-    auto parallel_invoke_impl(Fn&& f, ArgsTuple&& args, Rest... r) {
+    auto parallel_invoke_impl(Fn&& f, ArgsTuple&& args, Rest&&... r) {
       if constexpr (std::is_void_v<RetVal>) {
         std::apply(f, args);
         return std::tuple_cat(std::make_tuple(empty{}), parallel_invoke(std::forward<Rest>(r)...));
@@ -309,7 +312,7 @@ class ito_pattern_naive {
     };
 
     template <typename RetVal, typename Fn, typename ArgsTuple, typename... Rest>
-    auto parallel_invoke_impl(Fn&& f, ArgsTuple&& args, Rest... r) {
+    auto parallel_invoke_impl(Fn&& f, ArgsTuple&& args, Rest&&... r) {
       if constexpr (std::is_void_v<RetVal>) {
         madm::uth::thread<void> th{[=] {
           iro::acquire();
@@ -340,7 +343,9 @@ public:
   static auto root_spawn(Fn&& f, Args&&... args) {
     using ret_t = std::invoke_result_t<Fn, Args...>;
     iro::release();
-    madm::uth::thread<ret_t> th(std::forward<Fn>(f), std::forward<Args>(args)...);
+    auto th = madm::uth::thread<ret_t>{};
+    th.spawn_aux(std::forward<Fn>(f), std::make_tuple(std::forward<Args>(args)...),
+                 [](bool) { iro::release(); });
     if constexpr (std::is_void_v<ret_t>) {
       th.join();
       iro::acquire();
@@ -407,13 +412,13 @@ public:
       iro::release();
       auto th = madm::uth::thread<T>{[=] {
         iro::acquire();
-        T ret = parallel_for(first, mid, init, reduce, transform, cutoff);
+        T ret = parallel_reduce(first, mid, init, reduce, transform, cutoff);
         iro::release();
         return ret;
       }};
       iro::acquire();
 
-      T acc2 = parallel_for(mid, last, init, reduce, transform, cutoff);
+      T acc2 = parallel_reduce(mid, last, init, reduce, transform, cutoff);
 
       iro::release();
       T acc1 = th.join();
@@ -514,7 +519,7 @@ class ito_pattern_workfirst {
     };
 
     template <typename RetVal, typename Fn, typename ArgsTuple, typename... Rest>
-    auto parallel_invoke_impl(Fn&& f, ArgsTuple&& args, Rest... r) {
+    auto parallel_invoke_impl(Fn&& f, ArgsTuple&& args, Rest&&... r) {
       iro::poll();
 
       auto th = madm::uth::thread<RetVal>{};
@@ -752,7 +757,9 @@ public:
   static auto root_spawn(Fn&& f, Args&&... args) {
     using ret_t = std::invoke_result_t<Fn, Args...>;
     iro::release();
-    madm::uth::thread<ret_t> th(std::forward<Fn>(f), std::forward<Args>(args)...);
+    auto th = madm::uth::thread<ret_t>{};
+    th.spawn_aux(std::forward<Fn>(f), std::make_tuple(std::forward<Args>(args)...),
+                 [](bool) { iro::release(); });
     if constexpr (std::is_void_v<ret_t>) {
       th.join();
       iro::acquire();
@@ -880,7 +887,7 @@ class ito_pattern_workfirst_lazy {
     };
 
     template <typename RetVal, typename Fn, typename ArgsTuple, typename... Rest>
-    auto parallel_invoke_impl(Fn&& f, ArgsTuple&& args, Rest... r) {
+    auto parallel_invoke_impl(Fn&& f, ArgsTuple&& args, Rest&&... r) {
       iro::poll();
 
       auto th = madm::uth::thread<RetVal>{};
@@ -1122,7 +1129,9 @@ public:
   static auto root_spawn(Fn&& f, Args&&... args) {
     using ret_t = std::invoke_result_t<Fn, Args...>;
     iro::release();
-    madm::uth::thread<ret_t> th(std::forward<Fn>(f), std::forward<Args>(args)...);
+    auto th = madm::uth::thread<ret_t>{};
+    th.spawn_aux(std::forward<Fn>(f), std::make_tuple(std::forward<Args>(args)...),
+                 [](bool) { iro::release(); });
     if constexpr (std::is_void_v<ret_t>) {
       th.join();
       iro::acquire();
