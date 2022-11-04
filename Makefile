@@ -43,5 +43,8 @@ all: $(MAIN_TARGETS)
 uts.out: uts/uts.c uts/rng/brg_sha1.c uts/main.cc $(HEADERS)
 	$(MPICXX) $(CXXFLAGS) -DBRG_RNG=1 -o $@ uts/uts.c uts/rng/brg_sha1.c uts/main.cc $(LDFLAGS)
 
+uts++.out: uts/uts.c uts/rng/brg_sha1.c uts/main++.cc $(HEADERS)
+	$(MPICXX) $(CXXFLAGS) -DBRG_RNG=1 -o $@ uts/uts.c uts/rng/brg_sha1.c uts/main++.cc $(LDFLAGS)
+
 clean:
 	rm -rf $(MAIN_TARGETS)

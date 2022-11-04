@@ -92,9 +92,9 @@ public:
     return ito_pattern::parallel_invoke(std::forward<Args>(args)...);
   }
 
-  template <typename... Args>
+  template <typename iro::access_mode Mode, typename... Args>
   static auto parallel_for(Args&&... args) {
-    return ito_pattern::parallel_for(std::forward<Args>(args)...);
+    return ito_pattern::template parallel_for<Mode>(std::forward<Args>(args)...);
   }
 
   template <typename... Args>

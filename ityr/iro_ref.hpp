@@ -27,7 +27,7 @@ public:
   iro_ref(const this_t&) = default;
   iro_ref(this_t&&) = default;
 
-  operator value_t() {
+  operator value_t() const {
     std::remove_const_t<value_t> ret;
     iro::get(ptr_, &ret, 1);
     return ret;

@@ -66,6 +66,11 @@ public:
   }
 
   template <typename T>
+  static global_ptr<T> malloc_local(uint64_t nelems) {
+    return get_instance().template malloc_local<T>(nelems);
+  }
+
+  template <typename T>
   static void free(global_ptr<T> ptr) {
     get_instance().free(ptr);
   }
@@ -286,6 +291,8 @@ public:
 
   template <typename T>
   global_ptr<T> malloc(uint64_t nelems) { return (T*)std::malloc(nelems * sizeof(T)); }
+  template <typename T>
+  global_ptr<T> malloc_local(uint64_t nelems) { return malloc<T>(nelems); }
   template <typename T>
   void free(global_ptr<T> ptr) { std::free(ptr); }
 
