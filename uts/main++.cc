@@ -95,10 +95,13 @@ struct dynamic_node {
   global_ptr<dynamic_node> children[1];
 };
 
+std::size_t node_size(int n_children) {
+  return sizeof(dynamic_node) + (n_children - 1) * sizeof(global_ptr<dynamic_node>);
+}
+
 global_ptr<dynamic_node> new_dynamic_node(int n_children) {
-  std::size_t size = sizeof(dynamic_node) + (n_children - 1) * sizeof(global_ptr<dynamic_node>);
   auto gptr = static_cast<global_ptr<dynamic_node>>(
-      my_ityr::iro::malloc_local<std::byte>(size));
+      my_ityr::iro::malloc_local<std::byte>(node_size(n_children)));
   gptr->*(&dynamic_node::n_children) = n_children;
   return gptr;
 }
@@ -159,42 +162,66 @@ void destroy_tree(global_ptr<dynamic_node> this_node) {
         });
   }
 
-  my_ityr::iro::free(this_node);
+  my_ityr::iro::free(static_cast<global_ptr<std::byte>>(this_node),
+                     node_size(numChildren));
 }
 
 //-- main ---------------------------------------------------------------------
 
-Result uts_run(uint64_t *walltime) {
-  Result r;
+void uts_run() {
   int my_rank = my_ityr::rank();
 
-  if (my_rank == 0) {
-    Node root;
-    uts_initRoot(&root, type);
+  for (int i = 0; i < numRepeats; i++) {
+    global_ptr<dynamic_node> root_node;
 
-    global_ptr<dynamic_node> root_node = my_ityr::root_spawn([=]() { return build_tree(root); });
+    if (my_rank == 0) {
+      uint64_t t1 = uts_wctime();
+      Node root;
+      uts_initRoot(&root, type);
+      root_node = my_ityr::root_spawn([=]() { return build_tree(root); });
+      uint64_t t2 = uts_wctime();
 
-    uint64_t t1 = uts_wctime();
+      printf("## Tree built. (%ld ns)\n", t2 - t1);
+      fflush(stdout);
+    }
 
-    r = my_ityr::root_spawn([=]() { return traverse_tree(0, root_node); });
+    my_ityr::barrier();
 
-    uint64_t t2 = uts_wctime();
-    *walltime = t2 - t1;
+    if (my_rank == 0) {
+      uint64_t t1 = uts_wctime();
+      Result r = my_ityr::root_spawn([=]() { return traverse_tree(0, root_node); });
+      uint64_t t2 = uts_wctime();
+      uint64_t walltime = t2 - t1;
 
-    my_ityr::root_spawn([=]() { return destroy_tree(root_node); });
+      counter_t maxTreeDepth = r.maxdepth;
+      counter_t nNodes = r.size;
+      counter_t nLeaves = r.leaves;
+
+      double perf = (double)nNodes / walltime;
+
+      printf("[%d] %ld ns %.6g Gnodes/s ( nodes: %llu depth: %llu leaves: %llu )\n",
+             i, walltime, perf, nNodes, maxTreeDepth, nLeaves);
+      fflush(stdout);
+    }
+
+    my_ityr::barrier();
+
+    if (my_rank == 0) {
+      uint64_t t1 = uts_wctime();
+      my_ityr::root_spawn([=]() { return destroy_tree(root_node); });
+      uint64_t t2 = uts_wctime();
+
+      printf("## Tree destroyed. (%ld ns)\n", t2 - t1);
+      fflush(stdout);
+    }
+
+    my_ityr::barrier();
+    my_ityr::iro::collect_deallocated();
+    my_ityr::barrier();
   }
-
-  my_ityr::barrier();
-
-  return r;
 }
 
 void real_main(int argc, char *argv[]) {
-  counter_t nNodes = 0;
-  counter_t nLeaves = 0;
-  counter_t maxTreeDepth = 0;
-  uint64_t  walltime = 0;
-
   uts_parseParams(argc, argv);
 
   int my_rank = my_ityr::rank();
@@ -238,21 +265,7 @@ void real_main(int argc, char *argv[]) {
 
   my_ityr::iro::init(cache_size * 1024 * 1024);
 
-  for (int i = 0; i < numRepeats; i++) {
-    Result r = uts_run(&walltime);
-
-    if (my_rank == 0) {
-      maxTreeDepth = r.maxdepth;
-      nNodes = r.size;
-      nLeaves = r.leaves;
-
-      double perf = (double)nNodes / walltime;
-
-      printf("[%d] %ld ns %.6g Gnodes/s ( nodes: %llu depth: %llu leaves: %llu )\n",
-             i, walltime, perf, nNodes, maxTreeDepth, nLeaves);
-      fflush(stdout);
-    }
-  }
+  uts_run();
 
   my_ityr::iro::fini();
 }

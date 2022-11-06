@@ -60,6 +60,10 @@ public:
     get_instance().poll();
   }
 
+  static void collect_deallocated() {
+    get_instance().collect_deallocated();
+  }
+
   template <typename T>
   static global_ptr<T> malloc(uint64_t nelems) {
     return get_instance().template malloc<T>(nelems);
@@ -71,8 +75,8 @@ public:
   }
 
   template <typename T>
-  static void free(global_ptr<T> ptr) {
-    get_instance().free(ptr);
+  static void free(global_ptr<T> ptr, uint64_t nelems = 0) {
+    get_instance().free(ptr, nelems);
   }
 
   template <typename ConstT, typename T>
@@ -187,6 +191,7 @@ public:
   void acquire() {}
   void acquire(release_handler) {}
   void poll() {}
+  void collect_deallocated() {}
   template <typename T>
   void willread(global_ptr<T>, uint64_t) {}
 
@@ -288,13 +293,14 @@ public:
   void acquire() {}
   void acquire(release_handler) {}
   void poll() {}
+  void collect_deallocated() {}
 
   template <typename T>
   global_ptr<T> malloc(uint64_t nelems) { return (T*)std::malloc(nelems * sizeof(T)); }
   template <typename T>
   global_ptr<T> malloc_local(uint64_t nelems) { return malloc<T>(nelems); }
   template <typename T>
-  void free(global_ptr<T> ptr) { std::free(ptr); }
+  void free(global_ptr<T> ptr, uint64_t nelmes [[maybe_unused]]) { std::free(ptr); }
 
   template <typename ConstT, typename T>
   std::enable_if_t<std::is_same_v<std::remove_const_t<ConstT>, T>>

@@ -83,6 +83,8 @@ run:
       export LD_PRELOAD=${KOCHI_INSTALL_PREFIX_JEMALLOC}/lib/libjemalloc.so${LD_PRELOAD:+:$LD_PRELOAD}
     fi
 
+    export OMPI_MCA_common_tofu_num_mrq_entries=2097152
+
     if [[ $KOCHI_PARAM_DEBUGGER == 0 ]]; then
       ityr_mpirun $((n_nodes * KOCHI_PARAM_CORES)) $KOCHI_PARAM_CORES ./uts++.out \
         ${!KOCHI_PARAM_TREE} \
