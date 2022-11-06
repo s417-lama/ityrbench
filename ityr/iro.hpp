@@ -96,9 +96,9 @@ public:
     return get_instance().template checkout<Mode>(ptr, nelems);
   }
 
-  template <typename T>
+  template <access_mode Mode, typename T>
   static void checkin(T* raw_ptr, uint64_t nelems) {
-    get_instance().checkin(raw_ptr, nelems);
+    get_instance().template checkin<Mode>(raw_ptr, nelems);
   }
 
   static void logger_clear() {
@@ -216,12 +216,12 @@ public:
     return ret;
   }
 
-  template <typename T>
+  template <access_mode Mode, typename T>
   void checkin(const T* raw_ptr, uint64_t) {
     std::free(const_cast<T*>(raw_ptr));
   }
 
-  template <typename T>
+  template <access_mode Mode, typename T>
   void checkin(T* raw_ptr, uint64_t nelems) {
     uint64_t size = nelems * sizeof(T);
     global_ptr<uint8_t> ptr = *((global_ptr<uint8_t>*)((uint8_t*)raw_ptr + size));
@@ -259,12 +259,12 @@ public:
     return ret;
   }
 
-  template <typename T>
+  template <access_mode Mode, typename T>
   void checkin(const T* raw_ptr, uint64_t) {
     std::free(const_cast<T*>(raw_ptr));
   }
 
-  template <typename T>
+  template <access_mode Mode, typename T>
   void checkin(T* raw_ptr, uint64_t nelems) {
     uint64_t size = nelems * sizeof(T);
     global_ptr<uint8_t> ptr = *((global_ptr<uint8_t>*)((uint8_t*)raw_ptr + size));
@@ -310,7 +310,7 @@ public:
   void willread(global_ptr<T> ptr, uint64_t nelems) {}
   template <access_mode Mode, typename T>
   auto checkout(global_ptr<T> ptr, uint64_t nelems) { return ptr; }
-  template <typename T>
+  template <access_mode Mode, typename T>
   void checkin(T* raw_ptr, uint64_t nelems) {}
 
   void logger_clear() {}

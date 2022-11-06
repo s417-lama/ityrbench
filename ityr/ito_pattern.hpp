@@ -82,7 +82,7 @@ inline void for_each_serial(ForwardIterator                  first,
       auto d = std::distance(first, last);
       auto first_ = P::iro_t::template checkout<Mode>(first, d);
       for_each_serial<P, Mode>(first_, first_ + d, f, cutoff);
-      P::iro_t::checkin(first_, d);
+      P::iro_t::template checkin<Mode>(first_, d);
       return;
     }
   }
@@ -104,14 +104,14 @@ inline void for_each_serial(ForwardIterator1                  first1,
       auto d = std::distance(first1, last1);
       auto first1_ = P::iro_t::template checkout<Mode1>(first1, d);
       for_each_serial<P, Mode1, Mode2>(first1_, first1_ + d, first2, f, cutoff);
-      P::iro_t::checkin(first1_, d);
+      P::iro_t::template checkin<Mode1>(first1_, d);
       return;
 
     } else if constexpr (pcas::is_global_ptr_v<ForwardIterator2>) {
       auto d = std::distance(first1, last1);
       auto first2_ = P::iro_t::template checkout<Mode2>(first2, d);
       for_each_serial<P, Mode1, Mode2>(first1, last1, first2_, f, cutoff);
-      P::iro_t::checkin(first2_, d);
+      P::iro_t::template checkin<Mode2>(first2_, d);
       return;
     }
   }
@@ -134,21 +134,21 @@ inline void for_each_serial(ForwardIterator1                  first1,
       auto d = std::distance(first1, last1);
       auto first1_ = P::iro_t::template checkout<Mode1>(first1, d);
       for_each_serial<P, Mode1, Mode2, Mode3>(first1_, first1_ + d, first2, first3, f, cutoff);
-      P::iro_t::checkin(first1_, d);
+      P::iro_t::template checkin<Mode1>(first1_, d);
       return;
 
     } else if constexpr (pcas::is_global_ptr_v<ForwardIterator2>) {
       auto d = std::distance(first1, last1);
       auto first2_ = P::iro_t::template checkout<Mode2>(first2, d);
       for_each_serial<P, Mode1, Mode2, Mode3>(first1, last1, first2_, first3, f, cutoff);
-      P::iro_t::checkin(first2_, d);
+      P::iro_t::template checkin<Mode2>(first2_, d);
       return;
 
     } else if constexpr (pcas::is_global_ptr_v<ForwardIterator3>) {
       auto d = std::distance(first1, last1);
       auto first3_ = P::iro_t::template checkout<Mode3>(first3, d);
       for_each_serial<P, Mode1, Mode2, Mode3>(first1, last1, first2, first3_, f, cutoff);
-      P::iro_t::checkin(first3_, d);
+      P::iro_t::template checkin<Mode3>(first3_, d);
       return;
     }
   }

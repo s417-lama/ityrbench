@@ -18,7 +18,7 @@ class iro_ref : public pcas::global_ref_base<GPtrT> {
   void with_read_write(Fn&& f) {
     value_t* vp = iro::template checkout<iro::access_mode::read_write>(ptr_, 1);
     std::forward<Fn>(f)(*vp);
-    iro::checkin(vp, 1);
+    iro::template checkin<iro::access_mode::read_write>(vp, 1);
   }
 
 public:

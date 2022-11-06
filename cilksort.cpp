@@ -110,13 +110,28 @@ public:
   }
 
   void willread() const {}
-
-  template <my_ityr::iro::access_mode Mode>
-  raw_span<std::conditional_t<Mode == my_ityr::iro::access_mode::read, const T, T>>
-  checkout() const { return {ptr_, n_}; }
-
-  void checkin(raw_span<T> s) const {}
 };
+
+template <my_ityr::iro::access_mode Mode,
+          typename T, typename Fn>
+void with_checkout(raw_span<T> s, Fn f) {
+  f(s);
+}
+
+template <my_ityr::iro::access_mode Mode1,
+          my_ityr::iro::access_mode Mode2,
+          typename T1, typename T2, typename Fn>
+void with_checkout(raw_span<T1> s1, raw_span<T2> s2, Fn f) {
+  f(s1, s2);
+}
+
+template <my_ityr::iro::access_mode Mode1,
+          my_ityr::iro::access_mode Mode2,
+          my_ityr::iro::access_mode Mode3,
+          typename T1, typename T2, typename T3, typename Fn>
+void with_checkout(raw_span<T1> s1, raw_span<T2> s2, raw_span<T3> s3, Fn f) {
+  f(s1, s2, s3);
+}
 
 template <typename T>
 class gptr_span {
@@ -190,17 +205,40 @@ public:
   void willread() const {
     my_ityr::iro::willread(ptr_, n_);
   }
-
-  template <my_ityr::iro::access_mode Mode>
-  auto checkout() const {
-    auto p = my_ityr::iro::checkout<Mode>(ptr_, n_);
-    return raw_span{p, n_};
-  }
-
-  void checkin(raw_span<T> s) const {
-    my_ityr::iro::checkin(&s[0], s.size());
-  }
 };
+
+template <my_ityr::iro::access_mode Mode,
+          typename T, typename Fn>
+void with_checkout(gptr_span<T> s, Fn f) {
+  auto p = my_ityr::iro::checkout<Mode>(s.data(), s.size());
+  f(raw_span<T>{p, s.size()});
+  my_ityr::iro::checkin<Mode>(p, s.size());
+}
+
+template <my_ityr::iro::access_mode Mode1,
+          my_ityr::iro::access_mode Mode2,
+          typename T1, typename T2, typename Fn>
+void with_checkout(gptr_span<T1> s1, gptr_span<T2> s2, Fn f) {
+  auto p1 = my_ityr::iro::checkout<Mode1>(s1.data(), s1.size());
+  auto p2 = my_ityr::iro::checkout<Mode2>(s2.data(), s2.size());
+  f(raw_span<T1>{p1, s1.size()}, raw_span<T2>{p2, s2.size()});
+  my_ityr::iro::checkin<Mode1>(p1, s1.size());
+  my_ityr::iro::checkin<Mode2>(p2, s2.size());
+}
+
+template <my_ityr::iro::access_mode Mode1,
+          my_ityr::iro::access_mode Mode2,
+          my_ityr::iro::access_mode Mode3,
+          typename T1, typename T2, typename T3, typename Fn>
+void with_checkout(gptr_span<T1> s1, gptr_span<T2> s2, gptr_span<T3> s3, Fn f) {
+  auto p1 = my_ityr::iro::checkout<Mode1>(s1.data(), s1.size());
+  auto p2 = my_ityr::iro::checkout<Mode2>(s2.data(), s2.size());
+  auto p3 = my_ityr::iro::checkout<Mode3>(s3.data(), s3.size());
+  f(raw_span<T1>{p1, s1.size()}, raw_span<T2>{p2, s2.size()}, raw_span<T3>{p3, s3.size()});
+  my_ityr::iro::checkin<Mode1>(p1, s1.size());
+  my_ityr::iro::checkin<Mode2>(p2, s2.size());
+  my_ityr::iro::checkin<Mode3>(p3, s3.size());
+}
 
 enum class exec_t {
   Serial = 0,
@@ -361,11 +399,16 @@ void cilkmerge(Span<const T> s1, Span<const T> s2, Span<T> dest) {
     // s2 is always smaller
     std::swap(s1, s2);
   }
+
   if (s2.size() == 0) {
-    // FIXME: trace for each leaf task
     auto ev = my_ityr::logger::record<my_ityr::logger_kind::Copy>();
-    my_ityr::parallel_transform(s1.begin(), s1.end(), dest.begin(),
-                                [](const auto& e) { return e; }, my_ityr::iro::block_size / sizeof(T));
+
+    with_checkout<my_ityr::iro::access_mode::read,
+                  my_ityr::iro::access_mode::write>(
+        s1, dest, [&](auto s1_, auto dest_) {
+      std::copy(s1_.begin(), s1_.end(), dest_.begin());
+    });
+
     return;
   }
 
@@ -377,16 +420,14 @@ void cilkmerge(Span<const T> s1, Span<const T> s2, Span<T> dest) {
   if (dest.size() <= cutoff_merge) {
     auto ev = my_ityr::logger::record<my_ityr::logger_kind::Merge>();
 
-    auto s1_ = s1.template checkout<my_ityr::iro::access_mode::read>();
-    auto s2_ = s2.template checkout<my_ityr::iro::access_mode::read>();
-    auto dest_ = dest.template checkout<my_ityr::iro::access_mode::write>();
-    {
+    with_checkout<my_ityr::iro::access_mode::read,
+                  my_ityr::iro::access_mode::read,
+                  my_ityr::iro::access_mode::write>(
+        s1, s2, dest, [&](auto s1_, auto s2_, auto dest_) {
       auto ev2 = my_ityr::logger::record<my_ityr::logger_kind::MergeKernel>();
       merge_seq(s1_, s2_, dest_);
-    }
-    s1.checkin(s1_);
-    s2.checkin(s2_);
-    dest.checkin(dest_);
+    });
+
     return;
   }
 
@@ -414,12 +455,11 @@ void cilksort(Span<T> a, Span<T> b) {
   if (a.size() <= cutoff_quick) {
     auto ev = my_ityr::logger::record<my_ityr::logger_kind::Quicksort>();
 
-    auto a_ = a.template checkout<my_ityr::iro::access_mode::read_write>();
-    {
+    with_checkout<my_ityr::iro::access_mode::read_write>(a, [&](auto a_) {
       auto ev2 = my_ityr::logger::record<my_ityr::logger_kind::QuicksortKernel>();
       quicksort_seq(a_);
-    }
-    a.checkin(a_);
+    });
+
     return;
   }
 
