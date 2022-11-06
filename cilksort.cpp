@@ -171,7 +171,7 @@ public:
     return divide(n_ / 2);
   }
 
-  template <typename F, uint64_t BlockSize = 65536>
+  template <typename F, std::size_t BlockSize = 65536>
   void for_each(F f) const {
     for (size_t i = 0; i < n_; i += BlockSize / sizeof(T)) {
       size_t b = std::min(n_ - i, BlockSize / sizeof(T));
@@ -183,7 +183,7 @@ public:
     }
   }
 
-  template <typename F, uint64_t BlockSize = 65536>
+  template <typename F, std::size_t BlockSize = 65536>
   void map(F f) {
     for (size_t i = 0; i < n_; i += BlockSize / sizeof(T)) {
       size_t b = std::min(n_ - i, BlockSize / sizeof(T));
@@ -195,7 +195,7 @@ public:
     }
   }
 
-  template <typename Acc, typename ReduceOp, typename TransformOp, uint64_t BlockSize = 65536>
+  template <typename Acc, typename ReduceOp, typename TransformOp, std::size_t BlockSize = 65536>
   Acc reduce(Acc         init,
              ReduceOp    reduce_op,
              TransformOp transform_op) const {

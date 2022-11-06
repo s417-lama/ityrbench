@@ -1262,8 +1262,8 @@ struct ito_pattern_policy_default {
   template <typename P_>
   using ito_pattern_impl_t = ito_pattern_serial<P_>;
   using iro_t = iro_if<iro_policy_default>;
-  static uint64_t rank() { return 0; }
-  static uint64_t n_ranks() { return 1; }
+  static int rank() { return 0; }
+  static int n_ranks() { return 1; }
 };
 
 }

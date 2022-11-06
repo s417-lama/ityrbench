@@ -44,35 +44,35 @@ class ityr_if {
   using logger_ = typename logger::template logger_if<logger_policy>;
 
   struct ito_group_policy : public ito_group_policy_default {
-    template <typename P_, size_t MaxTasks, bool SpawnLastTask>
+    template <typename P_, std::size_t MaxTasks, bool SpawnLastTask>
     using ito_group_impl_t = typename P::template ito_group_t<P_, MaxTasks, SpawnLastTask>;
     using iro_t = iro_;
-    static uint64_t rank() { return P::rank(); }
-    static uint64_t n_ranks() { return P::n_ranks(); }
+    static int rank() { return P::rank(); }
+    static int n_ranks() { return P::n_ranks(); }
   };
-  template <size_t MaxTasks, bool SpawnLastTask>
+  template <std::size_t MaxTasks, bool SpawnLastTask>
   using ito_group_ = ito_group_if<ito_group_policy, MaxTasks, SpawnLastTask>;
 
   struct ito_pattern_policy : public ito_pattern_policy_default {
     template <typename P_>
     using ito_pattern_impl_t = typename P::template ito_pattern_t<P_>;
     using iro_t = iro_;
-    static uint64_t rank() { return P::rank(); }
-    static uint64_t n_ranks() { return P::n_ranks(); }
+    static int rank() { return P::rank(); }
+    static int n_ranks() { return P::n_ranks(); }
   };
   using ito_pattern_ = ito_pattern_if<ito_pattern_policy>;
 
 public:
   using wallclock = typename P::wallclock_t;
   using iro = iro_;
-  template <size_t MaxTasks, bool SpawnLastTask = false>
+  template <std::size_t MaxTasks, bool SpawnLastTask = false>
   using ito_group = ito_group_<MaxTasks, SpawnLastTask>;
   using ito_pattern = ito_pattern_;
   using logger_kind = typename P::logger_kind_t::value;
   using logger = logger_;
 
-  static uint64_t rank() { return P::rank(); }
-  static uint64_t n_ranks() { return P::n_ranks(); }
+  static int rank() { return P::rank(); }
+  static int n_ranks() { return P::n_ranks(); }
 
   template <typename F, typename... Args>
   static void main(F f, Args... args) {
@@ -112,7 +112,7 @@ public:
 // -----------------------------------------------------------------------------
 
 struct ityr_policy_serial {
-  template <typename P, size_t MaxTasks, bool SpawnLastTask>
+  template <typename P, std::size_t MaxTasks, bool SpawnLastTask>
   using ito_group_t = ito_group_serial<P, MaxTasks, SpawnLastTask>;
 
   template <typename P>
@@ -128,9 +128,9 @@ struct ityr_policy_serial {
   template <typename P>
   using logger_impl_t = logger::impl_dummy<P>;
 
-  static uint64_t rank() { return 0; }
+  static int rank() { return 0; }
 
-  static uint64_t n_ranks() { return 1; }
+  static int n_ranks() { return 1; }
 
   template <typename Fn, typename... Args>
   static void main(Fn&& f, Args&&... args) { f(std::forward<Args>(args)...); }
@@ -142,7 +142,7 @@ struct ityr_policy_serial {
 // -----------------------------------------------------------------------------
 
 struct ityr_policy_naive {
-  template <typename P, size_t MaxTasks, bool SpawnLastTask>
+  template <typename P, std::size_t MaxTasks, bool SpawnLastTask>
   using ito_group_t = ito_group_naive<P, MaxTasks, SpawnLastTask>;
 
   template <typename P>
@@ -180,11 +180,11 @@ struct ityr_policy_naive {
   using logger_impl_t = logger::ITYR_LOGGER_IMPL<P>;
 #undef ITYR_LOGGER_IMPL
 
-  static uint64_t rank() {
+  static int rank() {
     return madm::uth::get_pid();
   }
 
-  static uint64_t n_ranks() {
+  static int n_ranks() {
     return madm::uth::get_n_procs();
   }
 
@@ -202,7 +202,7 @@ struct ityr_policy_naive {
 // -----------------------------------------------------------------------------
 
 struct ityr_policy_workfirst : public ityr_policy_naive {
-  template <typename P, size_t MaxTasks, bool SpawnLastTask>
+  template <typename P, std::size_t MaxTasks, bool SpawnLastTask>
   using ito_group_t = ito_group_workfirst<P, MaxTasks, SpawnLastTask>;
 
   template <typename P>
@@ -213,7 +213,7 @@ struct ityr_policy_workfirst : public ityr_policy_naive {
 // -----------------------------------------------------------------------------
 
 struct ityr_policy_workfirst_lazy : public ityr_policy_naive {
-  template <typename P, size_t MaxTasks, bool SpawnLastTask>
+  template <typename P, std::size_t MaxTasks, bool SpawnLastTask>
   using ito_group_t = ito_group_workfirst_lazy<P, MaxTasks, SpawnLastTask>;
 
   template <typename P>

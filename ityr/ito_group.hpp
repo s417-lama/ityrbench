@@ -6,7 +6,7 @@
 
 namespace ityr {
 
-template <typename P, size_t MaxTasks, bool SpawnLastTask>
+template <typename P, std::size_t MaxTasks, bool SpawnLastTask>
 class ito_group_if {
   typename P::template ito_group_impl_t<P, MaxTasks, SpawnLastTask> impl_;
 
@@ -19,7 +19,7 @@ public:
   void wait() { impl_.wait(); }
 };
 
-template <typename P, size_t MaxTasks, bool SpawnLastTask>
+template <typename P, std::size_t MaxTasks, bool SpawnLastTask>
 class ito_group_serial {
 public:
   ito_group_serial() {}
@@ -32,12 +32,12 @@ public:
   void wait() {}
 };
 
-template <typename P, size_t MaxTasks, bool SpawnLastTask>
+template <typename P, std::size_t MaxTasks, bool SpawnLastTask>
 class ito_group_naive {
   using iro = typename P::iro_t;
 
   madm::uth::thread<void> tasks_[MaxTasks];
-  size_t n_ = 0;
+  std::size_t n_ = 0;
 
 public:
   ito_group_naive() {}
@@ -60,7 +60,7 @@ public:
 
   void wait() {
     iro::release();
-    for (size_t i = 0; i < n_; i++) {
+    for (std::size_t i = 0; i < n_; i++) {
       tasks_[i].join();
     }
     iro::acquire();
@@ -68,14 +68,14 @@ public:
   }
 };
 
-template <typename P, size_t MaxTasks, bool SpawnLastTask>
+template <typename P, std::size_t MaxTasks, bool SpawnLastTask>
 class ito_group_workfirst {
   using iro = typename P::iro_t;
 
   madm::uth::thread<void> tasks_[MaxTasks];
   bool all_synched_ = true;
-  uint64_t initial_rank;
-  size_t n_ = 0;
+  int initial_rank;
+  std::size_t n_ = 0;
 
 public:
   ito_group_workfirst() { initial_rank = P::rank(); }
@@ -111,7 +111,7 @@ public:
 
   void wait() {
     bool blocked = false;
-    for (size_t i = 0; i < n_; i++) {
+    for (std::size_t i = 0; i < n_; i++) {
       iro::poll();
       tasks_[i].join_aux(0, [&blocked] {
         // on-block callback
@@ -131,14 +131,14 @@ public:
   }
 };
 
-template <typename P, size_t MaxTasks, bool SpawnLastTask>
+template <typename P, std::size_t MaxTasks, bool SpawnLastTask>
 class ito_group_workfirst_lazy {
   using iro = typename P::iro_t;
 
   madm::uth::thread<void> tasks_[MaxTasks];
   bool all_synched_ = true;
-  uint64_t initial_rank;
-  size_t n_ = 0;
+  int initial_rank;
+  std::size_t n_ = 0;
 
 public:
   ito_group_workfirst_lazy() { initial_rank = P::rank(); }
@@ -176,7 +176,7 @@ public:
 
   void wait() {
     bool blocked = false;
-    for (size_t i = 0; i < n_; i++) {
+    for (std::size_t i = 0; i < n_; i++) {
       iro::poll();
       tasks_[i].join_aux(0, [&blocked] {
         // on-block callback
@@ -197,11 +197,11 @@ public:
 };
 
 struct ito_group_policy_default {
-  template <typename P_, size_t MaxTasks, bool SpawnLastTask>
+  template <typename P_, std::size_t MaxTasks, bool SpawnLastTask>
   using ito_group_impl_t = ito_group_serial<P_, MaxTasks, SpawnLastTask>;
   using iro_t = iro_if<iro_policy_default>;
-  static uint64_t rank() { return 0; }
-  static uint64_t n_ranks() { return 1; }
+  static int rank() { return 0; }
+  static int n_ranks() { return 1; }
 };
 
 }
