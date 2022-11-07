@@ -18,10 +18,18 @@ Makefile
 configure~
 configure.ac~
 
+stamp-h1
+
 examples/fmm
 examples/kernel
 examples/tree
 examples/vec
+examples/biotsavart
+examples/biotsavart_kernel
+examples/helmholtz
+examples/helmholtz_kernel
+examples/laplace
+examples/laplace_kernel
 
 accuracy.reg
 time_
