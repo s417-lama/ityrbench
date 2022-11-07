@@ -15,4 +15,13 @@ config.h.in~
 config.log
 config.status
 Makefile
-stamp-h1
+configure~
+configure.ac~
+
+examples/fmm
+examples/kernel
+examples/tree
+examples/vec
+
+accuracy.reg
+time_
