@@ -2,10 +2,12 @@
 #define vec_h
 #include "namespace.h"
 #include <ostream>
+#if EXAFMM_USE_SIMD
 #if defined __FUJITSU || defined __INTEL_COMPILER
 #else
 #include "vectormath_trig.h"
 #include "vectormath_exp.h"
+#endif
 #endif
 #ifndef EXAFMM_VEC_NEWTON
 #define EXAFMM_VEC_NEWTON 1

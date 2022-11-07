@@ -27,19 +27,25 @@ namespace EXAFMM_NAMESPACE {
   typedef vec<3,float> fvec3;                                   //!< Vector of 3 float types
   typedef vec<3,complex_t> cvec3;                               //!< Vector of 3 complex_t types
 
+#if EXAFMM_USE_SIMD
   // SIMD vector types for AVX512, AVX, and SSE
   const int NSIMD = SIMD_BYTES / int(sizeof(real_t));           //!< SIMD vector length (SIMD_BYTES defined in macros.h)
   typedef vec<NSIMD,real_t> simdvec;                            //!< SIMD vector type
+#endif
 
   // Kahan summation types (Achieves quasi-double precision using single precision types)
 #if EXAFMM_USE_KAHAN
   typedef kahan<real_t> kreal_t;                                //!< Real type with Kahan summation
   typedef kahan<complex_t> kcomplex_t;                          //!< Complex type with Kahan summation
+#if EXAFMM_USE_SIMD
   typedef kahan<simdvec> ksimdvec;                              //!< SIMD vector type with Kahan summation
+#endif
 #else
   typedef real_t kreal_t;                                       //!< Real type (dummy Kahan)
   typedef complex_t kcomplex_t;                                 //!< Complex type (dummy Kahan)
+#if EXAFMM_USE_SIMD
   typedef simdvec ksimdvec;                                     //!< SIMD vector type (dummy Kahan)
+#endif
 #endif
   typedef vec<4,kreal_t> kvec4;                                 //!< Vector of 4 real types with Kahan summaiton
   typedef vec<4,kcomplex_t> kcvec4;                             //!< Vector of 4 complex types with Kahan summaiton
