@@ -26,7 +26,9 @@ default_params:
   tree: T1L # T1L/T1XL/T1XXL/T1WL
   repeats: 10
   exec_type: parallel # serial/parallel
+  # common params
   cache_policy: writeback_lazy # serial/nocache/writethrough/writeback/writeback_lazy/getput
+  dist_policy: cyclic # block/cyclic
   cache_size: 128 # MB
   block_size: 65536 # bytes
   max_dirty: $cache_size # MB
@@ -38,28 +40,16 @@ default_params:
 default_name: uts++
 
 build:
-  depend_params: [exec_type, cache_policy, block_size, logger]
+  depend_params: [exec_type, cache_policy, dist_policy, block_size, logger]
   script: |
-    source common.bash
+    source build_common.bash
 
     CFLAGS="${CFLAGS:+$CFLAGS} -DNDEBUG"
-    CFLAGS="${CFLAGS:+$CFLAGS} -DITYR_LOGGER_IMPL=impl_$KOCHI_PARAM_LOGGER"
-    CFLAGS="${CFLAGS:+$CFLAGS} -DITYR_BLOCK_SIZE=$KOCHI_PARAM_BLOCK_SIZE"
 
     case $KOCHI_PARAM_EXEC_TYPE in
       serial)   CFLAGS="${CFLAGS:+$CFLAGS} -DUTS_RUN_SEQ=1 -DUTS_RECURSIVE_FOR=1" ;;
       parallel) ;;
       *)        echo "Unknown exec type ($KOCHI_PARAM_EXEC_TYPE)"; exit 1 ;;
-    esac
-
-    case $KOCHI_PARAM_CACHE_POLICY in
-      serial)         CFLAGS="${CFLAGS:+$CFLAGS} -DITYR_POLICY=ityr_policy_serial" ;;
-      nocache)        CFLAGS="${CFLAGS:+$CFLAGS} -DITYR_POLICY=ityr_policy_workfirst -DITYR_IRO_DISABLE_CACHE=1" ;;
-      writethrough)   CFLAGS="${CFLAGS:+$CFLAGS} -DITYR_POLICY=ityr_policy_workfirst -DITYR_ENABLE_WRITE_THROUGH=1" ;;
-      writeback)      CFLAGS="${CFLAGS:+$CFLAGS} -DITYR_POLICY=ityr_policy_workfirst" ;;
-      writeback_lazy) CFLAGS="${CFLAGS:+$CFLAGS} -DITYR_POLICY=ityr_policy_workfirst_lazy" ;;
-      getput)         CFLAGS="${CFLAGS:+$CFLAGS} -DITYR_POLICY=ityr_policy_workfirst_lazy -DITYR_IRO_GETPUT=1" ;;
-      *)              echo "Unknown cache policy ($KOCHI_PARAM_CACHE_POLICY)"; exit 1 ;;
     esac
 
     make clean
@@ -68,37 +58,24 @@ build:
 run:
   depend_params: [nodes, cores, tree, repeats, cache_size, max_dirty, shared_mem, logger, allocator, debugger]
   script: |
-    source common.bash
+    source run_common.bash
 
     source uts/sample_trees.sh
 
-    export PCAS_ENABLE_SHARED_MEMORY=$KOCHI_PARAM_SHARED_MEM
-    export PCAS_MAX_DIRTY_CACHE_SIZE=$(bc <<< "$KOCHI_PARAM_MAX_DIRTY * 2^20 / 1")
-    export PCAS_PREFETCH_BLOCKS=0
-
-    export MADM_STACK_SIZE=$((4 * 1024 * 1024))
-    n_nodes=$(echo $KOCHI_PARAM_NODES | cut -f 1 -d ":" | sed 's/x/*/g' | bc)
-
-    if [[ $KOCHI_PARAM_ALLOCATOR == jemalloc ]]; then
-      export LD_PRELOAD=${KOCHI_INSTALL_PREFIX_JEMALLOC}/lib/libjemalloc.so${LD_PRELOAD:+:$LD_PRELOAD}
-    fi
-
     export OMPI_MCA_common_tofu_num_mrq_entries=2097152
 
+    commands="
+      ./uts++.out
+        ${!KOCHI_PARAM_TREE}
+        -i $KOCHI_PARAM_REPEATS
+        -c $KOCHI_PARAM_CACHE_SIZE"
+
+    n_nodes=$(echo $KOCHI_PARAM_NODES | cut -f 1 -d ":" | sed 's/x/*/g' | bc)
+
     if [[ $KOCHI_PARAM_DEBUGGER == 0 ]]; then
-      ityr_mpirun $((n_nodes * KOCHI_PARAM_CORES)) $KOCHI_PARAM_CORES ./uts++.out \
-        ${!KOCHI_PARAM_TREE} \
-        -i $KOCHI_PARAM_REPEATS \
-        -c $KOCHI_PARAM_CACHE_SIZE
+      ityr_mpirun $((n_nodes * KOCHI_PARAM_CORES)) $KOCHI_PARAM_CORES $commands
     else
-      if [[ -z "${PS1+x}" ]]; then
-        echo "Use kochi interact."
-        exit 1
-      fi
-      MPIEXEC=mpitx ityr_mpirun $((n_nodes * KOCHI_PARAM_CORES)) $KOCHI_PARAM_CORES gdb --args ./uts++.out \
-        ${!KOCHI_PARAM_TREE} \
-        -i $KOCHI_PARAM_REPEATS \
-        -c $KOCHI_PARAM_CACHE_SIZE
+      MPIEXEC=mpitx ityr_mpirun $((n_nodes * KOCHI_PARAM_CORES)) $KOCHI_PARAM_CORES gdb --args $commands
     fi
 
     if [[ $KOCHI_PARAM_LOGGER == trace ]]; then run_trace_viewer; fi

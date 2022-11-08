@@ -23,9 +23,11 @@ default_params:
       machines: [ito-a]
     - value: 6
       machines: [local]
-  tree: T1L # T1L/T1XL/T1XXL/T1WL
+  n_input: 10000
   repeats: 10
-  exec_type: parallel # serial/parallel
+  theta: 0.2
+  nspawn: 3000
+  ncrit: 64
   # common params
   cache_policy: writeback_lazy # serial/nocache/writethrough/writeback/writeback_lazy/getput
   dist_policy: cyclic # block/cyclic
@@ -37,36 +39,31 @@ default_params:
   allocator: jemalloc # sys/jemalloc
   debugger: 0
 
-default_name: uts
+default_name: exafmm
 
 build:
-  depend_params: [exec_type, cache_policy, dist_policy, block_size, logger]
+  depend_params: [cache_policy, dist_policy, block_size, logger]
   script: |
     source build_common.bash
 
     CFLAGS="${CFLAGS:+$CFLAGS} -DNDEBUG"
 
-    case $KOCHI_PARAM_EXEC_TYPE in
-      serial)   CFLAGS="${CFLAGS:+$CFLAGS} -DUTS_RUN_SEQ=1 -DUTS_RECURSIVE_FOR=1" ;;
-      parallel) ;;
-      *)        echo "Unknown exec type ($KOCHI_PARAM_EXEC_TYPE)"; exit 1 ;;
-    esac
-
     make clean
-    MPICXX=$MPICXX CFLAGS=$CFLAGS make uts.out
+    MPICXX=$MPICXX CFLAGS=$CFLAGS make exafmm
 
 run:
-  depend_params: [nodes, cores, tree, repeats, cache_size, max_dirty, shared_mem, logger, allocator, debugger]
+  depend_params: [nodes, cores, n_input, repeats, theta, nspawn, ncrit, cache_size, max_dirty, shared_mem, logger, allocator, debugger]
   script: |
     source run_common.bash
 
-    source uts/sample_trees.sh
-
     commands="
-      ./uts.out
-        ${!KOCHI_PARAM_TREE}
-        -i $KOCHI_PARAM_REPEATS
-        -c $KOCHI_PARAM_CACHE_SIZE"
+      ./exafmm/examples/laplace
+        -v -T 1 -D -a
+        -n $KOCHI_PARAM_N_INPUT
+        -r $KOCHI_PARAM_REPEATS
+        -t $KOCHI_PARAM_THETA
+        -s $KOCHI_PARAM_NSPAWN
+        -c $KOCHI_PARAM_NCRIT"
 
     n_nodes=$(echo $KOCHI_PARAM_NODES | cut -f 1 -d ":" | sed 's/x/*/g' | bc)
 

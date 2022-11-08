@@ -1,11 +1,9 @@
 #!/bin/bash
 [[ -z "${PS1+x}" ]] && set -euo pipefail
 
-MPICXX=${MPICXX:-mpicxx}
 MPIEXEC=${MPIEXEC:-mpiexec}
 
-$MPIEXEC --version || true
-$MPICXX --version
+$MPIEXEC --version
 
 export MADM_RUN__=1
 export MADM_PRINT_ENV=1
@@ -112,3 +110,18 @@ run_trace_viewer() {
   shopt -s nullglob
   MLOG_VIEWER_ONESHOT=false bokeh serve $KOCHI_INSTALL_PREFIX_MASSIVELOGGER/viewer --port $KOCHI_FORWARD_PORT --allow-websocket-origin \* --args ityr_log_*.ignore pcas_log_*.ignore
 }
+
+export PCAS_ENABLE_SHARED_MEMORY=$KOCHI_PARAM_SHARED_MEM
+export PCAS_MAX_DIRTY_CACHE_SIZE=$(bc <<< "$KOCHI_PARAM_MAX_DIRTY * 2^20 / 1")
+export PCAS_PREFETCH_BLOCKS=0
+
+export MADM_STACK_SIZE=$((4 * 1024 * 1024))
+
+if [[ $KOCHI_PARAM_ALLOCATOR == jemalloc ]]; then
+  export LD_PRELOAD=${KOCHI_INSTALL_PREFIX_JEMALLOC}/lib/libjemalloc.so${LD_PRELOAD:+:$LD_PRELOAD}
+fi
+
+if [[ $KOCHI_PARAM_DEBUGGER == 1 ]] && [[ -z "${PS1+x}" ]]; then
+  echo "Use kochi interact to run debugger."
+  exit 1
+fi

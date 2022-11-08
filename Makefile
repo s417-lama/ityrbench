@@ -1,5 +1,8 @@
 SHELL=/bin/bash
-.SHELLFLAGS = -eu -o pipefail -c
+.SHELLFLAGS += -eu -o pipefail -c
+.ONESHELL:
+
+THIS_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 
 UTH_PATH     := ${KOCHI_INSTALL_PREFIX_MASSIVETHREADS_DM}
 UTH_CXXFLAGS := -I$(UTH_PATH)/include -fno-stack-protector -Wno-register -Wl,-export-dynamic
@@ -33,9 +36,9 @@ MPICXX := $(or ${MPICXX},mpicxx)
 SRCS := $(wildcard ./*.cpp)
 HEADERS := $(wildcard ./ityr/**/*.hpp)
 
-MAIN_TARGETS := $(patsubst %.cpp,%.out,$(SRCS)) uts.out
+MAIN_TARGETS := $(patsubst %.cpp,%.out,$(SRCS)) uts.out uts++.out
 
-all: $(MAIN_TARGETS)
+all: $(MAIN_TARGETS) exafmm
 
 %.out: %.cpp $(HEADERS)
 	$(MPICXX) $(CXXFLAGS) -o $@ $< $(LDFLAGS)
@@ -46,5 +49,12 @@ uts.out: uts/uts.c uts/rng/brg_sha1.c uts/main.cc $(HEADERS)
 uts++.out: uts/uts.c uts/rng/brg_sha1.c uts/main++.cc $(HEADERS)
 	$(MPICXX) $(CXXFLAGS) -DBRG_RNG=1 -o $@ uts/uts.c uts/rng/brg_sha1.c uts/main++.cc $(LDFLAGS)
 
+.PHONY: exafmm
+exafmm:
+	cd exafmm
+	[ -f Makefile ] || ./configure --disable-simd --enable-mpi CXXFLAGS="-I$(THIS_DIR) $(CXXFLAGS)" LDFLAGS="$(LDFLAGS)"
+	make -j
+
 clean:
 	rm -rf $(MAIN_TARGETS)
+	[ ! -f exafmm/Makefile ] || make clean -C exafmm
