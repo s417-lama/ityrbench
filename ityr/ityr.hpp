@@ -68,7 +68,7 @@ class ityr_if {
     using ito_pattern = ito_pattern_;
   };
   template <typename T>
-  using global_span_ = global_span_if<global_span_policy, T>;
+  using global_span_ = typename global_span_if<global_span_policy>::template global_span<T>;
 
 public:
   using wallclock = typename P::wallclock_t;

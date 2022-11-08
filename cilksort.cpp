@@ -99,8 +99,8 @@ size_t cutoff_merge  = 16 * 1024;
 size_t cutoff_quick  = 16 * 1024;
 
 #if !ITYR_BENCH_USE_SEQ_STL
-template <typename T>
-static inline T select_pivot(raw_span<const T> s) {
+template <template <typename> typename Span, typename T>
+static inline T select_pivot(Span<const T> s) {
   // median of three values
   if (s.size() < 3) return s[0];
   auto a = s[0];
@@ -111,8 +111,8 @@ static inline T select_pivot(raw_span<const T> s) {
   else                         return c;
 }
 
-template <typename T>
-void insertion_sort(raw_span<T> s) {
+template <template <typename> typename Span, typename T>
+void insertion_sort(Span<T> s) {
   for (size_t i = 1; i < s.size(); i++) {
     auto a = s[i];
     size_t j;
@@ -123,8 +123,8 @@ void insertion_sort(raw_span<T> s) {
   }
 }
 
-template <typename T>
-std::pair<raw_span<T>, raw_span<T>> partition_seq(raw_span<T> s, T pivot) {
+template <template <typename> typename Span, typename T>
+std::pair<Span<T>, Span<T>> partition_seq(Span<T> s, T pivot) {
   size_t l = 0;
   size_t h = s.size() - 1;
   while (true) {
@@ -137,15 +137,15 @@ std::pair<raw_span<T>, raw_span<T>> partition_seq(raw_span<T> s, T pivot) {
 }
 #endif
 
-template <typename T>
-void quicksort_seq(raw_span<T> s) {
+template <template <typename> typename Span, typename T>
+void quicksort_seq(Span<T> s) {
 #if ITYR_BENCH_USE_SEQ_STL
   std::sort(s.begin(), s.end());
 #else
   if (s.size() <= cutoff_insert) {
     insertion_sort(s);
   } else {
-    auto pivot = select_pivot(raw_span<const T>(s));
+    auto pivot = select_pivot(Span<const T>(s));
     auto [s1, s2] = partition_seq(s, pivot);
     quicksort_seq(s1);
     quicksort_seq(s2);
@@ -153,8 +153,8 @@ void quicksort_seq(raw_span<T> s) {
 #endif
 }
 
-template <typename T>
-void merge_seq(raw_span<const T> s1, raw_span<const T> s2, raw_span<T> dest) {
+template <template <typename> typename Span, typename T>
+void merge_seq(Span<const T> s1, Span<const T> s2, Span<T> dest) {
   assert(s1.size() + s2.size() == dest.size());
 
 #if ITYR_BENCH_USE_SEQ_STL
@@ -179,19 +179,19 @@ void merge_seq(raw_span<const T> s1, raw_span<const T> s2, raw_span<T> dest) {
     }
   }
   if (l1 >= s1.size()) {
-    raw_span<T>       dest_r = dest.subspan(d, s2.size() - l2);
-    raw_span<const T> src_r  = s2.subspan(l2, s2.size() - l2);
+    Span dest_r = dest.subspan(d, s2.size() - l2);
+    Span src_r  = s2.subspan(l2, s2.size() - l2);
     std::copy(src_r.begin(), src_r.end(), dest_r.begin());
   } else {
-    raw_span<T>       dest_r = dest.subspan(d, s1.size() - l1);
-    raw_span<const T> src_r  = s1.subspan(l1, s1.size() - l1);
+    Span dest_r = dest.subspan(d, s1.size() - l1);
+    Span src_r  = s1.subspan(l1, s1.size() - l1);
     std::copy(src_r.begin(), src_r.end(), dest_r.begin());
   }
 #endif
 }
 
-template <typename T>
-size_t binary_search(global_span<const T> s, const T& v) {
+template <template <typename> typename Span, typename T>
+size_t binary_search(Span<const T> s, const T& v) {
 #if ITYR_BENCH_USE_SEQ_STL
   auto it = std::lower_bound(s.begin(), s.end(), v);
   return it - s.begin();
@@ -207,8 +207,8 @@ size_t binary_search(global_span<const T> s, const T& v) {
 #endif
 }
 
-template <typename T>
-void cilkmerge(global_span<const T> s1, global_span<const T> s2, global_span<T> dest) {
+template <template <typename> typename Span, typename T>
+void cilkmerge(Span<const T> s1, Span<const T> s2, Span<T> dest) {
   assert(s1.size() + s2.size() == dest.size());
 
   if (s1.size() < s2.size()) {
@@ -259,13 +259,13 @@ void cilkmerge(global_span<const T> s1, global_span<const T> s2, global_span<T> 
   auto [dest1, dest2] = dest.divide(split1 + split2);
 
   my_ityr::parallel_invoke(
-    cilkmerge<T>, s11, s21, dest1,
-    cilkmerge<T>, s12, s22, dest2
+    cilkmerge<Span, T>, s11, s21, dest1,
+    cilkmerge<Span, T>, s12, s22, dest2
   );
 }
 
-template <typename T>
-void cilksort(global_span<T> a, global_span<T> b) {
+template <template <typename> typename Span, typename T>
+void cilksort(Span<T> a, Span<T> b) {
   assert(a.size() == b.size());
 
   if (a.size() <= cutoff_quick) {
@@ -293,18 +293,18 @@ void cilksort(global_span<T> a, global_span<T> b) {
   auto [b3, b4] = b34.divide_two();
 
   my_ityr::parallel_invoke(
-    cilksort<T>, a1, b1,
-    cilksort<T>, a2, b2,
-    cilksort<T>, a3, b3,
-    cilksort<T>, a4, b4
+    cilksort<Span, T>, a1, b1,
+    cilksort<Span, T>, a2, b2,
+    cilksort<Span, T>, a3, b3,
+    cilksort<Span, T>, a4, b4
   );
 
   my_ityr::parallel_invoke(
-    cilkmerge<T>, global_span<const T>(a1), global_span<const T>(a2), b12,
-    cilkmerge<T>, global_span<const T>(a3), global_span<const T>(a4), b34
+    cilkmerge<Span, T>, Span<const T>(a1), Span<const T>(a2), b12,
+    cilkmerge<Span, T>, Span<const T>(a3), Span<const T>(a4), b34
   );
 
-  cilkmerge(global_span<const T>(b12), global_span<const T>(b34), a);
+  cilkmerge(Span<const T>(b12), Span<const T>(b34), a);
 }
 
 template <typename T, typename Rng>
@@ -321,8 +321,8 @@ gen_random_elem(Rng& r) {
   return dist(r);
 }
 
-template <typename T>
-void init_array(global_span<T> s) {
+template <template <typename> typename Span, typename T>
+void init_array(Span<T> s) {
   static int counter = 0;
   auto seed = counter++;
 
@@ -340,8 +340,8 @@ void init_array(global_span<T> s) {
   /* std::cout << std::endl; */
 }
 
-template <typename T>
-bool check_sorted(global_span<const T> s) {
+template <template <typename> typename Span, typename T>
+bool check_sorted(Span<const T> s) {
   struct acc_type {
     bool is_init;
     bool success;
@@ -359,8 +359,8 @@ bool check_sorted(global_span<const T> s) {
   return ret.success;
 }
 
-template <typename T>
-void run(global_span<T> a, global_span<T> b) {
+template <template <typename> typename Span, typename T>
+void run(Span<T> a, Span<T> b) {
   for (int r = 0; r < n_repeats; r++) {
     if (my_rank == 0) {
       uint64_t t0 = my_ityr::wallclock::get_time();
@@ -415,7 +415,7 @@ void run(global_span<T> a, global_span<T> b) {
         uint64_t t0 = my_ityr::wallclock::get_time();
         /* bool success = std::is_sorted(a.begin(), a.end()); */
         bool success = my_ityr::root_spawn([=]() {
-          return check_sorted(global_span<const T>(a));
+          return check_sorted(Span<const T>(a));
         });
         uint64_t t1 = my_ityr::wallclock::get_time();
         if (success) {
@@ -513,16 +513,29 @@ int real_main(int argc, char **argv) {
 
   my_ityr::iro::init(cache_size * 1024 * 1024);
 
-  auto array = my_ityr::iro::malloc<elem_t>(n_input);
-  auto buf   = my_ityr::iro::malloc<elem_t>(n_input);
+  if (exec_type == exec_t::Parallel) {
+    auto array = my_ityr::iro::malloc<elem_t>(n_input);
+    auto buf   = my_ityr::iro::malloc<elem_t>(n_input);
 
-  global_span<elem_t> a(array, n_input);
-  global_span<elem_t> b(buf  , n_input);
+    global_span<elem_t> a(array, n_input);
+    global_span<elem_t> b(buf  , n_input);
 
-  run(a, b);
+    run(a, b);
 
-  my_ityr::iro::free(array);
-  my_ityr::iro::free(buf);
+    my_ityr::iro::free(array);
+    my_ityr::iro::free(buf);
+  } else {
+    elem_t* array = (elem_t*)malloc(sizeof(elem_t) * n_input);
+    elem_t* buf   = (elem_t*)malloc(sizeof(elem_t) * n_input);
+
+    raw_span<elem_t> a(array, n_input);
+    raw_span<elem_t> b(buf  , n_input);
+
+    run(a, b);
+
+    free(array);
+    free(buf);
+  }
 
   my_ityr::iro::fini();
 
