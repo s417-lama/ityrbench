@@ -51,194 +51,10 @@ struct my_ityr_policy : ityr::ityr_policy {
 using my_ityr = ityr::ityr_if<my_ityr_policy>;
 
 template <typename T>
-class raw_span {
-  using this_t = raw_span<T>;
-  T* ptr_;
-  size_t n_;
-
-public:
-  using element_type = T;
-
-  raw_span(T* ptr, size_t n) : ptr_(ptr), n_(n) {}
-  template <typename U>
-  raw_span(raw_span<U> s) : ptr_(s.data()), n_(s.size() * sizeof(U) / sizeof(T)) {}
-
-  constexpr T* data() const noexcept { return ptr_; }
-  constexpr size_t size() const noexcept { return n_; }
-
-  constexpr T* begin() const noexcept { return ptr_; }
-  constexpr T* end()   const noexcept { return ptr_ + n_; }
-
-  constexpr T& operator[](size_t i) const { assert(i < n_); return ptr_[i]; }
-
-  constexpr this_t subspan(size_t offset, size_t count) const {
-    assert(offset + count <= n_);
-    return {ptr_ + offset, count};
-  }
-
-  constexpr std::pair<this_t, this_t> divide(size_t at) const {
-    return {subspan(0, at), subspan(at, n_ - at)};
-  }
-
-  constexpr std::pair<this_t, this_t> divide_two() const {
-    return divide(n_ / 2);
-  }
-
-  template <typename F>
-  void for_each(F f) const {
-    for (size_t i = 0; i < n_; i++) {
-      f(const_cast<const T&>(ptr_[i]));
-    }
-  }
-
-  template <typename F>
-  void map(F f) {
-    for (size_t i = 0; i < n_; i++) {
-      f(ptr_[i]);
-    }
-  }
-
-  template <typename Acc, typename ReduceOp, typename TransformOp>
-  Acc reduce(Acc         init,
-             ReduceOp    reduce_op,
-             TransformOp transform_op) {
-    Acc acc = init;
-    for (size_t i = 0; i < n_; i++) {
-      acc = reduce_op(acc, transform_op(ptr_[i]));
-    }
-    return acc;
-  }
-
-  void willread() const {}
-};
-
-template <my_ityr::iro::access_mode Mode,
-          typename T, typename Fn>
-void with_checkout(raw_span<T> s, Fn f) {
-  f(s);
-}
-
-template <my_ityr::iro::access_mode Mode1,
-          my_ityr::iro::access_mode Mode2,
-          typename T1, typename T2, typename Fn>
-void with_checkout(raw_span<T1> s1, raw_span<T2> s2, Fn f) {
-  f(s1, s2);
-}
-
-template <my_ityr::iro::access_mode Mode1,
-          my_ityr::iro::access_mode Mode2,
-          my_ityr::iro::access_mode Mode3,
-          typename T1, typename T2, typename T3, typename Fn>
-void with_checkout(raw_span<T1> s1, raw_span<T2> s2, raw_span<T3> s3, Fn f) {
-  f(s1, s2, s3);
-}
+using raw_span = ityr::raw_span<T>;
 
 template <typename T>
-class gptr_span {
-  using this_t = gptr_span<T>;
-  using ptr_t = my_ityr::iro::global_ptr<T>;
-  ptr_t ptr_;
-  size_t n_;
-
-public:
-  using element_type = T;
-
-  gptr_span(ptr_t ptr, size_t n) : ptr_(ptr), n_(n) {}
-  template <typename U>
-  gptr_span(gptr_span<U> s) : ptr_(s.data()), n_(s.size() * sizeof(U) / sizeof(T)) {}
-
-  constexpr ptr_t data() const noexcept { return ptr_; }
-  constexpr size_t size() const noexcept { return n_; }
-
-  constexpr ptr_t begin() const noexcept { return ptr_; }
-  constexpr ptr_t end()   const noexcept { return ptr_ + n_; }
-
-  constexpr auto operator[](size_t i) const {
-    assert(i < n_);
-    return ptr_[i];
-  }
-
-  constexpr this_t subspan(size_t offset, size_t count) const {
-    assert(offset + count <= n_);
-    return {ptr_ + offset, count};
-  }
-
-  constexpr std::pair<this_t, this_t> divide(size_t at) const {
-    return {subspan(0, at), subspan(at, n_ - at)};
-  }
-
-  constexpr std::pair<this_t, this_t> divide_two() const {
-    return divide(n_ / 2);
-  }
-
-  template <typename F, std::size_t BlockSize = 65536>
-  void for_each(F f) const {
-    for (size_t i = 0; i < n_; i += BlockSize / sizeof(T)) {
-      size_t b = std::min(n_ - i, BlockSize / sizeof(T));
-      auto p = my_ityr::iro::checkout<my_ityr::iro::access_mode::read>(ptr_ + i, b);
-      for (size_t j = 0; j < b; j++) {
-        f(const_cast<const T&>(p[j]));
-      }
-      my_ityr::iro::checkin(p, b);
-    }
-  }
-
-  template <typename F, std::size_t BlockSize = 65536>
-  void map(F f) {
-    for (size_t i = 0; i < n_; i += BlockSize / sizeof(T)) {
-      size_t b = std::min(n_ - i, BlockSize / sizeof(T));
-      auto p = my_ityr::iro::checkout<my_ityr::iro::access_mode::read_write>(ptr_ + i, b);
-      for (size_t j = 0; j < b; j++) {
-        f(p[j]);
-      }
-      my_ityr::iro::checkin(p, b);
-    }
-  }
-
-  template <typename Acc, typename ReduceOp, typename TransformOp, std::size_t BlockSize = 65536>
-  Acc reduce(Acc         init,
-             ReduceOp    reduce_op,
-             TransformOp transform_op) const {
-    return my_ityr::parallel_reduce(ptr_, ptr_ + n_, init, reduce_op, transform_op, BlockSize);
-  }
-
-  void willread() const {
-    my_ityr::iro::willread(ptr_, n_);
-  }
-};
-
-template <my_ityr::iro::access_mode Mode,
-          typename T, typename Fn>
-void with_checkout(gptr_span<T> s, Fn f) {
-  auto p = my_ityr::iro::checkout<Mode>(s.data(), s.size());
-  f(raw_span<T>{p, s.size()});
-  my_ityr::iro::checkin<Mode>(p, s.size());
-}
-
-template <my_ityr::iro::access_mode Mode1,
-          my_ityr::iro::access_mode Mode2,
-          typename T1, typename T2, typename Fn>
-void with_checkout(gptr_span<T1> s1, gptr_span<T2> s2, Fn f) {
-  auto p1 = my_ityr::iro::checkout<Mode1>(s1.data(), s1.size());
-  auto p2 = my_ityr::iro::checkout<Mode2>(s2.data(), s2.size());
-  f(raw_span<T1>{p1, s1.size()}, raw_span<T2>{p2, s2.size()});
-  my_ityr::iro::checkin<Mode1>(p1, s1.size());
-  my_ityr::iro::checkin<Mode2>(p2, s2.size());
-}
-
-template <my_ityr::iro::access_mode Mode1,
-          my_ityr::iro::access_mode Mode2,
-          my_ityr::iro::access_mode Mode3,
-          typename T1, typename T2, typename T3, typename Fn>
-void with_checkout(gptr_span<T1> s1, gptr_span<T2> s2, gptr_span<T3> s3, Fn f) {
-  auto p1 = my_ityr::iro::checkout<Mode1>(s1.data(), s1.size());
-  auto p2 = my_ityr::iro::checkout<Mode2>(s2.data(), s2.size());
-  auto p3 = my_ityr::iro::checkout<Mode3>(s3.data(), s3.size());
-  f(raw_span<T1>{p1, s1.size()}, raw_span<T2>{p2, s2.size()}, raw_span<T3>{p3, s3.size()});
-  my_ityr::iro::checkin<Mode1>(p1, s1.size());
-  my_ityr::iro::checkin<Mode2>(p2, s2.size());
-  my_ityr::iro::checkin<Mode3>(p3, s3.size());
-}
+using global_span = my_ityr::template global_span<T>;
 
 enum class exec_t {
   Serial = 0,
@@ -283,8 +99,8 @@ size_t cutoff_merge  = 16 * 1024;
 size_t cutoff_quick  = 16 * 1024;
 
 #if !ITYR_BENCH_USE_SEQ_STL
-template <template<typename> typename Span, typename T>
-static inline T select_pivot(Span<const T> s) {
+template <typename T>
+static inline T select_pivot(raw_span<const T> s) {
   // median of three values
   if (s.size() < 3) return s[0];
   auto a = s[0];
@@ -295,8 +111,8 @@ static inline T select_pivot(Span<const T> s) {
   else                         return c;
 }
 
-template <template<typename> typename Span, typename T>
-void insertion_sort(Span<T> s) {
+template <typename T>
+void insertion_sort(raw_span<T> s) {
   for (size_t i = 1; i < s.size(); i++) {
     auto a = s[i];
     size_t j;
@@ -307,8 +123,8 @@ void insertion_sort(Span<T> s) {
   }
 }
 
-template <template<typename> typename Span, typename T>
-std::pair<Span<T>, Span<T>> partition_seq(Span<T> s, T pivot) {
+template <typename T>
+std::pair<raw_span<T>, raw_span<T>> partition_seq(raw_span<T> s, T pivot) {
   size_t l = 0;
   size_t h = s.size() - 1;
   while (true) {
@@ -321,15 +137,15 @@ std::pair<Span<T>, Span<T>> partition_seq(Span<T> s, T pivot) {
 }
 #endif
 
-template <template<typename> typename Span, typename T>
-void quicksort_seq(Span<T> s) {
+template <typename T>
+void quicksort_seq(raw_span<T> s) {
 #if ITYR_BENCH_USE_SEQ_STL
   std::sort(s.begin(), s.end());
 #else
   if (s.size() <= cutoff_insert) {
     insertion_sort(s);
   } else {
-    auto pivot = select_pivot(Span<const T>(s));
+    auto pivot = select_pivot(raw_span<const T>(s));
     auto [s1, s2] = partition_seq(s, pivot);
     quicksort_seq(s1);
     quicksort_seq(s2);
@@ -337,8 +153,8 @@ void quicksort_seq(Span<T> s) {
 #endif
 }
 
-template <template<typename> typename Span, typename T>
-void merge_seq(Span<const T> s1, Span<const T> s2, Span<T> dest) {
+template <typename T>
+void merge_seq(raw_span<const T> s1, raw_span<const T> s2, raw_span<T> dest) {
   assert(s1.size() + s2.size() == dest.size());
 
 #if ITYR_BENCH_USE_SEQ_STL
@@ -363,19 +179,19 @@ void merge_seq(Span<const T> s1, Span<const T> s2, Span<T> dest) {
     }
   }
   if (l1 >= s1.size()) {
-    Span dest_r = dest.subspan(d, s2.size() - l2);
-    Span src_r  = s2.subspan(l2, s2.size() - l2);
+    raw_span<T>       dest_r = dest.subspan(d, s2.size() - l2);
+    raw_span<const T> src_r  = s2.subspan(l2, s2.size() - l2);
     std::copy(src_r.begin(), src_r.end(), dest_r.begin());
   } else {
-    Span dest_r = dest.subspan(d, s1.size() - l1);
-    Span src_r  = s1.subspan(l1, s1.size() - l1);
+    raw_span<T>       dest_r = dest.subspan(d, s1.size() - l1);
+    raw_span<const T> src_r  = s1.subspan(l1, s1.size() - l1);
     std::copy(src_r.begin(), src_r.end(), dest_r.begin());
   }
 #endif
 }
 
-template <template<typename> typename Span, typename T>
-size_t binary_search(Span<const T> s, const T& v) {
+template <typename T>
+size_t binary_search(global_span<const T> s, const T& v) {
 #if ITYR_BENCH_USE_SEQ_STL
   auto it = std::lower_bound(s.begin(), s.end(), v);
   return it - s.begin();
@@ -391,8 +207,8 @@ size_t binary_search(Span<const T> s, const T& v) {
 #endif
 }
 
-template <template<typename> typename Span, typename T>
-void cilkmerge(Span<const T> s1, Span<const T> s2, Span<T> dest) {
+template <typename T>
+void cilkmerge(global_span<const T> s1, global_span<const T> s2, global_span<T> dest) {
   assert(s1.size() + s2.size() == dest.size());
 
   if (s1.size() < s2.size()) {
@@ -403,8 +219,8 @@ void cilkmerge(Span<const T> s1, Span<const T> s2, Span<T> dest) {
   if (s2.size() == 0) {
     auto ev = my_ityr::logger::record<my_ityr::logger_kind::Copy>();
 
-    with_checkout<my_ityr::iro::access_mode::read,
-                  my_ityr::iro::access_mode::write>(
+    ityr::with_checkout<my_ityr::iro::access_mode::read,
+                        my_ityr::iro::access_mode::write>(
         s1, dest, [&](auto s1_, auto dest_) {
       std::copy(s1_.begin(), s1_.end(), dest_.begin());
     });
@@ -420,9 +236,9 @@ void cilkmerge(Span<const T> s1, Span<const T> s2, Span<T> dest) {
   if (dest.size() <= cutoff_merge) {
     auto ev = my_ityr::logger::record<my_ityr::logger_kind::Merge>();
 
-    with_checkout<my_ityr::iro::access_mode::read,
-                  my_ityr::iro::access_mode::read,
-                  my_ityr::iro::access_mode::write>(
+    ityr::with_checkout<my_ityr::iro::access_mode::read,
+                        my_ityr::iro::access_mode::read,
+                        my_ityr::iro::access_mode::write>(
         s1, s2, dest, [&](auto s1_, auto s2_, auto dest_) {
       auto ev2 = my_ityr::logger::record<my_ityr::logger_kind::MergeKernel>();
       merge_seq(s1_, s2_, dest_);
@@ -443,19 +259,19 @@ void cilkmerge(Span<const T> s1, Span<const T> s2, Span<T> dest) {
   auto [dest1, dest2] = dest.divide(split1 + split2);
 
   my_ityr::parallel_invoke(
-    cilkmerge<Span, T>, s11, s21, dest1,
-    cilkmerge<Span, T>, s12, s22, dest2
+    cilkmerge<T>, s11, s21, dest1,
+    cilkmerge<T>, s12, s22, dest2
   );
 }
 
-template <template<typename> typename Span, typename T>
-void cilksort(Span<T> a, Span<T> b) {
+template <typename T>
+void cilksort(global_span<T> a, global_span<T> b) {
   assert(a.size() == b.size());
 
   if (a.size() <= cutoff_quick) {
     auto ev = my_ityr::logger::record<my_ityr::logger_kind::Quicksort>();
 
-    with_checkout<my_ityr::iro::access_mode::read_write>(a, [&](auto a_) {
+    ityr::with_checkout<my_ityr::iro::access_mode::read_write>(a, [&](auto a_) {
       auto ev2 = my_ityr::logger::record<my_ityr::logger_kind::QuicksortKernel>();
       quicksort_seq(a_);
     });
@@ -477,18 +293,18 @@ void cilksort(Span<T> a, Span<T> b) {
   auto [b3, b4] = b34.divide_two();
 
   my_ityr::parallel_invoke(
-    cilksort<Span, T>, a1, b1,
-    cilksort<Span, T>, a2, b2,
-    cilksort<Span, T>, a3, b3,
-    cilksort<Span, T>, a4, b4
+    cilksort<T>, a1, b1,
+    cilksort<T>, a2, b2,
+    cilksort<T>, a3, b3,
+    cilksort<T>, a4, b4
   );
 
   my_ityr::parallel_invoke(
-    cilkmerge<Span, T>, Span<const T>(a1), Span<const T>(a2), b12,
-    cilkmerge<Span, T>, Span<const T>(a3), Span<const T>(a4), b34
+    cilkmerge<T>, global_span<const T>(a1), global_span<const T>(a2), b12,
+    cilkmerge<T>, global_span<const T>(a3), global_span<const T>(a4), b34
   );
 
-  cilkmerge(Span<const T>(b12), Span<const T>(b34), a);
+  cilkmerge(global_span<const T>(b12), global_span<const T>(b34), a);
 }
 
 template <typename T, typename Rng>
@@ -505,8 +321,8 @@ gen_random_elem(Rng& r) {
   return dist(r);
 }
 
-template <template<typename> typename Span, typename T>
-void init_array(Span<T> s) {
+template <typename T>
+void init_array(global_span<T> s) {
   static int counter = 0;
   auto seed = counter++;
 
@@ -524,8 +340,8 @@ void init_array(Span<T> s) {
   /* std::cout << std::endl; */
 }
 
-template <template<typename> typename Span, typename T>
-bool check_sorted(Span<const T> s) {
+template <typename T>
+bool check_sorted(global_span<const T> s) {
   struct acc_type {
     bool is_init;
     bool success;
@@ -543,8 +359,8 @@ bool check_sorted(Span<const T> s) {
   return ret.success;
 }
 
-template <template<typename> typename Span, typename T>
-void run(Span<T> a, Span<T> b) {
+template <typename T>
+void run(global_span<T> a, global_span<T> b) {
   for (int r = 0; r < n_repeats; r++) {
     if (my_rank == 0) {
       uint64_t t0 = my_ityr::wallclock::get_time();
@@ -599,7 +415,7 @@ void run(Span<T> a, Span<T> b) {
         uint64_t t0 = my_ityr::wallclock::get_time();
         /* bool success = std::is_sorted(a.begin(), a.end()); */
         bool success = my_ityr::root_spawn([=]() {
-          return check_sorted(Span<const T>(a));
+          return check_sorted(global_span<const T>(a));
         });
         uint64_t t1 = my_ityr::wallclock::get_time();
         if (success) {
@@ -697,29 +513,16 @@ int real_main(int argc, char **argv) {
 
   my_ityr::iro::init(cache_size * 1024 * 1024);
 
-  if (exec_type == exec_t::Parallel) {
-    auto array = my_ityr::iro::malloc<elem_t>(n_input);
-    auto buf   = my_ityr::iro::malloc<elem_t>(n_input);
+  auto array = my_ityr::iro::malloc<elem_t>(n_input);
+  auto buf   = my_ityr::iro::malloc<elem_t>(n_input);
 
-    gptr_span<elem_t> a(array, n_input);
-    gptr_span<elem_t> b(buf  , n_input);
+  global_span<elem_t> a(array, n_input);
+  global_span<elem_t> b(buf  , n_input);
 
-    run(a, b);
+  run(a, b);
 
-    my_ityr::iro::free(array);
-    my_ityr::iro::free(buf);
-  } else {
-    elem_t* array = (elem_t*)malloc(sizeof(elem_t) * n_input);
-    elem_t* buf   = (elem_t*)malloc(sizeof(elem_t) * n_input);
-
-    raw_span<elem_t> a(array, n_input);
-    raw_span<elem_t> b(buf  , n_input);
-
-    run(a, b);
-
-    free(array);
-    free(buf);
-  }
+  my_ityr::iro::free(array);
+  my_ityr::iro::free(buf);
 
   my_ityr::iro::fini();
 

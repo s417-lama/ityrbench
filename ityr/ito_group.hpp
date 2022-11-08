@@ -34,7 +34,7 @@ public:
 
 template <typename P, std::size_t MaxTasks, bool SpawnLastTask>
 class ito_group_naive {
-  using iro = typename P::iro_t;
+  using iro = typename P::iro;
 
   madm::uth::thread<void> tasks_[MaxTasks];
   std::size_t n_ = 0;
@@ -70,7 +70,7 @@ public:
 
 template <typename P, std::size_t MaxTasks, bool SpawnLastTask>
 class ito_group_workfirst {
-  using iro = typename P::iro_t;
+  using iro = typename P::iro;
 
   madm::uth::thread<void> tasks_[MaxTasks];
   bool all_synched_ = true;
@@ -133,7 +133,7 @@ public:
 
 template <typename P, std::size_t MaxTasks, bool SpawnLastTask>
 class ito_group_workfirst_lazy {
-  using iro = typename P::iro_t;
+  using iro = typename P::iro;
 
   madm::uth::thread<void> tasks_[MaxTasks];
   bool all_synched_ = true;
@@ -199,7 +199,7 @@ public:
 struct ito_group_policy_default {
   template <typename P_, std::size_t MaxTasks, bool SpawnLastTask>
   using ito_group_impl_t = ito_group_serial<P_, MaxTasks, SpawnLastTask>;
-  using iro_t = iro_if<iro_policy_default>;
+  using iro = iro_if<iro_policy_default>;
   static int rank() { return 0; }
   static int n_ranks() { return 1; }
 };

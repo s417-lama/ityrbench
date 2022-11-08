@@ -13,6 +13,7 @@
 #include "ityr/ito_group.hpp"
 #include "ityr/ito_pattern.hpp"
 #include "ityr/logger/logger.hpp"
+#include "ityr/span.hpp"
 
 namespace ityr {
 
@@ -24,7 +25,7 @@ class ityr_if {
   struct iro_policy : public iro_policy_default {
     template <typename P_>
     using iro_impl_t = typename P::template iro_t<P_>;
-    struct iro_ref_policy { using iro_t = iro_if<iro_policy>; };
+    struct iro_ref_policy { using iro = iro_if<iro_policy>; };
     template <typename GPtrT>
     using global_ref = iro_ref<iro_ref_policy, GPtrT>;
     using wallclock_t = typename P::wallclock_t;
@@ -36,7 +37,7 @@ class ityr_if {
   struct logger_policy : public logger_policy_default {
     template <typename P_>
     using logger_impl_t = typename P::template logger_impl_t<P_>;
-    using iro_t = iro_;
+    using iro = iro_;
     using wallclock_t = typename P::wallclock_t;
     using logger_kind_t = typename P::logger_kind_t;
     static const char* outfile_prefix() { return "ityr"; }
@@ -46,7 +47,7 @@ class ityr_if {
   struct ito_group_policy : public ito_group_policy_default {
     template <typename P_, std::size_t MaxTasks, bool SpawnLastTask>
     using ito_group_impl_t = typename P::template ito_group_t<P_, MaxTasks, SpawnLastTask>;
-    using iro_t = iro_;
+    using iro = iro_;
     static int rank() { return P::rank(); }
     static int n_ranks() { return P::n_ranks(); }
   };
@@ -56,11 +57,18 @@ class ityr_if {
   struct ito_pattern_policy : public ito_pattern_policy_default {
     template <typename P_>
     using ito_pattern_impl_t = typename P::template ito_pattern_t<P_>;
-    using iro_t = iro_;
+    using iro = iro_;
     static int rank() { return P::rank(); }
     static int n_ranks() { return P::n_ranks(); }
   };
   using ito_pattern_ = ito_pattern_if<ito_pattern_policy>;
+
+  struct global_span_policy : public global_span_policy_default {
+    using iro = iro_;
+    using ito_pattern = ito_pattern_;
+  };
+  template <typename T>
+  using global_span_ = global_span_if<global_span_policy, T>;
 
 public:
   using wallclock = typename P::wallclock_t;
@@ -70,6 +78,10 @@ public:
   using ito_pattern = ito_pattern_;
   using logger_kind = typename P::logger_kind_t::value;
   using logger = logger_;
+  template <typename T>
+  using global_ptr = typename iro::template global_ptr<T>;
+  template <typename T>
+  using global_span = global_span_<T>;
 
   static int rank() { return P::rank(); }
   static int n_ranks() { return P::n_ranks(); }

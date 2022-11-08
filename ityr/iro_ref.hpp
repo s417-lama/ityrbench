@@ -10,7 +10,7 @@ class iro_ref : public pcas::global_ref_base<GPtrT> {
   using this_t = iro_ref;
   using ptr_t = GPtrT;
   using value_t = typename GPtrT::value_type;
-  using iro = typename P::iro_t;
+  using iro = typename P::iro;
 
   using base_t::ptr_;
 

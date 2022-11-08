@@ -15,7 +15,7 @@ namespace logger {
 
 template <typename P>
 class logger_if {
-  using iro = typename P::iro_t;
+  using iro = typename P::iro;
   using kind = typename P::logger_kind_t;
   using impl = typename P::template logger_impl_t<P>;
 
@@ -103,7 +103,7 @@ public:
 struct logger_policy_default {
   template <typename P>
   using logger_impl_t = logger::impl_dummy<P>;
-  using iro_t = iro_if<iro_policy_default>;
+  using iro = iro_if<iro_policy_default>;
   using wallclock_t = wallclock_native;
   using logger_kind_t = logger::kind_dummy;
   static const char* outfile_prefix() { return "ityr"; }

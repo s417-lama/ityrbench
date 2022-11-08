@@ -66,7 +66,7 @@ namespace ityr {
 template <typename Iterator>
 using iterator_diff_t = typename std::iterator_traits<Iterator>::difference_type;
 
-template <typename P, typename P::iro_t::access_mode Mode,
+template <typename P, typename P::iro::access_mode Mode,
           typename ForwardIterator, typename Fn>
 inline void for_each_serial(ForwardIterator                  first,
                             ForwardIterator                  last,
@@ -80,9 +80,9 @@ inline void for_each_serial(ForwardIterator                  first,
   if (cutoff > iterator_diff_t<ForwardIterator>(1)) {
     if constexpr (pcas::is_global_ptr_v<ForwardIterator>) {
       auto d = std::distance(first, last);
-      auto first_ = P::iro_t::template checkout<Mode>(first, d);
+      auto first_ = P::iro::template checkout<Mode>(first, d);
       for_each_serial<P, Mode>(first_, first_ + d, f, cutoff);
-      P::iro_t::template checkin<Mode>(first_, d);
+      P::iro::template checkin<Mode>(first_, d);
       return;
     }
   }
@@ -92,7 +92,7 @@ inline void for_each_serial(ForwardIterator                  first,
   }
 }
 
-template <typename P, typename P::iro_t::access_mode Mode1, typename P::iro_t::access_mode Mode2,
+template <typename P, typename P::iro::access_mode Mode1, typename P::iro::access_mode Mode2,
           typename ForwardIterator1, typename ForwardIterator2, typename Fn>
 inline void for_each_serial(ForwardIterator1                  first1,
                             ForwardIterator1                  last1,
@@ -102,16 +102,16 @@ inline void for_each_serial(ForwardIterator1                  first1,
   if (cutoff > iterator_diff_t<ForwardIterator1>(1)) {
     if constexpr (pcas::is_global_ptr_v<ForwardIterator1>) {
       auto d = std::distance(first1, last1);
-      auto first1_ = P::iro_t::template checkout<Mode1>(first1, d);
+      auto first1_ = P::iro::template checkout<Mode1>(first1, d);
       for_each_serial<P, Mode1, Mode2>(first1_, first1_ + d, first2, f, cutoff);
-      P::iro_t::template checkin<Mode1>(first1_, d);
+      P::iro::template checkin<Mode1>(first1_, d);
       return;
 
     } else if constexpr (pcas::is_global_ptr_v<ForwardIterator2>) {
       auto d = std::distance(first1, last1);
-      auto first2_ = P::iro_t::template checkout<Mode2>(first2, d);
+      auto first2_ = P::iro::template checkout<Mode2>(first2, d);
       for_each_serial<P, Mode1, Mode2>(first1, last1, first2_, f, cutoff);
-      P::iro_t::template checkin<Mode2>(first2_, d);
+      P::iro::template checkin<Mode2>(first2_, d);
       return;
     }
   }
@@ -121,7 +121,7 @@ inline void for_each_serial(ForwardIterator1                  first1,
   }
 }
 
-template <typename P, typename P::iro_t::access_mode Mode1, typename P::iro_t::access_mode Mode2, typename P::iro_t::access_mode Mode3,
+template <typename P, typename P::iro::access_mode Mode1, typename P::iro::access_mode Mode2, typename P::iro::access_mode Mode3,
           typename ForwardIterator1, typename ForwardIterator2, typename ForwardIterator3, typename Fn>
 inline void for_each_serial(ForwardIterator1                  first1,
                             ForwardIterator1                  last1,
@@ -132,23 +132,23 @@ inline void for_each_serial(ForwardIterator1                  first1,
   if (cutoff > iterator_diff_t<ForwardIterator1>(1)) {
     if constexpr (pcas::is_global_ptr_v<ForwardIterator1>) {
       auto d = std::distance(first1, last1);
-      auto first1_ = P::iro_t::template checkout<Mode1>(first1, d);
+      auto first1_ = P::iro::template checkout<Mode1>(first1, d);
       for_each_serial<P, Mode1, Mode2, Mode3>(first1_, first1_ + d, first2, first3, f, cutoff);
-      P::iro_t::template checkin<Mode1>(first1_, d);
+      P::iro::template checkin<Mode1>(first1_, d);
       return;
 
     } else if constexpr (pcas::is_global_ptr_v<ForwardIterator2>) {
       auto d = std::distance(first1, last1);
-      auto first2_ = P::iro_t::template checkout<Mode2>(first2, d);
+      auto first2_ = P::iro::template checkout<Mode2>(first2, d);
       for_each_serial<P, Mode1, Mode2, Mode3>(first1, last1, first2_, first3, f, cutoff);
-      P::iro_t::template checkin<Mode2>(first2_, d);
+      P::iro::template checkin<Mode2>(first2_, d);
       return;
 
     } else if constexpr (pcas::is_global_ptr_v<ForwardIterator3>) {
       auto d = std::distance(first1, last1);
-      auto first3_ = P::iro_t::template checkout<Mode3>(first3, d);
+      auto first3_ = P::iro::template checkout<Mode3>(first3, d);
       for_each_serial<P, Mode1, Mode2, Mode3>(first1, last1, first2, first3_, f, cutoff);
-      P::iro_t::template checkin<Mode3>(first3_, d);
+      P::iro::template checkin<Mode3>(first3_, d);
       return;
     }
   }
@@ -173,7 +173,7 @@ public:
     return impl::parallel_invoke(std::forward<Args>(args)...);
   };
 
-  template <typename P::iro_t::access_mode Mode, typename ForwardIterator, typename Fn>
+  template <typename P::iro::access_mode Mode, typename ForwardIterator, typename Fn>
   static void parallel_for(ForwardIterator                  first,
                            ForwardIterator                  last,
                            Fn                               f,
@@ -226,7 +226,7 @@ public:
 
 template <typename P>
 class ito_pattern_serial {
-  using iro = typename P::iro_t;
+  using iro = typename P::iro;
 
   struct parallel_invoke_inner_state {
     template <typename RetVal, typename Fn, typename ArgsTuple, typename... Rest>
@@ -255,7 +255,7 @@ public:
     return s.parallel_invoke(std::forward<Args>(args)...);
   }
 
-  template <typename P::iro_t::access_mode Mode, typename ForwardIterator, typename Fn>
+  template <typename P::iro::access_mode Mode, typename ForwardIterator, typename Fn>
   static void parallel_for(ForwardIterator                  first,
                            ForwardIterator                  last,
                            Fn                               f,
@@ -310,7 +310,7 @@ public:
 
 template <typename P>
 class ito_pattern_naive {
-  using iro = typename P::iro_t;
+  using iro = typename P::iro;
 
   struct parallel_invoke_inner_state {
     template <typename RetVal, typename Fn, typename ArgsTuple>
@@ -382,7 +382,7 @@ public:
     return ret;
   }
 
-  template <typename P::iro_t::access_mode Mode, typename ForwardIterator, typename Fn>
+  template <typename P::iro::access_mode Mode, typename ForwardIterator, typename Fn>
   static void parallel_for(ForwardIterator                  first,
                            ForwardIterator                  last,
                            Fn                               f,
@@ -517,7 +517,7 @@ public:
 
 template <typename P>
 class ito_pattern_workfirst {
-  using iro = typename P::iro_t;
+  using iro = typename P::iro;
 
   struct parallel_invoke_inner_state {
     bool all_synched = true;
@@ -581,7 +581,7 @@ class ito_pattern_workfirst {
     ITYR_PARALLEL_INVOKE_DEF(8, parallel_invoke_impl)
   };
 
-  template <typename P::iro_t::access_mode Mode, typename ForwardIterator, typename Fn>
+  template <typename P::iro::access_mode Mode, typename ForwardIterator, typename Fn>
   static bool parallel_for_impl(ForwardIterator                  first,
                                 ForwardIterator                  last,
                                 Fn                               f,
@@ -803,7 +803,7 @@ public:
     return ret;
   }
 
-  template <typename P::iro_t::access_mode Mode, typename ForwardIterator, typename Fn>
+  template <typename P::iro::access_mode Mode, typename ForwardIterator, typename Fn>
   static void parallel_for(ForwardIterator                  first,
                            ForwardIterator                  last,
                            Fn                               f,
@@ -884,7 +884,7 @@ public:
 
 template <typename P>
 class ito_pattern_workfirst_lazy {
-  using iro = typename P::iro_t;
+  using iro = typename P::iro;
 
   struct parallel_invoke_inner_state {
     typename iro::release_handler rh;
@@ -949,7 +949,7 @@ class ito_pattern_workfirst_lazy {
     ITYR_PARALLEL_INVOKE_DEF(8, parallel_invoke_impl)
   };
 
-  template <typename P::iro_t::access_mode Mode, typename ForwardIterator, typename Fn>
+  template <typename P::iro::access_mode Mode, typename ForwardIterator, typename Fn>
   static bool parallel_for_impl(ForwardIterator                  first,
                                 ForwardIterator                  last,
                                 Fn                               f,
@@ -1175,7 +1175,7 @@ public:
     return ret;
   }
 
-  template <typename P::iro_t::access_mode Mode, typename ForwardIterator, typename Fn>
+  template <typename P::iro::access_mode Mode, typename ForwardIterator, typename Fn>
   static void parallel_for(ForwardIterator                  first,
                            ForwardIterator                  last,
                            Fn                               f,
@@ -1261,7 +1261,7 @@ public:
 struct ito_pattern_policy_default {
   template <typename P_>
   using ito_pattern_impl_t = ito_pattern_serial<P_>;
-  using iro_t = iro_if<iro_policy_default>;
+  using iro = iro_if<iro_policy_default>;
   static int rank() { return 0; }
   static int n_ranks() { return 1; }
 };
