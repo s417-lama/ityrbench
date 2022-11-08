@@ -10,11 +10,14 @@
 #include "verify.h"
 using namespace EXAFMM_NAMESPACE;
 
-int main(int argc, char ** argv) {
+int real_main(int argc, char ** argv) {
   const vec3 cycle = 2 * M_PI;
   const real_t eps2 = 0.0;
   const complex_t wavek = complex_t(10.,1.) / real_t(2 * M_PI);
   Args args(argc, argv);
+
+  my_ityr::iro::init(args.cache_size * 1024 * 1024);
+
   Bodies bodies, bodies2, jbodies, buffer;
   BoundBox boundBox;
   Bounds bounds;
@@ -136,5 +139,13 @@ int main(int argc, char ** argv) {
     traversal.writeMatrix(bodies, jbodies);
   }
   logger::writeDAG();
+
+  my_ityr::iro::fini();
+
+  return 0;
+}
+
+int main(int argc, char** argv) {
+  my_ityr::main(real_main, argc, argv);
   return 0;
 }

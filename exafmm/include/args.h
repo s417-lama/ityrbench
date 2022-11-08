@@ -32,6 +32,7 @@ namespace EXAFMM_NAMESPACE {
     {"threads",      required_argument, 0, 'T'},
     {"verbose",      no_argument,       0, 'v'},
     {"write",        no_argument,       0, 'w'},
+    {"cache-size",   no_argument,       0, 'x'},
     {0, 0, 0, 0}
   };
 
@@ -55,6 +56,7 @@ namespace EXAFMM_NAMESPACE {
     int threads;
     int verbose;
     int write;
+    std::size_t cache_size;
 
   private:
     void usage(char * name) {
@@ -79,7 +81,8 @@ namespace EXAFMM_NAMESPACE {
 	      " --theta (-t)                    : Multipole acceptance criterion (%f)\n"
 	      " --threads (-T)                  : Number of threads (%d)\n"
 	      " --verbose (-v)                  : Print information to screen (%d)\n"
-	      " --write (-w)                    : Write timings to file (%d)\n",
+	      " --write (-w)                    : Write timings to file (%d)\n"
+	      " --cache-size (-x)               : Cache size for PCAS (%ld)\n",
 	      name,
               accuracy,
 	      ncrit,
@@ -98,7 +101,8 @@ namespace EXAFMM_NAMESPACE {
 	      theta,
 	      threads,
 	      verbose,
-	      write);
+	      write,
+              cache_size);
     }
 
     const char * parseDistribution(const char * arg) {
@@ -203,10 +207,11 @@ namespace EXAFMM_NAMESPACE {
       theta(.4),
       threads(16),
       verbose(0),
-      write(0) {
+      write(0),
+      cache_size(16) {
       while (1) {
 	int option_index;
-	int c = getopt_long(argc, argv, "ab:c:d:De:gGhi:jmMn:op:P:r:s:t:T:vwx", long_options, &option_index);
+	int c = getopt_long(argc, argv, "ab:c:d:De:gGhi:jmMn:op:P:r:s:t:T:vwx:", long_options, &option_index);
 	if (c == -1) break;
 	switch (c) {
 	case 'a':
@@ -265,6 +270,9 @@ namespace EXAFMM_NAMESPACE {
 	  break;
 	case 'w':
 	  write = 1;
+	  break;
+	case 'x':
+	  cache_size = atoll(optarg);
 	  break;
 	default:
 	  usage(argv[0]);
@@ -330,7 +338,9 @@ namespace EXAFMM_NAMESPACE {
 		  << std::setw(stringLength)
 		  << "verbose" << " : " << verbose << std::endl
 		  << std::setw(stringLength)
-		  << "write" << " : " << write << std::endl;
+		  << "write" << " : " << write << std::endl
+		  << std::setw(stringLength)
+		  << "cache_size" << " : " << cache_size << " MB" << std::endl;
       }
     }
   };

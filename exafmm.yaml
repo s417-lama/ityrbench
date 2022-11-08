@@ -63,7 +63,8 @@ run:
         -r $KOCHI_PARAM_REPEATS
         -t $KOCHI_PARAM_THETA
         -s $KOCHI_PARAM_NSPAWN
-        -c $KOCHI_PARAM_NCRIT"
+        -c $KOCHI_PARAM_NCRIT
+        -x $KOCHI_PARAM_CACHE_SIZE"
 
     n_nodes=$(echo $KOCHI_PARAM_NODES | cut -f 1 -d ":" | sed 's/x/*/g' | bc)
 

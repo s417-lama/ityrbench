@@ -9,7 +9,13 @@
 #include <vector>
 #include "vec.h"
 
+#include "ityr/ityr.hpp"
+
 namespace EXAFMM_NAMESPACE {
+  using my_ityr = ityr::ityr_if<ityr::ityr_policy>;
+  template <typename T>
+  using global_ptr = my_ityr::iro::global_ptr<T>;
+
   // Basic type definitions
 #if EXAFMM_SINGLE
   typedef float real_t;                                         //!< Floating point type is single precision
