@@ -105,8 +105,23 @@ public:
   }
 
   template <typename iro::access_mode Mode, typename... Args>
+  static auto serial_for(Args&&... args) {
+    return ito_pattern::template serial_for<Mode>(std::forward<Args>(args)...);
+  }
+
+  template <typename iro::access_mode Mode1, typename iro::access_mode Mode2, typename... Args>
+  static auto serial_for(Args&&... args) {
+    return ito_pattern::template serial_for<Mode1, Mode2>(std::forward<Args>(args)...);
+  }
+
+  template <typename iro::access_mode Mode, typename... Args>
   static auto parallel_for(Args&&... args) {
     return ito_pattern::template parallel_for<Mode>(std::forward<Args>(args)...);
+  }
+
+  template <typename iro::access_mode Mode1, typename iro::access_mode Mode2, typename... Args>
+  static auto parallel_for(Args&&... args) {
+    return ito_pattern::template parallel_for<Mode1, Mode2>(std::forward<Args>(args)...);
   }
 
   template <typename... Args>

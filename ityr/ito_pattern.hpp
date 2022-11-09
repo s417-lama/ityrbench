@@ -174,11 +174,39 @@ public:
   };
 
   template <typename P::iro::access_mode Mode, typename ForwardIterator, typename Fn>
+  static void serial_for(ForwardIterator                  first,
+                         ForwardIterator                  last,
+                         Fn                               f,
+                         iterator_diff_t<ForwardIterator> cutoff = {1}) {
+    for_each_serial<P, Mode>(first, last, f, cutoff);
+  }
+
+  template <typename P::iro::access_mode Mode1, typename P::iro::access_mode Mode2,
+            typename ForwardIterator1, typename ForwardIterator2, typename Fn>
+  static void serial_for(ForwardIterator1                  first1,
+                         ForwardIterator1                  last1,
+                         ForwardIterator2                  first2,
+                         Fn                                f,
+                         iterator_diff_t<ForwardIterator1> cutoff = {1}) {
+    for_each_serial<P, Mode1, Mode2>(first1, last1, first2, f, cutoff);
+  }
+
+  template <typename P::iro::access_mode Mode, typename ForwardIterator, typename Fn>
   static void parallel_for(ForwardIterator                  first,
                            ForwardIterator                  last,
                            Fn                               f,
                            iterator_diff_t<ForwardIterator> cutoff = {1}) {
     impl::template parallel_for<Mode>(first, last, f, cutoff);
+  }
+
+  template <typename P::iro::access_mode Mode1, typename P::iro::access_mode Mode2,
+            typename ForwardIterator1, typename ForwardIterator2, typename Fn>
+  static void parallel_for(ForwardIterator1                  first1,
+                           ForwardIterator1                  last1,
+                           ForwardIterator2                  first2,
+                           Fn                                f,
+                           iterator_diff_t<ForwardIterator1> cutoff = {1}) {
+    impl::template parallel_for<Mode1, Mode2>(first1, last1, first2, f, cutoff);
   }
 
   template <typename ForwardIterator, typename T, typename ReduceOp>
@@ -261,6 +289,16 @@ public:
                            Fn                               f,
                            iterator_diff_t<ForwardIterator> cutoff) {
     for_each_serial<P, Mode>(first, last, f, cutoff);
+  }
+
+  template <typename P::iro::access_mode Mode1, typename P::iro::access_mode Mode2,
+            typename ForwardIterator1, typename ForwardIterator2, typename Fn>
+  static void parallel_for(ForwardIterator1                  first1,
+                           ForwardIterator1                  last1,
+                           ForwardIterator2                  first2,
+                           Fn                                f,
+                           iterator_diff_t<ForwardIterator1> cutoff) {
+    for_each_serial<P, Mode1, Mode2>(first1, last1, first2, f, cutoff);
   }
 
   template <typename ForwardIterator, typename T, typename ReduceOp, typename TransformOp>
@@ -401,7 +439,37 @@ public:
       }};
       iro::acquire();
 
-      parallel_for<Mode>(mid, last, std::forward<Fn>(f), cutoff);
+      parallel_for<Mode>(mid, last, f, cutoff);
+
+      iro::release();
+      th.join();
+      iro::acquire();
+    }
+  }
+
+  template <typename P::iro::access_mode Mode1, typename P::iro::access_mode Mode2,
+            typename ForwardIterator1, typename ForwardIterator2, typename Fn>
+  static void parallel_for(ForwardIterator1                  first1,
+                           ForwardIterator1                  last1,
+                           ForwardIterator2                  first2,
+                           Fn                                f,
+                           iterator_diff_t<ForwardIterator1> cutoff) {
+    auto d = std::distance(first1, last1);
+    if (d <= cutoff) {
+      for_each_serial<P, Mode1, Mode2>(first1, last1, first2, f, cutoff);
+    } else {
+      auto mid1 = std::next(first1, d / 2);
+
+      iro::release();
+      auto th = madm::uth::thread<void>{[=] {
+        iro::acquire();
+        parallel_for<Mode1, Mode2>(first1, mid1, first2, f, cutoff);
+        iro::release();
+      }};
+      iro::acquire();
+
+      auto mid2 = std::next(first2, d / 2);
+      parallel_for<Mode1, Mode2>(mid1, last1, mid2, f, cutoff);
 
       iro::release();
       th.join();
@@ -621,6 +689,49 @@ class ito_pattern_workfirst {
     }
   }
 
+  template <typename P::iro::access_mode Mode1, typename P::iro::access_mode Mode2,
+            typename ForwardIterator1, typename ForwardIterator2, typename Fn>
+  static bool parallel_for_impl(ForwardIterator1                  first1,
+                                ForwardIterator1                  last1,
+                                ForwardIterator2                  first2,
+                                Fn                                f,
+                                iterator_diff_t<ForwardIterator1> cutoff) {
+    iro::poll();
+
+    auto d = std::distance(first1, last1);
+    if (d <= cutoff) {
+      for_each_serial<P, Mode1, Mode2>(first1, last1, first2, f, cutoff);
+      return true;
+    } else {
+      auto mid1 = std::next(first1, d / 2);
+
+      auto th = madm::uth::thread<void>{};
+      bool synched = th.spawn_aux(
+        parallel_for_impl<Mode1, Mode2, ForwardIterator1, ForwardIterator2, Fn>,
+        std::make_tuple(first1, mid1, first2, f, cutoff),
+        [=] (bool parent_popped) {
+          // on-die callback
+          if (!parent_popped) {
+            iro::release();
+          }
+        }
+      );
+      if (!synched) {
+        iro::acquire();
+      }
+
+      auto mid2 = std::next(first2, d / 2);
+      synched &= parallel_for_impl<Mode1, Mode2>(mid1, last1, mid2, f, cutoff);
+
+      th.join_aux(0, [&] {
+        // on-block callback
+        iro::release();
+      });
+
+      return synched;
+    }
+  }
+
   template <bool TopLevel, typename ForwardIterator, typename T, typename ReduceOp, typename TransformOp>
   static std::conditional_t<TopLevel, std::tuple<T, bool>, T>
   parallel_reduce_impl(ForwardIterator                  first,
@@ -811,7 +922,25 @@ public:
     iro::poll();
 
     iro::release();
-    bool synched = parallel_for_impl<Mode>(first, last, std::forward<Fn>(f), cutoff);
+    bool synched = parallel_for_impl<Mode>(first, last, f, cutoff);
+    if (!synched) {
+      iro::acquire();
+    }
+
+    iro::poll();
+  }
+
+  template <typename P::iro::access_mode Mode1, typename P::iro::access_mode Mode2,
+            typename ForwardIterator1, typename ForwardIterator2, typename Fn>
+  static void parallel_for(ForwardIterator1                  first1,
+                           ForwardIterator1                  last1,
+                           ForwardIterator2                  first2,
+                           Fn                                f,
+                           iterator_diff_t<ForwardIterator1> cutoff) {
+    iro::poll();
+
+    iro::release();
+    bool synched = parallel_for_impl<Mode1, Mode2>(first1, last1, first2, f, cutoff);
     if (!synched) {
       iro::acquire();
     }
@@ -980,6 +1109,50 @@ class ito_pattern_workfirst_lazy {
       }
 
       synched &= parallel_for_impl<Mode>(mid, last, f, cutoff, rh);
+
+      th.join_aux(0, [&] {
+        // on-block callback
+        iro::release();
+      });
+
+      return synched;
+    }
+  }
+
+  template <typename P::iro::access_mode Mode1, typename P::iro::access_mode Mode2,
+            typename ForwardIterator1, typename ForwardIterator2, typename Fn>
+  static bool parallel_for_impl(ForwardIterator1                  first1,
+                                ForwardIterator1                  last1,
+                                ForwardIterator2                  first2,
+                                Fn                                f,
+                                iterator_diff_t<ForwardIterator1> cutoff,
+                                typename iro::release_handler     rh) {
+    iro::poll();
+
+    auto d = std::distance(first1, last1);
+    if (d <= cutoff) {
+      for_each_serial<P, Mode1, Mode2>(first1, last1, first2, f, cutoff);
+      return true;
+    } else {
+      auto mid1 = std::next(first1, d / 2);
+
+      auto th = madm::uth::thread<void>{};
+      bool synched = th.spawn_aux(
+        parallel_for_impl<Mode1, Mode2, ForwardIterator1, ForwardIterator2, Fn>,
+        std::make_tuple(first1, mid1, first2, f, cutoff, rh),
+        [=] (bool parent_popped) {
+          // on-die callback
+          if (!parent_popped) {
+            iro::release();
+          }
+        }
+      );
+      if (!synched) {
+        iro::acquire(rh);
+      }
+
+      auto mid2 = std::next(first2, d / 2);
+      synched &= parallel_for_impl<Mode1, Mode2>(mid1, last1, mid2, f, cutoff, rh);
 
       th.join_aux(0, [&] {
         // on-block callback
@@ -1184,7 +1357,26 @@ public:
 
     typename iro::release_handler rh;
     iro::release_lazy(&rh);
-    bool synched = parallel_for_impl<Mode>(first, last, std::forward<Fn>(f), cutoff, rh);
+    bool synched = parallel_for_impl<Mode>(first, last, f, cutoff, rh);
+    if (!synched) {
+      iro::acquire();
+    }
+
+    iro::poll();
+  }
+
+  template <typename P::iro::access_mode Mode1, typename P::iro::access_mode Mode2,
+            typename ForwardIterator1, typename ForwardIterator2, typename Fn>
+  static void parallel_for(ForwardIterator1                  first1,
+                           ForwardIterator1                  last1,
+                           ForwardIterator2                  first2,
+                           Fn                                f,
+                           iterator_diff_t<ForwardIterator1> cutoff) {
+    iro::poll();
+
+    typename iro::release_handler rh;
+    iro::release_lazy(&rh);
+    bool synched = parallel_for_impl<Mode1, Mode2>(first1, last1, first2, f, cutoff, rh);
     if (!synched) {
       iro::acquire();
     }

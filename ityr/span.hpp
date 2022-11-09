@@ -13,30 +13,41 @@ namespace ityr {
 template <typename T>
 class raw_span {
   using this_t = raw_span<T>;
+
   T* ptr_;
-  size_t n_;
+  std::size_t n_;
 
 public:
-  using value_type = T;
+  using element_type = T;
+  using value_type = std::remove_cv_t<T>;
+  using iterator = T*;
+  using pointer = T*;
+  using reference = T&;
 
-  raw_span(T* ptr, size_t n) : ptr_(ptr), n_(n) {}
+  raw_span() : ptr_(nullptr), n_(0) {}
+  raw_span(T* ptr, std::size_t n) : ptr_(ptr), n_(n) {}
   template <typename U>
   raw_span(raw_span<U> s) : ptr_(s.data()), n_(s.size() * sizeof(U) / sizeof(T)) {}
 
-  constexpr T* data() const noexcept { return ptr_; }
-  constexpr size_t size() const noexcept { return n_; }
+  constexpr pointer data() const noexcept { return ptr_; }
+  constexpr std::size_t size() const noexcept { return n_; }
 
-  constexpr T* begin() const noexcept { return ptr_; }
-  constexpr T* end()   const noexcept { return ptr_ + n_; }
+  constexpr iterator begin() const noexcept { return ptr_; }
+  constexpr iterator end()   const noexcept { return ptr_ + n_; }
 
-  constexpr T& operator[](size_t i) const { assert(i < n_); return ptr_[i]; }
+  constexpr reference operator[](std::size_t i) const { assert(i < n_); return ptr_[i]; }
 
-  constexpr this_t subspan(size_t offset, size_t count) const {
+  constexpr reference front() const { return *ptr_; }
+  constexpr reference back() const { return *(ptr_ + n_ - 1); }
+
+  constexpr bool empty() const noexcept { return n_ == 0; }
+
+  constexpr this_t subspan(std::size_t offset, std::size_t count) const {
     assert(offset + count <= n_);
     return {ptr_ + offset, count};
   }
 
-  constexpr std::pair<this_t, this_t> divide(size_t at) const {
+  constexpr std::pair<this_t, this_t> divide(std::size_t at) const {
     return {subspan(0, at), subspan(at, n_ - at)};
   }
 
@@ -46,14 +57,14 @@ public:
 
   template <typename F>
   void for_each(F f) const {
-    for (size_t i = 0; i < n_; i++) {
+    for (std::size_t i = 0; i < n_; i++) {
       f(const_cast<const T&>(ptr_[i]));
     }
   }
 
   template <typename F>
   void map(F f) {
-    for (size_t i = 0; i < n_; i++) {
+    for (std::size_t i = 0; i < n_; i++) {
       f(ptr_[i]);
     }
   }
@@ -63,7 +74,7 @@ public:
              ReduceOp    reduce_op,
              TransformOp transform_op) {
     Acc acc = init;
-    for (size_t i = 0; i < n_; i++) {
+    for (std::size_t i = 0; i < n_; i++) {
       acc = reduce_op(acc, transform_op(ptr_[i]));
     }
     return acc;
@@ -99,34 +110,46 @@ struct global_span_if {
   class global_span {
     using this_t = global_span<T>;
     using ptr_t = typename P::iro::template global_ptr<T>;
+
     ptr_t ptr_;
-    size_t n_;
+    std::size_t n_;
 
   public:
-    using value_type = T;
+    using element_type = T;
+    using value_type = std::remove_cv_t<T>;
+    using iterator = ptr_t;
+    using pointer = ptr_t;
+    using reference = typename ptr_t::reference;
+
     using policy = P;
 
-    global_span(ptr_t ptr, size_t n) : ptr_(ptr), n_(n) {}
+    global_span() : ptr_(nullptr), n_(0) {}
+    global_span(ptr_t ptr, std::size_t n) : ptr_(ptr), n_(n) {}
     template <typename U>
     global_span(global_span<U> s) : ptr_(s.data()), n_(s.size() * sizeof(U) / sizeof(T)) {}
 
-    constexpr ptr_t data() const noexcept { return ptr_; }
-    constexpr size_t size() const noexcept { return n_; }
+    constexpr pointer data() const noexcept { return ptr_; }
+    constexpr std::size_t size() const noexcept { return n_; }
 
-    constexpr ptr_t begin() const noexcept { return ptr_; }
-    constexpr ptr_t end()   const noexcept { return ptr_ + n_; }
+    constexpr pointer begin() const noexcept { return ptr_; }
+    constexpr pointer end()   const noexcept { return ptr_ + n_; }
 
-    constexpr auto operator[](size_t i) const {
+    constexpr reference operator[](std::size_t i) const {
       assert(i < n_);
       return ptr_[i];
     }
 
-    constexpr this_t subspan(size_t offset, size_t count) const {
+    constexpr reference front() const { return *ptr_; }
+    constexpr reference back() const { return *(ptr_ + n_ - 1); }
+
+    constexpr bool empty() const noexcept { return n_ == 0; }
+
+    constexpr this_t subspan(std::size_t offset, std::size_t count) const {
       assert(offset + count <= n_);
       return {ptr_ + offset, count};
     }
 
-    constexpr std::pair<this_t, this_t> divide(size_t at) const {
+    constexpr std::pair<this_t, this_t> divide(std::size_t at) const {
       return {subspan(0, at), subspan(at, n_ - at)};
     }
 
@@ -136,10 +159,10 @@ struct global_span_if {
 
     template <typename F, std::size_t BlockSize = 65536>
     void for_each(F f) const {
-      for (size_t i = 0; i < n_; i += BlockSize / sizeof(T)) {
-        size_t b = std::min(n_ - i, BlockSize / sizeof(T));
+      for (std::size_t i = 0; i < n_; i += BlockSize / sizeof(T)) {
+        std::size_t b = std::min(n_ - i, BlockSize / sizeof(T));
         auto p = P::iro::template checkout<pcas::access_mode::read>(ptr_ + i, b);
-        for (size_t j = 0; j < b; j++) {
+        for (std::size_t j = 0; j < b; j++) {
           f(const_cast<const T&>(p[j]));
         }
         P::iro::template checkin(p, b);
@@ -148,10 +171,10 @@ struct global_span_if {
 
     template <typename F, std::size_t BlockSize = 65536>
     void map(F f) {
-      for (size_t i = 0; i < n_; i += BlockSize / sizeof(T)) {
-        size_t b = std::min(n_ - i, BlockSize / sizeof(T));
+      for (std::size_t i = 0; i < n_; i += BlockSize / sizeof(T)) {
+        std::size_t b = std::min(n_ - i, BlockSize / sizeof(T));
         auto p = P::iro::template checkout<pcas::access_mode::read_write>(ptr_ + i, b);
-        for (size_t j = 0; j < b; j++) {
+        for (std::size_t j = 0; j < b; j++) {
           f(p[j]);
         }
         P::iro::template checkin(p, b);
