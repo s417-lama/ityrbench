@@ -143,8 +143,8 @@ inline auto with_checkout_tied(const raw_span<T1>& s1,
 
 struct global_vector_options {
   bool collective = false;
-  bool parallel_construct = true;
-  bool parallel_destruct = true;
+  bool parallel_construct = false;
+  bool parallel_destruct = false;
   std::size_t cutoff = 1024;
 };
 
@@ -358,12 +358,17 @@ struct global_container_if {
       end_ = begin_ + (old_end - old_begin);
       reserved_end_ = begin_ + count;
 
-      construct_elems_from_iter(make_move_iterator(old_begin),
-                                make_move_iterator(old_end),
-                                begin());
+      if (old_end - old_begin > 0) {
+        construct_elems_from_iter(make_move_iterator(old_begin),
+                                  make_move_iterator(old_end),
+                                  begin());
 
-      destruct_elems(old_begin, old_end);
-      free_mem(old_begin, old_capacity);
+        destruct_elems(old_begin, old_end);
+      }
+
+      if (old_capacity > 0) {
+        free_mem(old_begin, old_capacity);
+      }
     }
 
     template <typename... Args>
@@ -394,7 +399,7 @@ struct global_container_if {
         realloc_mem(new_cap);
       }
       iro_context::template with_checkout_tied<access_mode::write>(end(), 1,
-          [&](auto&& x) { new (&x) T(std::forward<Args>(args)...); });
+          [&](auto&& p) { new (p) T(std::forward<Args>(args)...); });
       ++end_;
     }
 

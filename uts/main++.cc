@@ -17,6 +17,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <math.h>
+#include <new>
 
 #include "ityr/ityr.hpp"
 
@@ -25,6 +26,10 @@ template <typename T>
 using global_ptr = my_ityr::global_ptr<T>;
 
 #include "uts.h"
+
+#ifndef UTS_USE_VECTOR
+#define UTS_USE_VECTOR 1
+#endif
 
 #ifndef UTS_RUN_SEQ
 #define UTS_RUN_SEQ 0
@@ -90,6 +95,44 @@ Node makeChild(const Node *parent, int childType, int computeGranuarity, counter
   return c;
 }
 
+#if UTS_USE_VECTOR
+
+struct dynamic_node {
+  int n_children;
+  my_ityr::global_vector<global_ptr<dynamic_node>> children;
+};
+
+global_ptr<dynamic_node> new_dynamic_node(int n_children) {
+  auto gptr = my_ityr::iro::malloc_local<dynamic_node>(1);
+  my_ityr::with_checkout_tied<my_ityr::access_mode::write>(
+      gptr, 1, [&](auto&& p) {
+    new (p) dynamic_node;
+    // FIXME: std::launder is not yet implemented in Fujitsu compiler (clang mode)
+    /* std::launder(p)->n_children = n_children; */
+    /* std::launder(p)->children.resize(n_children); */
+    reinterpret_cast<decltype(p)>(p)->n_children = n_children;
+    reinterpret_cast<decltype(p)>(p)->children.resize(n_children);
+  });
+  return gptr;
+}
+
+global_ptr<global_ptr<dynamic_node>> get_children(global_ptr<dynamic_node> node) {
+  return my_ityr::with_checkout_tied<my_ityr::access_mode::read>(
+      node, 1, [&](auto&& p) {
+    return p->children.data();
+  });
+}
+
+void delete_dynamic_node(global_ptr<dynamic_node> node, int) {
+  my_ityr::with_checkout_tied<my_ityr::access_mode::read_write>(
+      node, 1, [&](auto&& p) {
+    std::destroy_at(p);
+  });
+  my_ityr::iro::free(node, 1);
+}
+
+#else
+
 struct dynamic_node {
   int n_children;
   global_ptr<dynamic_node> children[1];
@@ -106,12 +149,23 @@ global_ptr<dynamic_node> new_dynamic_node(int n_children) {
   return gptr;
 }
 
+void delete_dynamic_node(global_ptr<dynamic_node> node, int n_children) {
+  my_ityr::iro::free(static_cast<global_ptr<std::byte>>(node),
+                     node_size(n_children));
+}
+
+global_ptr<global_ptr<dynamic_node>> get_children(global_ptr<dynamic_node> node) {
+  return &(node->*(&dynamic_node::children));
+}
+
+#endif
+
 global_ptr<dynamic_node> build_tree(Node parent) {
   counter_t numChildren = uts_numChildren(&parent);
   int childType = uts_childType(&parent);
 
   global_ptr<dynamic_node> this_node = new_dynamic_node(numChildren);
-  global_ptr<global_ptr<dynamic_node>> children = &(this_node->*(&dynamic_node::children));
+  global_ptr<global_ptr<dynamic_node>> children = get_children(this_node);
 
   if (numChildren > 0) {
     my_ityr::parallel_transform(
@@ -130,7 +184,7 @@ global_ptr<dynamic_node> build_tree(Node parent) {
 
 Result traverse_tree(counter_t depth, global_ptr<dynamic_node> this_node) {
   counter_t numChildren = this_node->*(&dynamic_node::n_children);
-  global_ptr<global_ptr<dynamic_node>> children = &(this_node->*(&dynamic_node::children));
+  global_ptr<global_ptr<dynamic_node>> children = get_children(this_node);
 
   if (numChildren == 0) {
     return { depth, 1, 1 };
@@ -151,7 +205,7 @@ Result traverse_tree(counter_t depth, global_ptr<dynamic_node> this_node) {
 
 void destroy_tree(global_ptr<dynamic_node> this_node) {
   counter_t numChildren = this_node->*(&dynamic_node::n_children);
-  global_ptr<global_ptr<dynamic_node>> children = &(this_node->*(&dynamic_node::children));
+  global_ptr<global_ptr<dynamic_node>> children = get_children(this_node);
 
   if (numChildren > 0) {
     my_ityr::parallel_for<my_ityr::iro::access_mode::read>(
@@ -162,8 +216,7 @@ void destroy_tree(global_ptr<dynamic_node> this_node) {
         });
   }
 
-  my_ityr::iro::free(static_cast<global_ptr<std::byte>>(this_node),
-                     node_size(numChildren));
+  delete_dynamic_node(this_node, numChildren);
 }
 
 //-- main ---------------------------------------------------------------------
@@ -208,7 +261,7 @@ void uts_run() {
 
     if (my_rank == 0) {
       uint64_t t1 = uts_wctime();
-      my_ityr::root_spawn([=]() { return destroy_tree(root_node); });
+      my_ityr::root_spawn([=]() { destroy_tree(root_node); });
       uint64_t t2 = uts_wctime();
 
       printf("## Tree destroyed. (%ld ns)\n", t2 - t1);

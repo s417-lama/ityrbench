@@ -106,9 +106,10 @@ inline void for_each_serial(ForwardIterator                  first,
                             iterator_diff_t<ForwardIterator> cutoff) {
   if constexpr (pcas::is_global_ptr_v<ForwardIterator>) {
     auto d = std::distance(first, last);
+    if (d == 0) return;
     P::iro_context::template with_checkout<Mode>(first, d, [&](auto&& first_) {
-      first_ = transfer_global_ptr_iter_param<ForwardIterator>(first_);
-      for_each_serial<P, Mode>(first_, first_ + d, std::forward<Fn>(f), cutoff);
+      auto it = transfer_global_ptr_iter_param<ForwardIterator>(first_);
+      for_each_serial<P, Mode>(it, it + d, std::forward<Fn>(f), cutoff);
     });
 
   } else {
@@ -127,16 +128,18 @@ inline void for_each_serial(ForwardIterator1                  first1,
                             iterator_diff_t<ForwardIterator1> cutoff) {
   if constexpr (pcas::is_global_ptr_v<ForwardIterator1>) {
     auto d = std::distance(first1, last1);
+    if (d == 0) return;
     P::iro_context::template with_checkout<Mode1>(first1, d, [&](auto&& first1_) {
-      first1_ = transfer_global_ptr_iter_param<ForwardIterator1>(first1_);
-      for_each_serial<P, Mode1, Mode2>(first1_, first1_ + d, first2, std::forward<Fn>(f), cutoff);
+      auto it1 = transfer_global_ptr_iter_param<ForwardIterator1>(first1_);
+      for_each_serial<P, Mode1, Mode2>(it1, it1 + d, first2, std::forward<Fn>(f), cutoff);
     });
 
   } else if constexpr (pcas::is_global_ptr_v<ForwardIterator2>) {
     auto d = std::distance(first1, last1);
+    if (d == 0) return;
     P::iro_context::template with_checkout<Mode2>(first2, d, [&](auto&& first2_) {
-      first2_ = transfer_global_ptr_iter_param<ForwardIterator2>(first2_);
-      for_each_serial<P, Mode1, Mode2>(first1, last1, first2_, std::forward<Fn>(f), cutoff);
+      auto it2 = transfer_global_ptr_iter_param<ForwardIterator2>(first2_);
+      for_each_serial<P, Mode1, Mode2>(first1, last1, it2, std::forward<Fn>(f), cutoff);
     });
 
   } else {
@@ -156,23 +159,26 @@ inline void for_each_serial(ForwardIterator1                  first1,
                             iterator_diff_t<ForwardIterator1> cutoff) {
   if constexpr (pcas::is_global_ptr_v<ForwardIterator1>) {
     auto d = std::distance(first1, last1);
+    if (d == 0) return;
     P::iro_context::template with_checkout<Mode1>(first1, d, [&](auto&& first1_) {
-      first1_ = transfer_global_ptr_iter_param<ForwardIterator1>(first1_);
-      for_each_serial<P, Mode1, Mode2, Mode3>(first1_, first1_ + d, first2, first3, std::forward<Fn>(f), cutoff);
+      auto it1 = transfer_global_ptr_iter_param<ForwardIterator1>(first1_);
+      for_each_serial<P, Mode1, Mode2, Mode3>(it1, it1 + d, first2, first3, std::forward<Fn>(f), cutoff);
     });
 
   } else if constexpr (pcas::is_global_ptr_v<ForwardIterator2>) {
     auto d = std::distance(first1, last1);
+    if (d == 0) return;
     P::iro_context::template with_checkout<Mode2>(first2, d, [&](auto&& first2_) {
-      first2_ = transfer_global_ptr_iter_param<ForwardIterator2>(first2_);
-      for_each_serial<P, Mode1, Mode2, Mode3>(first1, last1, first2_, first3, std::forward<Fn>(f), cutoff);
+      auto it2 = transfer_global_ptr_iter_param<ForwardIterator2>(first2_);
+      for_each_serial<P, Mode1, Mode2, Mode3>(first1, last1, it2, first3, std::forward<Fn>(f), cutoff);
     });
 
   } else if constexpr (pcas::is_global_ptr_v<ForwardIterator3>) {
     auto d = std::distance(first1, last1);
+    if (d == 0) return;
     P::iro_context::template with_checkout<Mode3>(first3, d, [&](auto&& first3_) {
-      first3_ = transfer_global_ptr_iter_param<ForwardIterator3>(first3_);
-      for_each_serial<P, Mode1, Mode2, Mode3>(first1, last1, first2, first3_, std::forward<Fn>(f), cutoff);
+      auto it3 = transfer_global_ptr_iter_param<ForwardIterator3>(first3_);
+      for_each_serial<P, Mode1, Mode2, Mode3>(first1, last1, first2, it3, std::forward<Fn>(f), cutoff);
     });
 
   } else {
