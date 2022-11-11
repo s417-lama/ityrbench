@@ -56,6 +56,16 @@ using raw_span = ityr::raw_span<T>;
 template <typename T>
 using global_span = my_ityr::template global_span<T>;
 
+template <template <typename> typename Span, typename T>
+auto divide(const Span<T>& s, typename Span<T>::size_type at) {
+  return std::make_pair(s.subspan(0, at), s.subspan(at, s.size() - at));
+}
+
+template <template <typename> typename Span, typename T>
+auto divide_two(const Span<T>& s) {
+  return divide(s, s.size() / 2);
+}
+
 enum class exec_t {
   Serial = 0,
   StdSort = 1,
@@ -254,9 +264,9 @@ void cilkmerge(Span<const T> s1, Span<const T> s2, Span<T> dest) {
     split2 = binary_search(s2, T(s1[split1 - 1]));
   }
 
-  auto [s11  , s12  ] = s1.divide(split1);
-  auto [s21  , s22  ] = s2.divide(split2);
-  auto [dest1, dest2] = dest.divide(split1 + split2);
+  auto [s11  , s12  ] = divide(s1, split1);
+  auto [s21  , s22  ] = divide(s2, split2);
+  auto [dest1, dest2] = divide(dest, split1 + split2);
 
   my_ityr::parallel_invoke(
     cilkmerge<Span, T>, s11, s21, dest1,
@@ -284,13 +294,13 @@ void cilksort(Span<T> a, Span<T> b) {
   /*   b.willread(); */
   /* } */
 
-  auto [a12, a34] = a.divide_two();
-  auto [b12, b34] = b.divide_two();
+  auto [a12, a34] = divide_two(a);
+  auto [b12, b34] = divide_two(b);
 
-  auto [a1, a2] = a12.divide_two();
-  auto [a3, a4] = a34.divide_two();
-  auto [b1, b2] = b12.divide_two();
-  auto [b3, b4] = b34.divide_two();
+  auto [a1, a2] = divide_two(a12);
+  auto [a3, a4] = divide_two(a34);
+  auto [b1, b2] = divide_two(b12);
+  auto [b3, b4] = divide_two(b34);
 
   my_ityr::parallel_invoke(
     cilksort<Span, T>, a1, b1,
@@ -349,13 +359,16 @@ bool check_sorted(Span<const T> s) {
     T last;
   };
   acc_type init{true, true, T{}, T{}};
-  auto ret = s.reduce(init, [](auto l, auto r) {
-    if (l.is_init) return r;
-    if (r.is_init) return l;
-    if (!l.success || !r.success) return acc_type{false, false, l.first, r.last};
-    else if (l.last > r.first) return acc_type{false, false, l.first, r.last};
-    else return acc_type{false, true, l.first, r.last};
-  }, [](const T& e) { return acc_type{false, true, e, e}; });
+  auto ret =
+    my_ityr::parallel_reduce(s.begin(), s.end(), init, [](const auto& l, const auto& r) {
+        if (l.is_init) return r;
+        if (r.is_init) return l;
+        if (!l.success || !r.success) return acc_type{false, false, l.first, r.last};
+        else if (l.last > r.first) return acc_type{false, false, l.first, r.last};
+        else return acc_type{false, true, l.first, r.last};
+      },
+      [](const T& e) { return acc_type{false, true, e, e}; },
+      my_ityr::iro::block_size / sizeof(T));
   return ret.success;
 }
 

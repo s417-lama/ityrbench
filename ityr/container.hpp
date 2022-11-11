@@ -11,89 +11,89 @@
 
 namespace ityr {
 
+// TODO: remove it and use std::span in C++20
 template <typename T>
 class raw_span {
   using this_t = raw_span<T>;
 
-  T* ptr_;
-  std::size_t n_;
-
 public:
   using element_type = T;
-  using value_type = std::remove_cv_t<T>;
-  using iterator = T*;
-  using pointer = T*;
-  using reference = T&;
+  using value_type   = std::remove_cv_t<T>;
+  using size_type    = std::size_t;
+  using pointer      = T*;
+  using iterator     = pointer;
+  using reference    = T&;
 
-  raw_span() : ptr_(nullptr), n_(0) {}
-  raw_span(T* ptr, std::size_t n) : ptr_(ptr), n_(n) {}
+private:
+  pointer ptr_;
+  size_type n_;
+
+public:
+  raw_span() {}
+  raw_span(T* ptr, size_type n) : ptr_(ptr), n_(n) {}
   template <typename U>
   raw_span(raw_span<U> s) : ptr_(s.data()), n_(s.size() * sizeof(U) / sizeof(T)) {}
 
   constexpr pointer data() const noexcept { return ptr_; }
-  constexpr std::size_t size() const noexcept { return n_; }
+  constexpr size_type size() const noexcept { return n_; }
 
   constexpr iterator begin() const noexcept { return ptr_; }
-  constexpr iterator end()   const noexcept { return ptr_ + n_; }
+  constexpr iterator end() const noexcept { return ptr_ + n_; }
 
-  constexpr reference operator[](std::size_t i) const { assert(i < n_); return ptr_[i]; }
+  constexpr reference operator[](size_type i) const { assert(i < n_); return ptr_[i]; }
 
   constexpr reference front() const { return *ptr_; }
   constexpr reference back() const { return *(ptr_ + n_ - 1); }
 
   constexpr bool empty() const noexcept { return n_ == 0; }
 
-  constexpr this_t subspan(std::size_t offset, std::size_t count) const {
+  constexpr this_t subspan(size_type offset, size_type count) const {
     assert(offset + count <= n_);
     return {ptr_ + offset, count};
   }
 
-  constexpr std::pair<this_t, this_t> divide(std::size_t at) const {
+  constexpr std::pair<this_t, this_t> divide(size_type at) const {
     return {subspan(0, at), subspan(at, n_ - at)};
   }
 
   constexpr std::pair<this_t, this_t> divide_two() const {
     return divide(n_ / 2);
   }
-
-  template <typename F>
-  void for_each(F f) const {
-    for (std::size_t i = 0; i < n_; i++) {
-      f(const_cast<const T&>(ptr_[i]));
-    }
-  }
-
-  template <typename F>
-  void map(F f) {
-    for (std::size_t i = 0; i < n_; i++) {
-      f(ptr_[i]);
-    }
-  }
-
-  template <typename Acc, typename ReduceOp, typename TransformOp>
-  Acc reduce(Acc         init,
-             ReduceOp    reduce_op,
-             TransformOp transform_op) {
-    Acc acc = init;
-    for (std::size_t i = 0; i < n_; i++) {
-      acc = reduce_op(acc, transform_op(ptr_[i]));
-    }
-    return acc;
-  }
-
-  void willread() const {}
 };
 
-template <pcas::access_mode Mode,
-          typename T, typename Fn>
-void with_checkout(raw_span<T> s, Fn f) {
+template <typename T>
+inline constexpr auto data(const raw_span<T>& s) noexcept {
+  return s.data();
+}
+
+template <typename T>
+inline constexpr auto size(const raw_span<T>& s) noexcept {
+  return s.size();
+}
+
+template <typename T>
+inline constexpr auto begin(const raw_span<T>& s) noexcept {
+  return s.begin();
+}
+
+template <typename T>
+inline constexpr auto end(const raw_span<T>& s) noexcept {
+  return s.end();
+}
+
+template <pcas::access_mode Mode1,
+          typename T1, typename Fn>
+inline void with_checkout(const raw_span<T1>& s,
+                          Fn f) {
   f(s);
 }
 
 template <pcas::access_mode Mode1,
           pcas::access_mode Mode2,
           typename T1, typename T2, typename Fn>
-void with_checkout(raw_span<T1> s1, raw_span<T2> s2, Fn f) {
+inline void with_checkout(const raw_span<T1>& s1,
+                          const raw_span<T2>& s2,
+                          Fn f) {
   f(s1, s2);
 }
 
@@ -101,7 +101,10 @@ template <pcas::access_mode Mode1,
           pcas::access_mode Mode2,
           pcas::access_mode Mode3,
           typename T1, typename T2, typename T3, typename Fn>
-void with_checkout(raw_span<T1> s1, raw_span<T2> s2, raw_span<T3> s3, Fn f) {
+inline void with_checkout(const raw_span<T1>& s1,
+                          const raw_span<T2>& s2,
+                          const raw_span<T3>& s3,
+                          Fn f) {
   f(s1, s2, s3);
 }
 
@@ -118,88 +121,61 @@ struct global_container_if {
   template <typename T>
   class global_span {
     using this_t = global_span<T>;
-    using ptr_t = typename P::iro::template global_ptr<T>;
-
-    ptr_t ptr_;
-    std::size_t n_;
 
   public:
     using element_type = T;
-    using value_type = std::remove_cv_t<T>;
-    using iterator = ptr_t;
-    using pointer = ptr_t;
-    using reference = typename std::iterator_traits<ptr_t>::reference;
+    using value_type   = std::remove_cv_t<T>;
+    using size_type    = std::size_t;
+    using pointer      = typename P::iro::template global_ptr<T>;
+    using iterator     = pointer;
+    using reference    = typename std::iterator_traits<pointer>::reference;
 
     using policy = P;
 
+  private:
+    pointer ptr_;
+    size_type n_;
+
+  public:
     global_span() : ptr_(nullptr), n_(0) {}
-    global_span(ptr_t ptr, std::size_t n) : ptr_(ptr), n_(n) {}
+    global_span(pointer ptr, size_type n) : ptr_(ptr), n_(n) {}
     template <typename U>
     global_span(global_span<U> s) : ptr_(s.data()), n_(s.size() * sizeof(U) / sizeof(T)) {}
 
-    constexpr pointer data() const noexcept { return ptr_; }
-    constexpr std::size_t size() const noexcept { return n_; }
+    pointer data() const noexcept { return ptr_; }
+    size_type size() const noexcept { return n_; }
 
-    constexpr pointer begin() const noexcept { return ptr_; }
-    constexpr pointer end()   const noexcept { return ptr_ + n_; }
+    pointer begin() const noexcept { return ptr_; }
+    pointer end() const noexcept { return ptr_ + n_; }
 
-    constexpr reference operator[](std::size_t i) const {
-      assert(i < n_);
-      return ptr_[i];
-    }
+    reference operator[](size_type i) const { assert(i < n_); return ptr_[i]; }
 
-    constexpr reference front() const { return *ptr_; }
-    constexpr reference back() const { return *(ptr_ + n_ - 1); }
+    reference front() const { return *ptr_; }
+    reference back() const { return *(ptr_ + n_ - 1); }
 
-    constexpr bool empty() const noexcept { return n_ == 0; }
+    bool empty() const noexcept { return n_ == 0; }
 
-    constexpr this_t subspan(std::size_t offset, std::size_t count) const {
+    this_t subspan(size_type offset, size_type count) const {
       assert(offset + count <= n_);
       return {ptr_ + offset, count};
     }
 
-    constexpr std::pair<this_t, this_t> divide(std::size_t at) const {
-      return {subspan(0, at), subspan(at, n_ - at)};
+    friend auto data(const raw_span<T>& s) noexcept {
+      return s.data();
     }
 
-    constexpr std::pair<this_t, this_t> divide_two() const {
-      return divide(n_ / 2);
+    friend auto size(const raw_span<T>& s) noexcept {
+      return s.size();
     }
 
-    template <typename F, std::size_t BlockSize = 65536>
-    void for_each(F f) const {
-      for (std::size_t i = 0; i < n_; i += BlockSize / sizeof(T)) {
-        std::size_t b = std::min(n_ - i, BlockSize / sizeof(T));
-        auto p = P::iro::template checkout<pcas::access_mode::read>(ptr_ + i, b);
-        for (std::size_t j = 0; j < b; j++) {
-          f(const_cast<const T&>(p[j]));
-        }
-        P::iro::template checkin(p, b);
-      }
+    friend auto begin(const raw_span<T>& s) noexcept {
+      return s.begin();
     }
 
-    template <typename F, std::size_t BlockSize = 65536>
-    void map(F f) {
-      for (std::size_t i = 0; i < n_; i += BlockSize / sizeof(T)) {
-        std::size_t b = std::min(n_ - i, BlockSize / sizeof(T));
-        auto p = P::iro::template checkout<pcas::access_mode::read_write>(ptr_ + i, b);
-        for (std::size_t j = 0; j < b; j++) {
-          f(p[j]);
-        }
-        P::iro::template checkin(p, b);
-      }
+    friend auto end(const raw_span<T>& s) noexcept {
+      return s.end();
     }
 
-    template <typename Acc, typename ReduceOp, typename TransformOp, std::size_t BlockSize = 65536>
-    Acc reduce(Acc         init,
-               ReduceOp    reduce_op,
-               TransformOp transform_op) const {
-      return P::ito_pattern::parallel_reduce(ptr_, ptr_ + n_, init, reduce_op, transform_op, BlockSize);
-    }
-
-    void willread() const {
-      P::iro::willread(ptr_, n_);
-    }
   };
 
   template <typename T>
@@ -220,9 +196,9 @@ struct global_container_if {
     using policy = P;
 
   private:
-    pointer begin_        = nullptr;
-    pointer end_          = nullptr;
-    pointer reserved_end_ = nullptr;
+    pointer begin_;
+    pointer end_;
+    pointer reserved_end_;
 
     global_vector_options opts_;
 
@@ -529,6 +505,10 @@ struct global_container_if {
 
 };
 
+// TODO: we would like to move these with_checkout calls to the inner class
+// and make them friend, but we cannot do it because functions with explicit
+// template parameters (Modes in our case) are not candidates for ADL in C++17.
+// (this issue is resolved in C++20).
 template <pcas::access_mode Mode,
           typename GlobalSpan, typename Fn>
 void with_checkout(GlobalSpan s, Fn f) {
