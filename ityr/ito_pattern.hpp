@@ -215,7 +215,9 @@ public:
 
   template <typename... Args>
   static auto parallel_invoke(Args&&... args) {
-    return impl::parallel_invoke(std::forward<Args>(args)...);
+    return P::iro::with_checkout_cancel([&]() {
+      return impl::parallel_invoke(std::forward<Args>(args)...);
+    });
   };
 
   template <typename P::iro::access_mode Mode, typename ForwardIterator, typename Fn>
@@ -241,7 +243,9 @@ public:
                            ForwardIterator                  last,
                            Fn                               f,
                            iterator_diff_t<ForwardIterator> cutoff = {1}) {
-    impl::template parallel_for<Mode>(first, last, f, cutoff);
+    P::iro::with_checkout_cancel([&]() {
+      impl::template parallel_for<Mode>(first, last, f, cutoff);
+    });
   }
 
   template <typename P::iro::access_mode Mode1, typename P::iro::access_mode Mode2,
@@ -251,7 +255,9 @@ public:
                            ForwardIterator2                  first2,
                            Fn                                f,
                            iterator_diff_t<ForwardIterator1> cutoff = {1}) {
-    impl::template parallel_for<Mode1, Mode2>(first1, last1, first2, f, cutoff);
+    P::iro::with_checkout_cancel([&]() {
+      impl::template parallel_for<Mode1, Mode2>(first1, last1, first2, f, cutoff);
+    });
   }
 
   template <typename ForwardIterator, typename T, typename ReduceOp>
@@ -260,8 +266,10 @@ public:
                            T                                init,
                            ReduceOp                         reduce,
                            iterator_diff_t<ForwardIterator> cutoff = {1}) {
-    auto transform = [](typename ForwardIterator::value_type&& v) { return std::forward(v); };
-    return impl::parallel_reduce(first, last, init, reduce, transform, cutoff);
+    return P::iro::with_checkout_cancel([&]() {
+      auto transform = [](typename ForwardIterator::value_type&& v) { return std::forward(v); };
+      return impl::parallel_reduce(first, last, init, reduce, transform, cutoff);
+    });
   }
 
   template <typename ForwardIterator, typename T, typename ReduceOp, typename TransformOp>
@@ -271,7 +279,9 @@ public:
                            ReduceOp                         reduce,
                            TransformOp                      transform,
                            iterator_diff_t<ForwardIterator> cutoff = {1}) {
-    return impl::parallel_reduce(first, last, init, reduce, transform, cutoff);
+    return P::iro::with_checkout_cancel([&]() {
+      return impl::parallel_reduce(first, last, init, reduce, transform, cutoff);
+    });
   }
 
   template <typename ForwardIterator, typename ForwardIteratorR, class UnaryOp>
@@ -280,7 +290,9 @@ public:
                                              ForwardIteratorR                 result,
                                              UnaryOp                          unary_op,
                                              iterator_diff_t<ForwardIterator> cutoff = {1}) {
-    return impl::parallel_transform(first, last, result, unary_op, cutoff);
+    return P::iro::with_checkout_cancel([&]() {
+      return impl::parallel_transform(first, last, result, unary_op, cutoff);
+    });
   }
 
   // SFINAE for ambiguity in the default cutoff parameter above.
@@ -293,7 +305,9 @@ public:
                                              ForwardIteratorR                  result,
                                              BinaryOp                          binary_op,
                                              iterator_diff_t<ForwardIterator1> cutoff = {1}) {
-    return impl::parallel_transform(first1, last1, first2, result, binary_op, cutoff);
+    return P::iro::with_checkout_cancel([&]() {
+      return impl::parallel_transform(first1, last1, first2, result, binary_op, cutoff);
+    });
   }
 };
 

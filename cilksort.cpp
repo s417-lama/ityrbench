@@ -229,8 +229,8 @@ void cilkmerge(Span<const T> s1, Span<const T> s2, Span<T> dest) {
   if (s2.size() == 0) {
     auto ev = my_ityr::logger::record<my_ityr::logger_kind::Copy>();
 
-    ityr::with_checkout<my_ityr::iro::access_mode::read,
-                        my_ityr::iro::access_mode::write>(
+    ityr::with_checkout_tied<my_ityr::iro::access_mode::read,
+                             my_ityr::iro::access_mode::write>(
         s1, dest, [&](auto s1_, auto dest_) {
       std::copy(s1_.begin(), s1_.end(), dest_.begin());
     });
@@ -246,9 +246,9 @@ void cilkmerge(Span<const T> s1, Span<const T> s2, Span<T> dest) {
   if (dest.size() <= cutoff_merge) {
     auto ev = my_ityr::logger::record<my_ityr::logger_kind::Merge>();
 
-    ityr::with_checkout<my_ityr::iro::access_mode::read,
-                        my_ityr::iro::access_mode::read,
-                        my_ityr::iro::access_mode::write>(
+    ityr::with_checkout_tied<my_ityr::iro::access_mode::read,
+                             my_ityr::iro::access_mode::read,
+                             my_ityr::iro::access_mode::write>(
         s1, s2, dest, [&](auto s1_, auto s2_, auto dest_) {
       auto ev2 = my_ityr::logger::record<my_ityr::logger_kind::MergeKernel>();
       merge_seq(s1_, s2_, dest_);
@@ -281,7 +281,7 @@ void cilksort(Span<T> a, Span<T> b) {
   if (a.size() <= cutoff_quick) {
     auto ev = my_ityr::logger::record<my_ityr::logger_kind::Quicksort>();
 
-    ityr::with_checkout<my_ityr::iro::access_mode::read_write>(a, [&](auto a_) {
+    ityr::with_checkout_tied<my_ityr::iro::access_mode::read_write>(a, [&](auto a_) {
       auto ev2 = my_ityr::logger::record<my_ityr::logger_kind::QuicksortKernel>();
       quicksort_seq(a_);
     });

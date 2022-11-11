@@ -88,29 +88,56 @@ inline constexpr auto end(const raw_span<T>& s) noexcept {
 
 template <pcas::access_mode Mode1,
           typename T1, typename Fn>
-inline void with_checkout(const raw_span<T1>& s,
+inline auto with_checkout(const raw_span<T1>& s,
                           Fn f) {
-  f(s);
+  return f(s);
 }
 
 template <pcas::access_mode Mode1,
           pcas::access_mode Mode2,
           typename T1, typename T2, typename Fn>
-inline void with_checkout(const raw_span<T1>& s1,
+inline auto with_checkout(const raw_span<T1>& s1,
                           const raw_span<T2>& s2,
                           Fn f) {
-  f(s1, s2);
+  return f(s1, s2);
 }
 
 template <pcas::access_mode Mode1,
           pcas::access_mode Mode2,
           pcas::access_mode Mode3,
           typename T1, typename T2, typename T3, typename Fn>
-inline void with_checkout(const raw_span<T1>& s1,
+inline auto with_checkout(const raw_span<T1>& s1,
                           const raw_span<T2>& s2,
                           const raw_span<T3>& s3,
                           Fn f) {
-  f(s1, s2, s3);
+  return f(s1, s2, s3);
+}
+
+template <pcas::access_mode Mode1,
+          typename T1, typename Fn>
+inline auto with_checkout_tied(const raw_span<T1>& s,
+                               Fn f) {
+  return f(s);
+}
+
+template <pcas::access_mode Mode1,
+          pcas::access_mode Mode2,
+          typename T1, typename T2, typename Fn>
+inline auto with_checkout_tied(const raw_span<T1>& s1,
+                               const raw_span<T2>& s2,
+                               Fn f) {
+  return f(s1, s2);
+}
+
+template <pcas::access_mode Mode1,
+          pcas::access_mode Mode2,
+          pcas::access_mode Mode3,
+          typename T1, typename T2, typename T3, typename Fn>
+inline auto with_checkout_tied(const raw_span<T1>& s1,
+                               const raw_span<T2>& s2,
+                               const raw_span<T3>& s3,
+                               Fn f) {
+  return f(s1, s2, s3);
 }
 
 struct global_vector_options {
@@ -359,7 +386,7 @@ struct global_container_if {
         size_type new_cap = next_size(size() + 1);
         realloc_mem(new_cap);
       }
-      P::iro::template with_checkout<pcas::access_mode::write>(end(), 1,
+      P::iro::template with_checkout_tied<pcas::access_mode::write>(end(), 1,
           [&](auto&& x) { new (&x) T(std::forward<Args>(args)...); });
       ++end_;
     }
@@ -502,7 +529,7 @@ struct global_container_if {
     void pop_back() {
       assert(!opts_.collective);
       assert(size() > 0);
-      P::iro::template with_checkout<pcas::access_mode::read_write>(end() - 1, 1,
+      P::iro::template with_checkout_tied<pcas::access_mode::read_write>(end() - 1, 1,
           [&](auto&& x) { std::destroy_at(&x); });
       --end_;
     }
@@ -521,26 +548,26 @@ struct global_container_if {
 // (this issue is resolved in C++20).
 template <pcas::access_mode Mode,
           typename GlobalSpan, typename Fn>
-void with_checkout(GlobalSpan s, Fn f) {
+inline auto with_checkout(GlobalSpan s, Fn f) {
   using T = typename GlobalSpan::element_type;
   using iro = typename GlobalSpan::policy::iro;
-  iro::template with_checkout<Mode>(s.data(), s.size(),
-                                    [&](auto&& p) {
-    f(raw_span<T>{p, s.size()});
+  return iro::template with_checkout<Mode>(s.data(), s.size(),
+                                           [&](auto&& p) {
+    return f(raw_span<T>{p, s.size()});
   });
 }
 
 template <pcas::access_mode Mode1,
           pcas::access_mode Mode2,
           typename GlobalSpan1, typename GlobalSpan2, typename Fn>
-void with_checkout(GlobalSpan1 s1, GlobalSpan2 s2, Fn f) {
+inline auto with_checkout(GlobalSpan1 s1, GlobalSpan2 s2, Fn f) {
   using T1 = typename GlobalSpan1::element_type;
   using T2 = typename GlobalSpan2::element_type;
   using iro = typename GlobalSpan1::policy::iro;
-  iro::template with_checkout<Mode1, Mode2>(s1.data(), s1.size(),
-                                            s2.data(), s2.size(),
-                                            [&](auto&& p1, auto&& p2) {
-    f(raw_span<T1>{p1, s1.size()}, raw_span<T2>{p2, s2.size()});
+  return iro::template with_checkout<Mode1, Mode2>(s1.data(), s1.size(),
+                                                   s2.data(), s2.size(),
+                                                   [&](auto&& p1, auto&& p2) {
+    return f(raw_span<T1>{p1, s1.size()}, raw_span<T2>{p2, s2.size()});
   });
 }
 
@@ -548,16 +575,58 @@ template <pcas::access_mode Mode1,
           pcas::access_mode Mode2,
           pcas::access_mode Mode3,
           typename GlobalSpan1, typename GlobalSpan2, typename GlobalSpan3, typename Fn>
-void with_checkout(GlobalSpan1 s1, GlobalSpan2 s2, GlobalSpan3 s3, Fn f) {
+inline auto with_checkout(GlobalSpan1 s1, GlobalSpan2 s2, GlobalSpan3 s3, Fn f) {
   using T1 = typename GlobalSpan1::element_type;
   using T2 = typename GlobalSpan2::element_type;
   using T3 = typename GlobalSpan3::element_type;
   using iro = typename GlobalSpan1::policy::iro;
-  iro::template with_checkout<Mode1, Mode2, Mode3>(s1.data(), s1.size(),
-                                                   s2.data(), s2.size(),
-                                                   s3.data(), s3.size(),
-                                                   [&](auto&& p1, auto&& p2, auto&& p3) {
-    f(raw_span<T1>{p1, s1.size()}, raw_span<T2>{p2, s2.size()}, raw_span<T3>{p3, s3.size()});
+  return iro::template with_checkout<Mode1, Mode2, Mode3>(s1.data(), s1.size(),
+                                                          s2.data(), s2.size(),
+                                                          s3.data(), s3.size(),
+                                                          [&](auto&& p1, auto&& p2, auto&& p3) {
+    return f(raw_span<T1>{p1, s1.size()}, raw_span<T2>{p2, s2.size()}, raw_span<T3>{p3, s3.size()});
+  });
+}
+
+template <pcas::access_mode Mode,
+          typename GlobalSpan, typename Fn>
+inline auto with_checkout_tied(GlobalSpan s, Fn f) {
+  using T = typename GlobalSpan::element_type;
+  using iro = typename GlobalSpan::policy::iro;
+  return iro::template with_checkout_tied<Mode>(s.data(), s.size(),
+                                                [&](auto&& p) {
+    return f(raw_span<T>{p, s.size()});
+  });
+}
+
+template <pcas::access_mode Mode1,
+          pcas::access_mode Mode2,
+          typename GlobalSpan1, typename GlobalSpan2, typename Fn>
+inline auto with_checkout_tied(GlobalSpan1 s1, GlobalSpan2 s2, Fn f) {
+  using T1 = typename GlobalSpan1::element_type;
+  using T2 = typename GlobalSpan2::element_type;
+  using iro = typename GlobalSpan1::policy::iro;
+  return iro::template with_checkout_tied<Mode1, Mode2>(s1.data(), s1.size(),
+                                                        s2.data(), s2.size(),
+                                                        [&](auto&& p1, auto&& p2) {
+    return f(raw_span<T1>{p1, s1.size()}, raw_span<T2>{p2, s2.size()});
+  });
+}
+
+template <pcas::access_mode Mode1,
+          pcas::access_mode Mode2,
+          pcas::access_mode Mode3,
+          typename GlobalSpan1, typename GlobalSpan2, typename GlobalSpan3, typename Fn>
+inline auto with_checkout_tied(GlobalSpan1 s1, GlobalSpan2 s2, GlobalSpan3 s3, Fn f) {
+  using T1 = typename GlobalSpan1::element_type;
+  using T2 = typename GlobalSpan2::element_type;
+  using T3 = typename GlobalSpan3::element_type;
+  using iro = typename GlobalSpan1::policy::iro;
+  return iro::template with_checkout_tied<Mode1, Mode2, Mode3>(s1.data(), s1.size(),
+                                                               s2.data(), s2.size(),
+                                                               s3.data(), s3.size(),
+                                                               [&](auto&& p1, auto&& p2, auto&& p3) {
+    return f(raw_span<T1>{p1, s1.size()}, raw_span<T2>{p2, s2.size()}, raw_span<T3>{p3, s3.size()});
   });
 }
 
