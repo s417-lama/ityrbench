@@ -7,6 +7,7 @@
 
 #include "ityr/util.hpp"
 #include "ityr/iro.hpp"
+#include "ityr/iro_context.hpp"
 #include "ityr/ito_pattern.hpp"
 
 namespace ityr {
@@ -149,6 +150,12 @@ struct global_vector_options {
 
 template <typename P>
 struct global_container_if {
+  using iro = typename P::iro;
+  using iro_context = typename P::iro_context;
+  using ito_pattern = typename P::ito_pattern;
+  using access_mode = typename iro::access_mode;
+  template <typename T>
+  using global_ptr = typename iro::template global_ptr<T>;
 
   template <typename T>
   class global_span {
@@ -158,7 +165,7 @@ struct global_container_if {
     using element_type = T;
     using value_type   = std::remove_cv_t<T>;
     using size_type    = std::size_t;
-    using pointer      = typename P::iro::template global_ptr<T>;
+    using pointer      = global_ptr<T>;
     using iterator     = pointer;
     using reference    = typename std::iterator_traits<pointer>::reference;
 
@@ -222,8 +229,8 @@ struct global_container_if {
   public:
     using value_type      = T;
     using size_type       = std::size_t;
-    using pointer         = typename P::iro::template global_ptr<T>;
-    using const_pointer   = typename P::iro::template global_ptr<std::add_const_t<T>>;
+    using pointer         = global_ptr<T>;
+    using const_pointer   = global_ptr<std::add_const_t<T>>;
     using iterator        = pointer;
     using const_iterator  = const_pointer;
     using difference_type = typename pointer::difference_type;
@@ -245,20 +252,20 @@ struct global_container_if {
 
     pointer allocate_mem(size_type count) const {
       if (opts_.collective) {
-        return P::iro::template malloc<T>(count);
+        return iro::template malloc<T>(count);
       } else {
-        return P::iro::template malloc_local<T>(count);
+        return iro::template malloc_local<T>(count);
       }
     }
 
     void free_mem(pointer p, size_type count) const {
-      P::iro::template free<T>(p, count);
+      iro::template free<T>(p, count);
     }
 
     template <typename Fn, typename... Args>
     auto master_do_if_coll(Fn&& f, Args&&... args) const {
       if (opts_.collective) {
-        return P::ito_pattern::master_do(std::forward<Fn>(f), std::forward<Args>(args)...);
+        return ito_pattern::master_do(std::forward<Fn>(f), std::forward<Args>(args)...);
       } else {
         return std::forward<Fn>(f)(std::forward<Args>(args)...);
       }
@@ -301,10 +308,10 @@ struct global_container_if {
     template <typename... Args>
     void construct_elems(pointer b, pointer e, Args&&... args) {
       if (opts_.parallel_construct) {
-        P::ito_pattern::template parallel_for<P::iro::access_mode::write>(
+        ito_pattern::template parallel_for<access_mode::write>(
             b, e, [=](auto&& x) { new (&x) T(args...); }, opts_.cutoff);
       } else {
-        P::ito_pattern::template serial_for<P::iro::access_mode::write>(
+        ito_pattern::template serial_for<access_mode::write>(
             b, e, [&](auto&& x) { new (&x) T(std::forward<Args>(args)...); }, opts_.cutoff);
       }
     }
@@ -313,18 +320,18 @@ struct global_container_if {
     void construct_elems_from_iter(ForwardIterator first, ForwardIterator last, pointer b) {
       if constexpr (is_const_iterator_v<ForwardIterator>) {
         if (opts_.parallel_construct) {
-          P::ito_pattern::template parallel_for<P::iro::access_mode::read, P::iro::access_mode::write>(
+          ito_pattern::template parallel_for<access_mode::read, access_mode::write>(
               first, last, b, [](const auto& src, auto&& x) { new (&x) T(src); }, opts_.cutoff);
         } else {
-          P::ito_pattern::template serial_for<P::iro::access_mode::read, P::iro::access_mode::write>(
+          ito_pattern::template serial_for<access_mode::read, access_mode::write>(
               first, last, b, [](const auto& src, auto&& x) { new (&x) T(src); }, opts_.cutoff);
         }
       } else {
         if (opts_.parallel_construct) {
-          P::ito_pattern::template parallel_for<P::iro::access_mode::read_write, P::iro::access_mode::write>(
+          ito_pattern::template parallel_for<access_mode::read_write, access_mode::write>(
               first, last, b, [](auto&& src, auto&& x) { new (&x) T(std::forward<decltype(src)>(src)); }, opts_.cutoff);
         } else {
-          P::ito_pattern::template serial_for<P::iro::access_mode::read_write, P::iro::access_mode::write>(
+          ito_pattern::template serial_for<access_mode::read_write, access_mode::write>(
               first, last, b, [](auto&& src, auto&& x) { new (&x) T(std::forward<decltype(src)>(src)); }, opts_.cutoff);
         }
       }
@@ -333,10 +340,10 @@ struct global_container_if {
     void destruct_elems(pointer b, pointer e) {
       if constexpr (!std::is_trivially_destructible_v<T>) {
         if (opts_.parallel_destruct) {
-          P::ito_pattern::template parallel_for<P::iro::access_mode::read_write>(
+          ito_pattern::template parallel_for<access_mode::read_write>(
               b, e, [](auto&& x) { std::destroy_at(&x); }, opts_.cutoff);
         } else {
-          P::ito_pattern::template serial_for<P::iro::access_mode::read_write>(
+          ito_pattern::template serial_for<access_mode::read_write>(
               b, e, [](auto&& x) { std::destroy_at(&x); }, opts_.cutoff);
         }
       }
@@ -386,7 +393,7 @@ struct global_container_if {
         size_type new_cap = next_size(size() + 1);
         realloc_mem(new_cap);
       }
-      P::iro::template with_checkout_tied<pcas::access_mode::write>(end(), 1,
+      iro_context::template with_checkout_tied<access_mode::write>(end(), 1,
           [&](auto&& x) { new (&x) T(std::forward<Args>(args)...); });
       ++end_;
     }
@@ -529,7 +536,7 @@ struct global_container_if {
     void pop_back() {
       assert(!opts_.collective);
       assert(size() > 0);
-      P::iro::template with_checkout_tied<pcas::access_mode::read_write>(end() - 1, 1,
+      iro_context::template with_checkout_tied<access_mode::read_write>(end() - 1, 1,
           [&](auto&& x) { std::destroy_at(&x); });
       --end_;
     }
@@ -550,9 +557,9 @@ template <pcas::access_mode Mode,
           typename GlobalSpan, typename Fn>
 inline auto with_checkout(GlobalSpan s, Fn f) {
   using T = typename GlobalSpan::element_type;
-  using iro = typename GlobalSpan::policy::iro;
-  return iro::template with_checkout<Mode>(s.data(), s.size(),
-                                           [&](auto&& p) {
+  using iro_context = typename GlobalSpan::policy::iro_context;
+  return iro_context::template with_checkout<Mode>(s.data(), s.size(),
+                                                   [&](auto&& p) {
     return f(raw_span<T>{p, s.size()});
   });
 }
@@ -563,10 +570,10 @@ template <pcas::access_mode Mode1,
 inline auto with_checkout(GlobalSpan1 s1, GlobalSpan2 s2, Fn f) {
   using T1 = typename GlobalSpan1::element_type;
   using T2 = typename GlobalSpan2::element_type;
-  using iro = typename GlobalSpan1::policy::iro;
-  return iro::template with_checkout<Mode1, Mode2>(s1.data(), s1.size(),
-                                                   s2.data(), s2.size(),
-                                                   [&](auto&& p1, auto&& p2) {
+  using iro_context = typename GlobalSpan1::policy::iro_context;
+  return iro_context::template with_checkout<Mode1, Mode2>(s1.data(), s1.size(),
+                                                           s2.data(), s2.size(),
+                                                           [&](auto&& p1, auto&& p2) {
     return f(raw_span<T1>{p1, s1.size()}, raw_span<T2>{p2, s2.size()});
   });
 }
@@ -579,11 +586,11 @@ inline auto with_checkout(GlobalSpan1 s1, GlobalSpan2 s2, GlobalSpan3 s3, Fn f) 
   using T1 = typename GlobalSpan1::element_type;
   using T2 = typename GlobalSpan2::element_type;
   using T3 = typename GlobalSpan3::element_type;
-  using iro = typename GlobalSpan1::policy::iro;
-  return iro::template with_checkout<Mode1, Mode2, Mode3>(s1.data(), s1.size(),
-                                                          s2.data(), s2.size(),
-                                                          s3.data(), s3.size(),
-                                                          [&](auto&& p1, auto&& p2, auto&& p3) {
+  using iro_context = typename GlobalSpan1::policy::iro_context;
+  return iro_context::template with_checkout<Mode1, Mode2, Mode3>(s1.data(), s1.size(),
+                                                                  s2.data(), s2.size(),
+                                                                  s3.data(), s3.size(),
+                                                                  [&](auto&& p1, auto&& p2, auto&& p3) {
     return f(raw_span<T1>{p1, s1.size()}, raw_span<T2>{p2, s2.size()}, raw_span<T3>{p3, s3.size()});
   });
 }
@@ -592,9 +599,9 @@ template <pcas::access_mode Mode,
           typename GlobalSpan, typename Fn>
 inline auto with_checkout_tied(GlobalSpan s, Fn f) {
   using T = typename GlobalSpan::element_type;
-  using iro = typename GlobalSpan::policy::iro;
-  return iro::template with_checkout_tied<Mode>(s.data(), s.size(),
-                                                [&](auto&& p) {
+  using iro_context = typename GlobalSpan::policy::iro_context;
+  return iro_context::template with_checkout_tied<Mode>(s.data(), s.size(),
+                                                        [&](auto&& p) {
     return f(raw_span<T>{p, s.size()});
   });
 }
@@ -605,10 +612,10 @@ template <pcas::access_mode Mode1,
 inline auto with_checkout_tied(GlobalSpan1 s1, GlobalSpan2 s2, Fn f) {
   using T1 = typename GlobalSpan1::element_type;
   using T2 = typename GlobalSpan2::element_type;
-  using iro = typename GlobalSpan1::policy::iro;
-  return iro::template with_checkout_tied<Mode1, Mode2>(s1.data(), s1.size(),
-                                                        s2.data(), s2.size(),
-                                                        [&](auto&& p1, auto&& p2) {
+  using iro_context = typename GlobalSpan1::policy::iro_context;
+  return iro_context::template with_checkout_tied<Mode1, Mode2>(s1.data(), s1.size(),
+                                                                s2.data(), s2.size(),
+                                                                [&](auto&& p1, auto&& p2) {
     return f(raw_span<T1>{p1, s1.size()}, raw_span<T2>{p2, s2.size()});
   });
 }
@@ -621,17 +628,18 @@ inline auto with_checkout_tied(GlobalSpan1 s1, GlobalSpan2 s2, GlobalSpan3 s3, F
   using T1 = typename GlobalSpan1::element_type;
   using T2 = typename GlobalSpan2::element_type;
   using T3 = typename GlobalSpan3::element_type;
-  using iro = typename GlobalSpan1::policy::iro;
-  return iro::template with_checkout_tied<Mode1, Mode2, Mode3>(s1.data(), s1.size(),
-                                                               s2.data(), s2.size(),
-                                                               s3.data(), s3.size(),
-                                                               [&](auto&& p1, auto&& p2, auto&& p3) {
+  using iro_context = typename GlobalSpan1::policy::iro_context;
+  return iro_context::template with_checkout_tied<Mode1, Mode2, Mode3>(s1.data(), s1.size(),
+                                                                       s2.data(), s2.size(),
+                                                                       s3.data(), s3.size(),
+                                                                       [&](auto&& p1, auto&& p2, auto&& p3) {
     return f(raw_span<T1>{p1, s1.size()}, raw_span<T2>{p2, s2.size()}, raw_span<T3>{p3, s3.size()});
   });
 }
 
 struct global_container_policy_default {
   using iro = iro_if<iro_policy_default>;
+  using iro_context = iro_context_if<iro_context_policy_default>;
   using ito_pattern = ito_pattern_if<ito_pattern_policy_default>;
 };
 

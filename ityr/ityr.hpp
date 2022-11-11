@@ -10,6 +10,7 @@
 #include "ityr/iterator.hpp"
 #include "ityr/iro.hpp"
 #include "ityr/iro_ref.hpp"
+#include "ityr/iro_context.hpp"
 #include "ityr/ito_group.hpp"
 #include "ityr/ito_pattern.hpp"
 #include "ityr/logger/logger.hpp"
@@ -33,6 +34,13 @@ class ityr_if {
     using logger_impl_t = typename P::template logger_impl_t<P_>;
   };
   using iro_ = iro_if<iro_policy>;
+
+  struct iro_context_policy : public iro_context_policy_default {
+    template <typename P_>
+    using iro_context_impl_t = typename P::template iro_context_t<P_>;
+    using iro = iro_;
+  };
+  using iro_context_ = iro_context_if<iro_context_policy>;
 
   struct logger_policy : public logger_policy_default {
     template <typename P_>
@@ -58,6 +66,7 @@ class ityr_if {
     template <typename P_>
     using ito_pattern_impl_t = typename P::template ito_pattern_t<P_>;
     using iro = iro_;
+    using iro_context = iro_context_;
     static int rank() { return P::rank(); }
     static int n_ranks() { return P::n_ranks(); }
     static void barrier() { P::barrier(); }
@@ -66,6 +75,7 @@ class ityr_if {
 
   struct global_container_policy : public global_container_policy_default {
     using iro = iro_;
+    using iro_context = iro_context_;
     using ito_pattern = ito_pattern_;
   };
   using global_container_ = global_container_if<global_container_policy>;
@@ -73,6 +83,7 @@ class ityr_if {
 public:
   using wallclock = typename P::wallclock_t;
   using iro = iro_;
+  using iro_context = iro_context_;
   template <std::size_t MaxTasks, bool SpawnLastTask = false>
   using ito_group = ito_group_<MaxTasks, SpawnLastTask>;
   using ito_pattern = ito_pattern_;
@@ -84,6 +95,8 @@ public:
   using global_span = typename global_container_::template global_span<T>;
   template <typename T>
   using global_vector = typename global_container_::template global_vector<T>;
+
+  using access_mode = typename iro::access_mode;
 
   static_assert(!is_const_iterator_v<global_ptr<int>>);
   static_assert(is_const_iterator_v<global_ptr<const int>>);
@@ -99,9 +112,49 @@ public:
 
   static void barrier() { return P::barrier(); }
 
-  template <typename Fn, typename... Args>
-  static auto root_spawn(Fn&& f, Args&&... args) {
-    return ito_pattern::root_spawn(std::forward<Fn>(f), std::forward<Args>(args)...);
+  template <access_mode Mode, typename... Args>
+  static auto with_checkout(Args&&... args) {
+    return iro_context::template with_checkout<Mode>(std::forward<Args>(args)...);
+  }
+
+  template <access_mode Mode1, access_mode Mode2, typename... Args>
+  static auto with_checkout(Args&&... args) {
+    return iro_context::template with_checkout<Mode1, Mode2>(std::forward<Args>(args)...);
+  }
+
+  template <access_mode Mode1, access_mode Mode2, access_mode Mode3, typename... Args>
+  static auto with_checkout(Args&&... args) {
+    return iro_context::template with_checkout<Mode1, Mode2, Mode3>(std::forward<Args>(args)...);
+  }
+
+  template <access_mode Mode, typename... Args>
+  static auto with_checkout_tied(Args&&... args) {
+    return iro_context::template with_checkout_tied<Mode>(std::forward<Args>(args)...);
+  }
+
+  template <access_mode Mode1, access_mode Mode2, typename... Args>
+  static auto with_checkout_tied(Args&&... args) {
+    return iro_context::template with_checkout_tied<Mode1, Mode2>(std::forward<Args>(args)...);
+  }
+
+  template <access_mode Mode1, access_mode Mode2, access_mode Mode3, typename... Args>
+  static auto with_checkout_tied(Args&&... args) {
+    return iro_context::template with_checkout_tied<Mode1, Mode2, Mode3>(std::forward<Args>(args)...);
+  }
+
+  template <typename... Args>
+  static auto with_checkout_cancel(Args&&... args) {
+    return iro_context::with_checkout_cancel(std::forward<Args>(args)...);
+  }
+
+  template <typename... Args>
+  static auto root_spawn(Args&&... args) {
+    return ito_pattern::root_spawn(std::forward<Args>(args)...);
+  }
+
+  template <typename... Args>
+  static auto master_do(Args&&... args) {
+    return ito_pattern::master_do(std::forward<Args>(args)...);
   }
 
   template <typename... Args>
@@ -109,22 +162,22 @@ public:
     return ito_pattern::parallel_invoke(std::forward<Args>(args)...);
   }
 
-  template <typename iro::access_mode Mode, typename... Args>
+  template <access_mode Mode, typename... Args>
   static auto serial_for(Args&&... args) {
     return ito_pattern::template serial_for<Mode>(std::forward<Args>(args)...);
   }
 
-  template <typename iro::access_mode Mode1, typename iro::access_mode Mode2, typename... Args>
+  template <access_mode Mode1, access_mode Mode2, typename... Args>
   static auto serial_for(Args&&... args) {
     return ito_pattern::template serial_for<Mode1, Mode2>(std::forward<Args>(args)...);
   }
 
-  template <typename iro::access_mode Mode, typename... Args>
+  template <access_mode Mode, typename... Args>
   static auto parallel_for(Args&&... args) {
     return ito_pattern::template parallel_for<Mode>(std::forward<Args>(args)...);
   }
 
-  template <typename iro::access_mode Mode1, typename iro::access_mode Mode2, typename... Args>
+  template <access_mode Mode1, access_mode Mode2, typename... Args>
   static auto parallel_for(Args&&... args) {
     return ito_pattern::template parallel_for<Mode1, Mode2>(std::forward<Args>(args)...);
   }
@@ -152,6 +205,9 @@ struct ityr_policy_serial {
 
   template <typename P>
   using iro_t = iro_dummy<P>;
+
+  template <typename P>
+  using iro_context_t = iro_context_disabled<P>;
 
   using wallclock_t = wallclock_native;
 
@@ -200,6 +256,9 @@ struct ityr_policy_naive {
 
 #undef ITYR_IRO_DISABLE_CACHE
 #undef ITYR_IRO_GETPUT
+
+  template <typename P>
+  using iro_context_t = iro_context_enabled<P>;
 
   using wallclock_t = wallclock_madm;
 

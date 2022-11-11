@@ -50,12 +50,6 @@ struct my_ityr_policy : ityr::ityr_policy {
 
 using my_ityr = ityr::ityr_if<my_ityr_policy>;
 
-template <typename T>
-using raw_span = ityr::raw_span<T>;
-
-template <typename T>
-using global_span = my_ityr::template global_span<T>;
-
 template <template <typename> typename Span, typename T>
 auto divide(const Span<T>& s, typename Span<T>::size_type at) {
   return std::make_pair(s.subspan(0, at), s.subspan(at, s.size() - at));
@@ -229,8 +223,8 @@ void cilkmerge(Span<const T> s1, Span<const T> s2, Span<T> dest) {
   if (s2.size() == 0) {
     auto ev = my_ityr::logger::record<my_ityr::logger_kind::Copy>();
 
-    ityr::with_checkout_tied<my_ityr::iro::access_mode::read,
-                             my_ityr::iro::access_mode::write>(
+    ityr::with_checkout_tied<my_ityr::access_mode::read,
+                             my_ityr::access_mode::write>(
         s1, dest, [&](auto s1_, auto dest_) {
       std::copy(s1_.begin(), s1_.end(), dest_.begin());
     });
@@ -246,9 +240,9 @@ void cilkmerge(Span<const T> s1, Span<const T> s2, Span<T> dest) {
   if (dest.size() <= cutoff_merge) {
     auto ev = my_ityr::logger::record<my_ityr::logger_kind::Merge>();
 
-    ityr::with_checkout_tied<my_ityr::iro::access_mode::read,
-                             my_ityr::iro::access_mode::read,
-                             my_ityr::iro::access_mode::write>(
+    ityr::with_checkout_tied<my_ityr::access_mode::read,
+                             my_ityr::access_mode::read,
+                             my_ityr::access_mode::write>(
         s1, s2, dest, [&](auto s1_, auto s2_, auto dest_) {
       auto ev2 = my_ityr::logger::record<my_ityr::logger_kind::MergeKernel>();
       merge_seq(s1_, s2_, dest_);
@@ -281,7 +275,7 @@ void cilksort(Span<T> a, Span<T> b) {
   if (a.size() <= cutoff_quick) {
     auto ev = my_ityr::logger::record<my_ityr::logger_kind::Quicksort>();
 
-    ityr::with_checkout_tied<my_ityr::iro::access_mode::read_write>(a, [&](auto a_) {
+    ityr::with_checkout_tied<my_ityr::access_mode::read_write>(a, [&](auto a_) {
       auto ev2 = my_ityr::logger::record<my_ityr::logger_kind::QuicksortKernel>();
       quicksort_seq(a_);
     });
@@ -536,8 +530,8 @@ int real_main(int argc, char **argv) {
     my_ityr::global_vector<elem_t> array(opts, n_input);
     my_ityr::global_vector<elem_t> buf(opts, n_input);
 
-    global_span<elem_t> a(array.begin(), array.end());
-    global_span<elem_t> b(buf.begin(), buf.end());
+    my_ityr::global_span<elem_t> a(array.begin(), array.end());
+    my_ityr::global_span<elem_t> b(buf.begin(), buf.end());
 
     run(a, b);
 
@@ -545,8 +539,8 @@ int real_main(int argc, char **argv) {
     std::vector<elem_t> array(n_input);
     std::vector<elem_t> buf(n_input);
 
-    raw_span<elem_t> a(array.begin(), array.end());
-    raw_span<elem_t> b(buf.begin(), buf.end());
+    ityr::raw_span<elem_t> a(array.begin(), array.end());
+    ityr::raw_span<elem_t> b(buf.begin(), buf.end());
 
     run(a, b);
   }

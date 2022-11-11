@@ -22,7 +22,7 @@
 
 using my_ityr = ityr::ityr_if<ityr::ityr_policy>;
 template <typename T>
-using global_ptr = my_ityr::iro::global_ptr<T>;
+using global_ptr = my_ityr::global_ptr<T>;
 
 #include "uts.h"
 
