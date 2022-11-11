@@ -13,7 +13,7 @@
 #include "ityr/ito_group.hpp"
 #include "ityr/ito_pattern.hpp"
 #include "ityr/logger/logger.hpp"
-#include "ityr/span.hpp"
+#include "ityr/container.hpp"
 
 namespace ityr {
 
@@ -63,12 +63,11 @@ class ityr_if {
   };
   using ito_pattern_ = ito_pattern_if<ito_pattern_policy>;
 
-  struct global_span_policy : public global_span_policy_default {
+  struct global_container_policy : public global_container_policy_default {
     using iro = iro_;
     using ito_pattern = ito_pattern_;
   };
-  template <typename T>
-  using global_span_ = typename global_span_if<global_span_policy>::template global_span<T>;
+  using global_container_ = global_container_if<global_container_policy>;
 
 public:
   using wallclock = typename P::wallclock_t;
@@ -81,7 +80,12 @@ public:
   template <typename T>
   using global_ptr = typename iro::template global_ptr<T>;
   template <typename T>
-  using global_span = global_span_<T>;
+  using global_span = typename global_container_::template global_span<T>;
+  template <typename T>
+  using global_vector = typename global_container_::template global_vector<T>;
+
+  static_assert(!is_const_iterator_v<global_ptr<int>>);
+  static_assert(is_const_iterator_v<global_ptr<const int>>);
 
   static int rank() { return P::rank(); }
   static int n_ranks() { return P::n_ranks(); }

@@ -117,6 +117,45 @@ public:
     get_instance().logger_flush_and_print_stat(t_begin, t_end);
   }
 
+  // TODO: move outside?
+  template <access_mode Mode, typename T, typename Fn>
+  static void with_checkout(global_ptr<T> p, std::size_t n,
+                            Fn&& f) {
+    auto p_ = checkout<Mode>(p, n);
+    std::forward<Fn>(f)(p_);
+    checkin<Mode>(p_, n);
+  }
+
+  template <access_mode Mode1, access_mode Mode2,
+            typename T1, typename T2, typename Fn>
+  static void with_checkout(global_ptr<T1> p1, std::size_t n1,
+                            global_ptr<T2> p2, std::size_t n2,
+                            Fn&& f) {
+    with_checkout<Mode1>(p1, n1, [&](auto&& p1_) {
+      with_checkout<Mode2>(p2, n2, [&](auto&& p2_) {
+        std::forward<Fn>(f)(std::forward<decltype(p1_)>(p1_),
+                            std::forward<decltype(p2_)>(p2_));
+      });
+    });
+  }
+
+  template <access_mode Mode1, access_mode Mode2, access_mode Mode3,
+            typename T1, typename T2, typename T3, typename Fn>
+  static void with_checkout(global_ptr<T1> p1, std::size_t n1,
+                            global_ptr<T2> p2, std::size_t n2,
+                            global_ptr<T3> p3, std::size_t n3,
+                            Fn&& f) {
+    with_checkout<Mode1>(p1, n1, [&](auto&& p1_) {
+      with_checkout<Mode2>(p2, n2, [&](auto&& p2_) {
+        with_checkout<Mode3>(p3, n3, [&](auto&& p3_) {
+          std::forward<Fn>(f)(std::forward<decltype(p1_)>(p1_),
+                              std::forward<decltype(p2_)>(p2_),
+                              std::forward<decltype(p3_)>(p3_));
+        });
+      });
+    });
+  }
+
 };
 
 template <typename P>
@@ -196,8 +235,7 @@ public:
   void willread(global_ptr<T>, std::size_t) {}
 
   template <typename ConstT, typename T>
-  std::enable_if_t<std::is_same_v<std::remove_const_t<ConstT>, T>>
-  get(global_ptr<ConstT> from_ptr, T* to_ptr, std::size_t nelems) {
+  void get(global_ptr<ConstT> from_ptr, T* to_ptr, std::size_t nelems) {
     get_nocache(from_ptr, to_ptr, nelems);
   }
 
@@ -209,15 +247,16 @@ public:
   template <access_mode Mode, typename T>
   std::conditional_t<Mode == access_mode::read, const T*, T*>
   checkout(global_ptr<T> ptr, std::size_t nelems) {
-    // If T is const, then it cannot be checked out with write access mode
-    static_assert(!std::is_const_v<T> || Mode == access_mode::read);
+    static_assert(!std::is_const_v<T> || Mode == access_mode::read,
+                  "Const pointers cannot be checked out with write access mode");
 
+    using gptr_t = global_ptr<std::conditional_t<std::is_const_v<T>, const std::byte, std::byte>>;
     std::size_t size = nelems * sizeof(T);
-    auto ret = (std::remove_const_t<T>*)std::malloc(size + sizeof(global_ptr<uint8_t>));
+    auto ret = (std::remove_const_t<T>*)std::malloc(size + sizeof(gptr_t));
     if (Mode != access_mode::write) {
       get(ptr, ret, nelems);
     }
-    *((global_ptr<uint8_t>*)((uint8_t*)ret + size)) = global_ptr<uint8_t>(ptr);
+    *reinterpret_cast<gptr_t*>(reinterpret_cast<std::byte*>(ret) + size) = gptr_t(ptr);
     return ret;
   }
 
@@ -228,9 +267,11 @@ public:
 
   template <access_mode Mode, typename T>
   void checkin(T* raw_ptr, std::size_t nelems) {
+    using gptr_t = global_ptr<std::byte>;
+
     std::size_t size = nelems * sizeof(T);
-    global_ptr<uint8_t> ptr = *((global_ptr<uint8_t>*)((uint8_t*)raw_ptr + size));
-    put((uint8_t*)raw_ptr, ptr, size);
+    auto ptr = *reinterpret_cast<gptr_t*>(reinterpret_cast<std::byte*>(raw_ptr) + size);
+    put(reinterpret_cast<std::byte*>(raw_ptr), ptr, size);
     std::free(raw_ptr);
   }
 };
@@ -252,15 +293,16 @@ public:
   template <access_mode Mode, typename T>
   std::conditional_t<Mode == access_mode::read, const T*, T*>
   checkout(global_ptr<T> ptr, std::size_t nelems) {
-    // If T is const, then it cannot be checked out with write access mode
-    static_assert(!std::is_const_v<T> || Mode == access_mode::read);
+    static_assert(!std::is_const_v<T> || Mode == access_mode::read,
+                  "Const pointers cannot be checked out with write access mode");
 
+    using gptr_t = global_ptr<std::conditional_t<std::is_const_v<T>, const std::byte, std::byte>>;
     std::size_t size = nelems * sizeof(T);
-    auto ret = (std::remove_const_t<T>*)std::malloc(size + sizeof(global_ptr<uint8_t>));
+    auto ret = (std::remove_const_t<T>*)std::malloc(size + sizeof(gptr_t));
     if (Mode != access_mode::write) {
       get(ptr, ret, nelems);
     }
-    *((global_ptr<uint8_t>*)((uint8_t*)ret + size)) = global_ptr<uint8_t>(ptr);
+    *reinterpret_cast<gptr_t*>(reinterpret_cast<std::byte*>(ret) + size) = gptr_t(ptr);
     return ret;
   }
 
@@ -271,9 +313,11 @@ public:
 
   template <access_mode Mode, typename T>
   void checkin(T* raw_ptr, std::size_t nelems) {
+    using gptr_t = global_ptr<std::byte>;
+
     std::size_t size = nelems * sizeof(T);
-    global_ptr<uint8_t> ptr = *((global_ptr<uint8_t>*)((uint8_t*)raw_ptr + size));
-    put((uint8_t*)raw_ptr, ptr, size);
+    auto ptr = *reinterpret_cast<gptr_t*>(reinterpret_cast<std::byte*>(raw_ptr) + size);
+    put(reinterpret_cast<std::byte*>(raw_ptr), ptr, size);
     std::free(raw_ptr);
   }
 };
@@ -285,6 +329,8 @@ public:
   using global_ptr = T*;
   using access_mode = pcas::access_mode;
   using release_handler = int;
+
+  static constexpr std::size_t block_size = 0;
 
   iro_dummy(size_t) {}
 

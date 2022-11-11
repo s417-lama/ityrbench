@@ -80,4 +80,16 @@ inline void set_signal_handlers() {
   set_signal_handler(SIGTERM);
 }
 
+template <typename T, typename = void>
+struct is_const_iterator : public std::false_type {};
+
+template <typename T>
+struct is_const_iterator<T, std::enable_if_t<std::is_const_v<std::remove_pointer_t<typename std::iterator_traits<T>::pointer>>>> : public std::true_type {};
+
+template <typename T>
+constexpr inline bool is_const_iterator_v = is_const_iterator<T>::value;
+
+static_assert(!is_const_iterator_v<std::vector<int>::iterator>);
+static_assert(is_const_iterator_v<std::vector<int>::const_iterator>);
+
 }

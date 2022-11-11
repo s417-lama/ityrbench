@@ -2,6 +2,7 @@
 
 #include <tuple>
 #include <functional>
+#include <mpi.h>
 
 #include "uth.h"
 
@@ -66,11 +67,41 @@ namespace ityr {
 template <typename Iterator>
 using iterator_diff_t = typename std::iterator_traits<Iterator>::difference_type;
 
+template <typename GPtrT>
+class global_ptr_move_iterator : public GPtrT {
+public:
+  explicit global_ptr_move_iterator(const GPtrT& p) : GPtrT(p) {}
+  constexpr static bool is_global_ptr_move_iterator_v = true;
+};
+
+template <typename, typename = void>
+struct is_global_ptr_move_iterator : public std::false_type {};
+
+template <typename GPtrT>
+struct is_global_ptr_move_iterator<GPtrT, std::enable_if_t<GPtrT::is_global_ptr_move_iterator_v>> : public std::true_type {};
+
+template <typename T>
+inline constexpr bool is_global_ptr_move_iterator_v = is_global_ptr_move_iterator<T>::value;
+
+template <typename GPtrT>
+inline global_ptr_move_iterator<GPtrT> make_move_iterator(GPtrT p) {
+  return global_ptr_move_iterator<GPtrT>(p);
+}
+
+template <typename GPtrT, typename Iter>
+inline auto transfer_global_ptr_iter_param(Iter it) {
+  if constexpr (is_global_ptr_move_iterator_v<GPtrT>) {
+    return std::make_move_iterator(it);
+  } else {
+    return it;
+  }
+}
+
 template <typename P, typename P::iro::access_mode Mode,
           typename ForwardIterator, typename Fn>
 inline void for_each_serial(ForwardIterator                  first,
                             ForwardIterator                  last,
-                            Fn                               f,
+                            Fn&&                             f,
                             iterator_diff_t<ForwardIterator> cutoff) {
   // When the cutoff value is larger than 1 (user-provided value), we assume that the function 'f'
   // is a leaf task, i.e., 'f' does not fork any further threads. Otherwise, the lifetime of the
@@ -80,15 +111,16 @@ inline void for_each_serial(ForwardIterator                  first,
   if (cutoff > iterator_diff_t<ForwardIterator>(1)) {
     if constexpr (pcas::is_global_ptr_v<ForwardIterator>) {
       auto d = std::distance(first, last);
-      auto first_ = P::iro::template checkout<Mode>(first, d);
-      for_each_serial<P, Mode>(first_, first_ + d, f, cutoff);
-      P::iro::template checkin<Mode>(first_, d);
+      P::iro::template with_checkout<Mode>(first, d, [&](auto&& first_) {
+        first_ = transfer_global_ptr_iter_param<ForwardIterator>(first_);
+        for_each_serial<P, Mode>(first_, first_ + d, std::forward<Fn>(f), cutoff);
+      });
       return;
     }
   }
 
   for (; first != last; ++first) {
-    f(*first);
+    std::forward<Fn>(f)(*first);
   }
 }
 
@@ -97,27 +129,29 @@ template <typename P, typename P::iro::access_mode Mode1, typename P::iro::acces
 inline void for_each_serial(ForwardIterator1                  first1,
                             ForwardIterator1                  last1,
                             ForwardIterator2                  first2,
-                            Fn                                f,
+                            Fn&&                              f,
                             iterator_diff_t<ForwardIterator1> cutoff) {
   if (cutoff > iterator_diff_t<ForwardIterator1>(1)) {
     if constexpr (pcas::is_global_ptr_v<ForwardIterator1>) {
       auto d = std::distance(first1, last1);
-      auto first1_ = P::iro::template checkout<Mode1>(first1, d);
-      for_each_serial<P, Mode1, Mode2>(first1_, first1_ + d, first2, f, cutoff);
-      P::iro::template checkin<Mode1>(first1_, d);
+      P::iro::template with_checkout<Mode1>(first1, d, [&](auto&& first1_) {
+        first1_ = transfer_global_ptr_iter_param<ForwardIterator1>(first1_);
+        for_each_serial<P, Mode1, Mode2>(first1_, first1_ + d, first2, std::forward<Fn>(f), cutoff);
+      });
       return;
 
     } else if constexpr (pcas::is_global_ptr_v<ForwardIterator2>) {
       auto d = std::distance(first1, last1);
-      auto first2_ = P::iro::template checkout<Mode2>(first2, d);
-      for_each_serial<P, Mode1, Mode2>(first1, last1, first2_, f, cutoff);
-      P::iro::template checkin<Mode2>(first2_, d);
+      P::iro::template with_checkout<Mode2>(first2, d, [&](auto&& first2_) {
+        first2_ = transfer_global_ptr_iter_param<ForwardIterator2>(first2_);
+        for_each_serial<P, Mode1, Mode2>(first1, last1, first2_, std::forward<Fn>(f), cutoff);
+      });
       return;
     }
   }
 
   for (; first1 != last1; ++first1, ++first2) {
-    f(*first1, *first2);
+    std::forward<Fn>(f)(*first1, *first2);
   }
 }
 
@@ -127,34 +161,37 @@ inline void for_each_serial(ForwardIterator1                  first1,
                             ForwardIterator1                  last1,
                             ForwardIterator2                  first2,
                             ForwardIterator3                  first3,
-                            Fn                                f,
+                            Fn&&                              f,
                             iterator_diff_t<ForwardIterator1> cutoff) {
   if (cutoff > iterator_diff_t<ForwardIterator1>(1)) {
     if constexpr (pcas::is_global_ptr_v<ForwardIterator1>) {
       auto d = std::distance(first1, last1);
-      auto first1_ = P::iro::template checkout<Mode1>(first1, d);
-      for_each_serial<P, Mode1, Mode2, Mode3>(first1_, first1_ + d, first2, first3, f, cutoff);
-      P::iro::template checkin<Mode1>(first1_, d);
+      P::iro::template with_checkout<Mode1>(first1, d, [&](auto&& first1_) {
+        first1_ = transfer_global_ptr_iter_param<ForwardIterator1>(first1_);
+        for_each_serial<P, Mode1, Mode2, Mode3>(first1_, first1_ + d, first2, first3, std::forward<Fn>(f), cutoff);
+      });
       return;
 
     } else if constexpr (pcas::is_global_ptr_v<ForwardIterator2>) {
       auto d = std::distance(first1, last1);
-      auto first2_ = P::iro::template checkout<Mode2>(first2, d);
-      for_each_serial<P, Mode1, Mode2, Mode3>(first1, last1, first2_, first3, f, cutoff);
-      P::iro::template checkin<Mode2>(first2_, d);
+      P::iro::template with_checkout<Mode2>(first2, d, [&](auto&& first2_) {
+        first2_ = transfer_global_ptr_iter_param<ForwardIterator2>(first2_);
+        for_each_serial<P, Mode1, Mode2, Mode3>(first1, last1, first2_, first3, std::forward<Fn>(f), cutoff);
+      });
       return;
 
     } else if constexpr (pcas::is_global_ptr_v<ForwardIterator3>) {
       auto d = std::distance(first1, last1);
-      auto first3_ = P::iro::template checkout<Mode3>(first3, d);
-      for_each_serial<P, Mode1, Mode2, Mode3>(first1, last1, first2, first3_, f, cutoff);
-      P::iro::template checkin<Mode3>(first3_, d);
+      P::iro::template with_checkout<Mode3>(first3, d, [&](auto&& first3_) {
+        first3_ = transfer_global_ptr_iter_param<ForwardIterator3>(first3_);
+        for_each_serial<P, Mode1, Mode2, Mode3>(first1, last1, first2, first3_, std::forward<Fn>(f), cutoff);
+      });
       return;
     }
   }
 
   for (; first1 != last1; ++first1, ++first2, ++first3) {
-    f(*first1, *first2, *first3);
+    std::forward<Fn>(f)(*first1, *first2, *first3);
   }
 }
 
@@ -168,6 +205,28 @@ public:
     return impl::root_spawn(std::forward<Fn>(f), std::forward<Args>(args)...);
   }
 
+  template <typename Fn, typename... Args>
+  static auto master_do(Fn&& f, Args&&... args) {
+    PCAS_CHECK(MPI_Barrier(MPI_COMM_WORLD) == MPI_SUCCESS);
+
+    using ret_t = std::invoke_result_t<Fn, Args...>;
+    if constexpr (std::is_void_v<ret_t>) {
+      if (P::rank() == 0) {
+        root_spawn(std::forward<Fn>(f), std::forward<Args>(args)...);
+      }
+      P::barrier();
+
+    } else {
+      ret_t ret;
+      if (P::rank() == 0) {
+        ret = root_spawn(std::forward<Fn>(f), std::forward<Args>(args)...);
+      }
+      P::barrier();
+      MPI_Bcast(&ret, sizeof(ret_t), MPI_BYTE, 0, MPI_COMM_WORLD);
+      return ret;
+    }
+  }
+
   template <typename... Args>
   static auto parallel_invoke(Args&&... args) {
     return impl::parallel_invoke(std::forward<Args>(args)...);
@@ -176,7 +235,7 @@ public:
   template <typename P::iro::access_mode Mode, typename ForwardIterator, typename Fn>
   static void serial_for(ForwardIterator                  first,
                          ForwardIterator                  last,
-                         Fn                               f,
+                         Fn&&                             f,
                          iterator_diff_t<ForwardIterator> cutoff = {1}) {
     for_each_serial<P, Mode>(first, last, f, cutoff);
   }
@@ -186,7 +245,7 @@ public:
   static void serial_for(ForwardIterator1                  first1,
                          ForwardIterator1                  last1,
                          ForwardIterator2                  first2,
-                         Fn                                f,
+                         Fn&&                              f,
                          iterator_diff_t<ForwardIterator1> cutoff = {1}) {
     for_each_serial<P, Mode1, Mode2>(first1, last1, first2, f, cutoff);
   }
