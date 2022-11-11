@@ -60,6 +60,7 @@ class ityr_if {
     using iro = iro_;
     static int rank() { return P::rank(); }
     static int n_ranks() { return P::n_ranks(); }
+    static void barrier() { P::barrier(); }
   };
   using ito_pattern_ = ito_pattern_if<ito_pattern_policy>;
 

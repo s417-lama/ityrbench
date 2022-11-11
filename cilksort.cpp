@@ -527,27 +527,28 @@ int real_main(int argc, char **argv) {
   my_ityr::iro::init(cache_size * 1024 * 1024);
 
   if (exec_type == exec_t::Parallel) {
-    auto array = my_ityr::iro::malloc<elem_t>(n_input);
-    auto buf   = my_ityr::iro::malloc<elem_t>(n_input);
+    ityr::global_vector_options opts {
+      .collective         = true,
+      .parallel_construct = true,
+      .parallel_destruct  = true,
+      .cutoff             = my_ityr::iro::block_size / sizeof(elem_t),
+    };
+    my_ityr::global_vector<elem_t> array(opts, n_input);
+    my_ityr::global_vector<elem_t> buf(opts, n_input);
 
-    global_span<elem_t> a(array, n_input);
-    global_span<elem_t> b(buf  , n_input);
+    global_span<elem_t> a(array.begin(), array.end());
+    global_span<elem_t> b(buf.begin(), buf.end());
 
     run(a, b);
 
-    my_ityr::iro::free(array);
-    my_ityr::iro::free(buf);
   } else {
-    elem_t* array = (elem_t*)malloc(sizeof(elem_t) * n_input);
-    elem_t* buf   = (elem_t*)malloc(sizeof(elem_t) * n_input);
+    std::vector<elem_t> array(n_input);
+    std::vector<elem_t> buf(n_input);
 
-    raw_span<elem_t> a(array, n_input);
-    raw_span<elem_t> b(buf  , n_input);
+    raw_span<elem_t> a(array.begin(), array.end());
+    raw_span<elem_t> b(buf.begin(), buf.end());
 
     run(a, b);
-
-    free(array);
-    free(buf);
   }
 
   my_ityr::iro::fini();

@@ -30,7 +30,12 @@ private:
 
 public:
   raw_span() {}
-  raw_span(T* ptr, size_type n) : ptr_(ptr), n_(n) {}
+  template <typename ContiguousIterator>
+  raw_span(ContiguousIterator first, size_type n) :
+      ptr_(&(*first)), n_(n) {}
+  template <typename ContiguousIterator>
+  raw_span(ContiguousIterator first, ContiguousIterator last) :
+      ptr_(&(*first)), n_(last - first) {}
   template <typename U>
   raw_span(raw_span<U> s) : ptr_(s.data()), n_(s.size() * sizeof(U) / sizeof(T)) {}
 
@@ -137,8 +142,13 @@ struct global_container_if {
     size_type n_;
 
   public:
-    global_span() : ptr_(nullptr), n_(0) {}
-    global_span(pointer ptr, size_type n) : ptr_(ptr), n_(n) {}
+    global_span() {}
+    template <typename ContiguousIterator>
+    global_span(ContiguousIterator first, size_type n) :
+        ptr_(&(*first)), n_(n) {}
+    template <typename ContiguousIterator>
+    global_span(ContiguousIterator first, ContiguousIterator last) :
+        ptr_(&(*first)), n_(last - first) {}
     template <typename U>
     global_span(global_span<U> s) : ptr_(s.data()), n_(s.size() * sizeof(U) / sizeof(T)) {}
 
@@ -264,10 +274,10 @@ struct global_container_if {
     template <typename... Args>
     void construct_elems(pointer b, pointer e, Args&&... args) {
       if (opts_.parallel_construct) {
-        P::ito_pattern::parallel_for<P::iro::access_mode::write>(
+        P::ito_pattern::template parallel_for<P::iro::access_mode::write>(
             b, e, [=](auto&& x) { new (&x) T(args...); }, opts_.cutoff);
       } else {
-        P::ito_pattern::serial_for<P::iro::access_mode::write>(
+        P::ito_pattern::template serial_for<P::iro::access_mode::write>(
             b, e, [&](auto&& x) { new (&x) T(std::forward<Args>(args)...); }, opts_.cutoff);
       }
     }
@@ -276,18 +286,18 @@ struct global_container_if {
     void construct_elems_from_iter(ForwardIterator first, ForwardIterator last, pointer b) {
       if constexpr (is_const_iterator_v<ForwardIterator>) {
         if (opts_.parallel_construct) {
-          P::ito_pattern::parallel_for<P::iro::access_mode::read, P::iro::access_mode::write>(
+          P::ito_pattern::template parallel_for<P::iro::access_mode::read, P::iro::access_mode::write>(
               first, last, b, [](const auto& src, auto&& x) { new (&x) T(src); }, opts_.cutoff);
         } else {
-          P::ito_pattern::serial_for<P::iro::access_mode::read, P::iro::access_mode::write>(
+          P::ito_pattern::template serial_for<P::iro::access_mode::read, P::iro::access_mode::write>(
               first, last, b, [](const auto& src, auto&& x) { new (&x) T(src); }, opts_.cutoff);
         }
       } else {
         if (opts_.parallel_construct) {
-          P::ito_pattern::parallel_for<P::iro::access_mode::read_write, P::iro::access_mode::write>(
+          P::ito_pattern::template parallel_for<P::iro::access_mode::read_write, P::iro::access_mode::write>(
               first, last, b, [](auto&& src, auto&& x) { new (&x) T(std::forward<decltype(src)>(src)); }, opts_.cutoff);
         } else {
-          P::ito_pattern::serial_for<P::iro::access_mode::read_write, P::iro::access_mode::write>(
+          P::ito_pattern::template serial_for<P::iro::access_mode::read_write, P::iro::access_mode::write>(
               first, last, b, [](auto&& src, auto&& x) { new (&x) T(std::forward<decltype(src)>(src)); }, opts_.cutoff);
         }
       }
@@ -296,10 +306,10 @@ struct global_container_if {
     void destruct_elems(pointer b, pointer e) {
       if constexpr (!std::is_trivially_destructible_v<T>) {
         if (opts_.parallel_destruct) {
-          P::ito_pattern::parallel_for<P::iro::access_mode::read_write>(
+          P::ito_pattern::template parallel_for<P::iro::access_mode::read_write>(
               b, e, [](auto&& x) { std::destroy_at(&x); }, opts_.cutoff);
         } else {
-          P::ito_pattern::serial_for<P::iro::access_mode::read_write>(
+          P::ito_pattern::template serial_for<P::iro::access_mode::read_write>(
               b, e, [](auto&& x) { std::destroy_at(&x); }, opts_.cutoff);
         }
       }
