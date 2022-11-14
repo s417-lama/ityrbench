@@ -26,6 +26,7 @@ default_params:
   tree: T1L # T1L/T1XL/T1XXL/T1WL
   repeats: 10
   exec_type: parallel # serial/parallel
+  use_vector: 0
   # common params
   cache_policy: writeback_lazy # serial/nocache/writethrough/writeback/writeback_lazy/getput
   dist_policy: cyclic # block/cyclic
@@ -38,9 +39,48 @@ default_params:
   debugger: 0
 
 default_name: uts++
+default_queue: node_${nodes}
+default_duplicates: 3
+
+batches:
+  serial:
+    params:
+      nodes: 1
+      cores: 1
+      exec_type: serial
+      tree: T1L
+      repeats: 11
+      cache_policy: [serial, writeback_lazy]
+    duplicates: 1
+    artifacts:
+      - type: stdout
+        dest: ${batch_name}/tree_${tree}_p_${cache_policy}_${duplicate}.log
+      - type: stats
+        dest: ${batch_name}/tree_${tree}_p_${cache_policy}_${duplicate}.stats
+      - type: file
+        src: mpirun_out.txt
+        dest: ${batch_name}/tree_${tree}_p_${cache_policy}_${duplicate}.out
+
+  T1L:
+    name: uts++_${batch_name}
+    params:
+      nodes:
+        - value: [1, 2:torus, 2x3:torus, 2x3x2:torus, 3x4x3:torus, 6x6x4:torus]
+          machines: [wisteria-o]
+      tree: T1L
+      repeats: 11
+      cache_policy: [nocache, writethrough, writeback, writeback_lazy]
+    artifacts:
+      - type: stdout
+        dest: ${batch_name}/nodes_${nodes}_p_${cache_policy}_${duplicate}.log
+      - type: stats
+        dest: ${batch_name}/nodes_${nodes}_p_${cache_policy}_${duplicate}.stats
+      - type: file
+        src: mpirun_out.txt
+        dest: ${batch_name}/nodes_${nodes}_p_${cache_policy}_${duplicate}.out
 
 build:
-  depend_params: [exec_type, cache_policy, dist_policy, block_size, logger]
+  depend_params: [exec_type, use_vector, cache_policy, dist_policy, block_size, logger]
   script: |
     source build_common.bash
 
@@ -51,6 +91,8 @@ build:
       parallel) ;;
       *)        echo "Unknown exec type ($KOCHI_PARAM_EXEC_TYPE)"; exit 1 ;;
     esac
+
+    CFLAGS="${CFLAGS:+$CFLAGS} -DUTS_USE_VECTOR=$KOCHI_PARAM_USE_VECTOR"
 
     make clean
     MPICXX=$MPICXX CFLAGS=$CFLAGS make uts++.out

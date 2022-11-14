@@ -28,7 +28,7 @@ using global_ptr = my_ityr::global_ptr<T>;
 #include "uts.h"
 
 #ifndef UTS_USE_VECTOR
-#define UTS_USE_VECTOR 1
+#define UTS_USE_VECTOR 0
 #endif
 
 #ifndef UTS_RUN_SEQ
