@@ -46,11 +46,11 @@ namespace EXAFMM_NAMESPACE {
     UpDownPass(Kernel & _kernel) : kernel(_kernel) {}           // Initialize variables
 
     //! Upward pass (P2M, M2M)
-    void upwardPass(Cells & cells) {
+    void upwardPass(GCells cells) {
       logger::startTimer("Upward pass");                        // Start timer
       if (!cells.empty()) {                                     // If cell vector is not empty
-	C_iter C0 = cells.begin();                              //  Set iterator of target root cell
-        for (C_iter C=cells.begin(); C!=cells.end(); C++) {     //  Loop over cells
+	GC_iter C0 = cells.begin();                              //  Set iterator of target root cell
+        for (GC_iter C=cells.begin(); C!=cells.end(); C++) {     //  Loop over cells
           C->M.resize(kernel.NTERM, 0.0);                       //   Allocate & initialize M coefs
           C->L.resize(kernel.NTERM, 0.0);                       //   Allocate & initialize L coefs
         }                                                       //  End loop over cells

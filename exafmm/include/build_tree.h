@@ -15,51 +15,70 @@ namespace EXAFMM_NAMESPACE {
       int          IBODY;                                       //!< Index offset for first body in node
       int          NBODY;                                       //!< Number of descendant bodies
       int          NNODE;                                       //!< Number of descendant nodes
-      OctreeNode * CHILD[8];                                    //!< Pointer to child node
+      global_ptr<OctreeNode> CHILD[8];                                    //!< Pointer to child node
       vec3         X;                                           //!< Coordinate at center
     };
 
     const int    ncrit;                                         //!< Number of bodies per leaf cell
     int          numLevels;                                     //!< Number of levels in tree
-    B_iter       B0;                                            //!< Iterator of first body
-    OctreeNode * N0;                                            //!< Pointer to octree root node
+    GB_iter       B0;                                            //!< Iterator of first body
+    global_ptr<OctreeNode> N0;                                            //!< Pointer to octree root node
 
   private:
     //! Counting bodies in each octant
-    void countBodies(Bodies & bodies, int begin, int end, vec3 X, ivec8 & NBODY) {
+    void countBodies(GBodies bodies, int begin, int end, vec3 X, ivec8 & NBODY) {
       for (int i=0; i<8; i++) NBODY[i] = 0;                     // Initialize number of bodies in octant
-      for (int i=begin; i<end; i++) {                           // Loop over bodies in node
-        vec3 x = bodies[i].X;                                   //  Coordinates of body
-        if (bodies[i].ICELL < 0)                                //  If using residual index
-          x = bodies[i+bodies[i].ICELL].X;                      //   Use coordinates of first body in residual group
-        int octant = (x[0] > X[0]) + ((x[1] > X[1]) << 1) + ((x[2] > X[2]) << 2);// Which octant body belongs to
-        NBODY[octant]++;                                        //  Increment body count in octant
-      }                                                         // End loop over bodies in node
+      my_ityr::serial_for<my_ityr::iro::access_mode::read,
+                          my_ityr::iro::access_mode::read>(
+          ityr::count_iterator<int>(begin),
+          ityr::count_iterator<int>(end),
+          bodies.begin() + begin,
+          [&](int i, const auto& B) {
+            vec3 x = B.X;                                   //  Coordinates of body
+            if (B.ICELL < 0) {                                //  If using residual index
+              auto mp_X = static_cast<vec3 Body::*>(&Source::X);
+              x = (&bodies[i+B.ICELL])->*(mp_X);                      //   Use coordinates of first body in residual group
+            }
+            int octant = (x[0] > X[0]) + ((x[1] > X[1]) << 1) + ((x[2] > X[2]) << 2);// Which octant body belongs to
+            NBODY[octant]++;                                        //  Increment body count in octant
+          },
+          my_ityr::iro::block_size);
     }
 
     //! Sorting bodies according to octant (Morton order)
-    void moveBodies(Bodies & bodies, Bodies & buffer, int begin, int end,
+    void moveBodies(GBodies bodies, GBodies buffer, int begin, int end,
                            ivec8 octantOffset, vec3 X) {
-      for (int i=begin; i<end; i++) {                           // Loop over bodies
-        vec3 x = bodies[i].X;                                   //  Coordinates of body
-        if (bodies[i].ICELL < 0)                                //  If using residual index
-          x = bodies[i+bodies[i].ICELL].X;                      //   Use coordinates of first body in residual group
-        int octant = (x[0] > X[0]) + ((x[1] > X[1]) << 1) + ((x[2] > X[2]) << 2);// Which octant body belongs to`
-        buffer[octantOffset[octant]] = bodies[i];               //   Permute bodies out-of-place according to octant
-        octantOffset[octant]++;                                 //  Increment body count in octant
-      }                                                         // End loop over bodies
+      my_ityr::serial_for<my_ityr::iro::access_mode::read,
+                          my_ityr::iro::access_mode::read>(
+          ityr::count_iterator<int>(begin),
+          ityr::count_iterator<int>(end),
+          bodies.begin() + begin,
+          [&](int i, const auto& B) {
+            vec3 x = B.X;                                   //  Coordinates of body
+            if (B.ICELL < 0) {                                //  If using residual index
+              auto mp_X = static_cast<vec3 Body::*>(&Source::X);
+              x = (&bodies[i+B.ICELL])->*(mp_X);                      //   Use coordinates of first body in residual group
+            }
+            int octant = (x[0] > X[0]) + ((x[1] > X[1]) << 1) + ((x[2] > X[2]) << 2);// Which octant body belongs to`
+            buffer[octantOffset[octant]] = B;               //   Permute bodies out-of-place according to octant
+            octantOffset[octant]++;                                 //  Increment body count in octant
+          },
+          my_ityr::iro::block_size);
     }
 
     //! Create an octree node
-    OctreeNode * makeOctNode(OctreeNode *& octNode, int begin, int end, vec3 X, bool nochild) {
-      octNode = new OctreeNode();                               // Allocate memory for single node
-      octNode->IBODY = begin;                                   // Index of first body in node
-      octNode->NBODY = end - begin;                             // Number of bodies in node
-      octNode->NNODE = 1;                                       // Initialize counter for decendant nodes
-      octNode->X = X;                                           // Center coordinates of node
-      if (nochild) {                                            // If node has no children
-        for (int i=0; i<8; i++) octNode->CHILD[i] = NULL;       //  Initialize pointers to children
-      }                                                         // End if for node children
+    global_ptr<OctreeNode> makeOctNode(int begin, int end, vec3 X, bool nochild) {
+      global_ptr<OctreeNode> octNode = my_ityr::iro::malloc_local<OctreeNode>(1);
+      ityr::with_checkout<my_ityr::iro::access_mode::write>(
+          global_span<OctreeNode>(octNode, 1), [&](OctreeNode* octNode) {
+        octNode->IBODY = begin;                                   // Index of first body in node
+        octNode->NBODY = end - begin;                             // Number of bodies in node
+        octNode->NNODE = 1;                                       // Initialize counter for decendant nodes
+        octNode->X = X;                                           // Center coordinates of node
+        if (nochild) {                                            // If node has no children
+          for (int i=0; i<8; i++) octNode->CHILD[i] = NULL;       //  Initialize pointers to children
+        }                                                         // End if for node children
+      });
       return octNode;                                           // Return node
     }
 
@@ -74,37 +93,44 @@ namespace EXAFMM_NAMESPACE {
     }
 
     //! Recursive functor for building nodes of an octree adaptively using a top-down approach
-    void buildNodes(OctreeNode *& octNode, Bodies & bodies, Bodies & buffer,
+    global_ptr<OctreeNode> buildNodes(GBodies bodies, GBodies buffer,
                            int begin, int end, vec3 X, real_t R0,
                            int level=0, bool direction=false) {
       if (begin == end) {                                       // If no bodies are left
-        octNode = NULL;                                         //  Assign null pointer
-        return;                                                 //  End buildNodes()
+        return nullptr;                                                 //  End buildNodes()
       }                                                         // End if for no bodies
       if (end - begin <= ncrit) {                               // If number of bodies is less than threshold
-        if (direction)                                          //  If direction of data is from bodies to buffer
-          for (int i=begin; i<end; i++) buffer[i] = bodies[i];  //   Copy bodies to buffer
-        octNode = makeOctNode(octNode,begin,end,X,true);        //  Create an octree node and assign it's pointer
-        return;                                                 //  End buildNodes()
+        if (direction) {                                          //  If direction of data is from bodies to buffer
+          my_ityr::parallel_transform(bodies.begin() + begin,
+                                      bodies.end() + end,
+                                      buffer.begin() + begin,
+                                      [=](const auto&& B) { return B; },
+                                      my_ityr::iro::block_size);
+        }
+        return makeOctNode(begin,end,X,true);        //  Create an octree node and assign it's pointer
       }                                                         // End if for number of bodies
-      octNode = makeOctNode(octNode,begin,end,X,false);         // Create an octree node with child nodes
+      global_ptr<OctreeNode> octNode = makeOctNode(begin,end,X,false);         // Create an octree node with child nodes
       ivec8 NBODY;                                              // Number of bodies in node
       countBodies(bodies, begin, end, X, NBODY);                // Count bodies in each octant
       ivec8 octantOffset = exclusiveScan(NBODY, begin);         // Exclusive scan to obtain offset from octant count
       moveBodies(bodies, buffer, begin, end, octantOffset, X);  // Sort bodies according to octant
+                                                                //
+      global_ptr<global_ptr<OctreeNode>> children = &(octNode->*(&OctreeNode::CHILD));
       for (int i=0; i<8; i++) {                                 // Loop over children
         vec3 Xchild = X;                                        //  Initialize center coordinates of child node
         real_t r = R0 / (1 << (level + 1));                     //  Radius of cells for child's level
         for (int d=0; d<3; d++) {                               //  Loop over dimensions
           Xchild[d] += r * (((i & 1 << d) >> d) * 2 - 1);       //   Shift center coordinates to that of child node
         }                                                       //  End loop over dimensions
-        buildNodes(octNode->CHILD[i], buffer, bodies,           //  Recursive call for children
+        children[i] = buildNodes(buffer, bodies,           //  Recursive call for children
                    octantOffset[i], octantOffset[i] + NBODY[i],
                    Xchild, R0, level+1, !direction);
       }                                                         // End loop over children
       for (int i=0; i<8; i++) {                                 // Loop over children
-        if (octNode->CHILD[i]) octNode->NNODE += octNode->CHILD[i]->NNODE;// If child exists increment child node count
+        if (global_ptr<OctreeNode>(children[i]))
+          octNode->*(&OctreeNode::NNODE) += global_ptr<OctreeNode>(children[i])->*(&OctreeNode::NNODE);// If child exists increment child node count
       }                                                         // End loop over chlidren
+      return octNode;
     }
 
     //! Get Morton key
@@ -120,48 +146,53 @@ namespace EXAFMM_NAMESPACE {
     }
 
     //! Creating cell data structure from nodes
-    void nodes2cells(OctreeNode * octNode, C_iter C,
-                     C_iter C0, C_iter CN, vec3 X0, real_t R0,
+    void nodes2cells(global_ptr<OctreeNode> octNode, GC_iter C,
+                     GC_iter C0, GC_iter CN, vec3 X0, real_t R0,
                      int & maxLevel, int level=0, int iparent=0) {
-      C->IPARENT = iparent;                                     //  Index of parent cell
-      C->R       = R0 / (1 << level);                           //  Cell radius
-      C->X       = octNode->X;                                  //  Cell center
-      C->NBODY   = octNode->NBODY;                              //  Number of decendant bodies
-      C->IBODY   = octNode->IBODY;                              //  Index of first body in cell
-      C->BODY    = B0 + C->IBODY;                               //  Iterator of first body in cell
-      C->ICELL   = getKey(C->X, X0-R0, 2*C->R, level);          //  Get Morton key
-      if (octNode->NNODE == 1) {                                //  If node has no children
-        C->ICHILD = 0;                                          //   Set index of first child cell to zero
-        C->NCHILD = 0;                                          //   Number of child cells
-        assert(C->NBODY > 0);                                   //   Check for empty leaf cells
-        maxLevel = std::max(maxLevel, level);                   //   Update maximum level of tree
-      } else {                                                  //  Else if node has children
-        int nchild = 0;                                         //   Initialize number of child cells
-        int octants[8];                                         //   Map of child index to octants
-        for (int i=0; i<8; i++) {                               //   Loop over octants
-          if (octNode->CHILD[i]) {                              //    If child exists for that octant
-            octants[nchild] = i;                                //     Map octant to child index
-            nchild++;                                           //     Increment child cell counter
-          }                                                     //    End if for child existance
-        }                                                       //   End loop over octants
-        C_iter Ci = CN;                                         //   CN points to the next free memory address
-        C->ICHILD = Ci - C0;                                    //   Set Index of first child cell
-        C->NCHILD = nchild;                                     //   Number of child cells
-        assert(C->NCHILD > 0);                                  //   Check for childless non-leaf cells
-        CN += nchild;                                           //   Increment next free memory address
-        for (int i=0; i<nchild; i++) {                          //   Loop over children
-          int octant = octants[i];                              //    Get octant from child index
-          nodes2cells(octNode->CHILD[octant], Ci, C0, CN,       //    Recursive call for child cells
-                      X0, R0, numLevels, level+1, C-C0);
-          Ci++;                                                 //    Increment cell iterator
-          CN += octNode->CHILD[octant]->NNODE - 1;              //    Increment next free memory address
-        }                                                       //   End loop over children
-        for (int i=0; i<nchild; i++) {                          //   Loop over children
-          int octant = octants[i];                              //    Get octant from child index
-          delete octNode->CHILD[octant];                        //    Free child pointer to avoid memory leak
-        }                                                       //   End loop over children
-        maxLevel = std::max(maxLevel, level+1);                 //   Update maximum level of tree
-      }                                                         //  End if for child existance
+      ityr::with_checkout<my_ityr::iro::access_mode::read,
+                          my_ityr::iro::access_mode::write>(
+          global_span<OctreeNode>(octNode, 1), global_span<Cell>(C, 1),
+          [&](const OctreeNode* o, Cell* c) {
+        c->IPARENT = iparent;                                     //  Index of parent cell
+        c->R       = R0 / (1 << level);                           //  Cell radius
+        c->X       = o->X;                                  //  Cell center
+        c->NBODY   = o->NBODY;                              //  Number of decendant bodies
+        c->IBODY   = o->IBODY;                              //  Index of first body in cell
+        c->BODY    = B0 + c->IBODY;                               //  Iterator of first body in cell
+        c->ICELL   = getKey(c->X, X0-R0, 2*c->R, level);          //  Get Morton key
+        if (o->NNODE == 1) {                                //  If node has no children
+          c->ICHILD = 0;                                          //   Set index of first child cell to zero
+          c->NCHILD = 0;                                          //   Number of child cells
+          assert(c->NBODY > 0);                                   //   Check for empty leaf cells
+          maxLevel = std::max(maxLevel, level);                   //   Update maximum level of tree
+        } else {                                                  //  Else if node has children
+          int nchild = 0;                                         //   Initialize number of child cells
+          int octants[8];                                         //   Map of child index to octants
+          for (int i=0; i<8; i++) {                               //   Loop over octants
+            if (o->CHILD[i]) {                              //    If child exists for that octant
+              octants[nchild] = i;                                //     Map octant to child index
+              nchild++;                                           //     Increment child cell counter
+            }                                                     //    End if for child existance
+          }                                                       //   End loop over octants
+          GC_iter Ci = CN;                                         //   CN points to the next free memory address
+          c->ICHILD = Ci - C0;                                    //   Set Index of first child cell
+          c->NCHILD = nchild;                                     //   Number of child cells
+          assert(C->NCHILD > 0);                                  //   Check for childless non-leaf cells
+          CN += nchild;                                           //   Increment next free memory address
+          for (int i=0; i<nchild; i++) {                          //   Loop over children
+            int octant = octants[i];                              //    Get octant from child index
+            nodes2cells(o->CHILD[octant], Ci, C0, CN,       //    Recursive call for child cells
+                        X0, R0, numLevels, level+1, C-C0);
+            Ci++;                                                 //    Increment cell iterator
+            CN += o->CHILD[octant]->*(&OctreeNode::NNODE) - 1;              //    Increment next free memory address
+          }                                                       //   End loop over children
+          for (int i=0; i<nchild; i++) {                          //   Loop over children
+            int octant = octants[i];                              //    Get octant from child index
+            my_ityr::iro::free(o->CHILD[octant], 1);
+          }                                                       //   End loop over children
+          maxLevel = std::max(maxLevel, level+1);                 //   Update maximum level of tree
+        }                                                         //  End if for child existance
+      });
     };
 
     //! Transform Xmin & Xmax to X (center) & R (radius)
@@ -183,33 +214,43 @@ namespace EXAFMM_NAMESPACE {
     BuildTree(int _ncrit) : ncrit(_ncrit), numLevels(0) {}
 
     //! Build tree structure top down
-    Cells buildTree(Bodies & bodies, Bodies & buffer, Bounds bounds) {
+    GCells buildTree(GBodies bodies, GBodies buffer, Bounds bounds) {
       logger::startTimer("Grow tree");                          // Start timer
       Box box = bounds2box(bounds);                             // Get box from bounds
       if (bodies.empty()) {                                     // If bodies vector is empty
-	N0 = NULL;                                              //  Reinitialize N0 with NULL
+	N0 = nullptr;                                              //  Reinitialize N0 with NULL
       } else {                                                  // If bodies vector is not empty
+#if 0
 	if (bodies.size() > buffer.size()) buffer.resize(bodies.size());// Enlarge buffer if necessary
+#else
+        assert(bodies.size() <= buffer.size());
+#endif
         assert(box.R > 0);                                      // Check for bounds validity
         B0 = bodies.begin();                                    // Bodies iterator
-        buildNodes(N0, bodies, buffer, 0, bodies.size(),        // Build octree nodes
+        N0 = buildNodes(bodies, buffer, 0, bodies.size(),        // Build octree nodes
                    box.X, box.R);
       }                                                         // End if for empty root
       logger::stopTimer("Grow tree");                           // Stop timer
       logger::startTimer("Link tree");                          // Start timer
-      Cells cells;                                              // Initialize cell array
+      GCells cells;                                              // Initialize cell array
       if (N0 != NULL) {                                         // If the node tree is not empty
-	cells.resize(N0->NNODE);                                //  Allocate cells array
-	C_iter C0 = cells.begin();                              //  Cell begin iterator
+        std::size_t ncells = N0->*(&OctreeNode::NNODE);
+        cells = {my_ityr::iro::malloc<Cell>(ncells), ncells};
+        // TODO: common impl for new
+        my_ityr::parallel_for<my_ityr::iro::access_mode::write>(cells.begin(), cells.end(), [=](auto&& c) {
+          new (&c) Cell{};
+        });
+	GC_iter C0 = cells.begin();                              //  Cell begin iterator
 	nodes2cells(N0, C0, C0, C0+1, box.X, box.R, numLevels); // Instantiate recursive functor
-	delete N0;                                              //  Deallocate nodes
+        my_ityr::iro::free(N0, 1);
       }                                                         // End if for empty node tree
       logger::stopTimer("Link tree");                           // Stop timer
       return cells;                                             // Return cells array
     }
 
     //! Print tree structure statistics
-    void printTreeData(Cells & cells) {
+    void printTreeData(GCells cells) {
+#if 0
       if (logger::verbose && !cells.empty()) {                  // If verbose flag is true
 	logger::printTitle("Tree stats");                       //  Print title
 	std::cout  << std::setw(logger::stringLength) << std::left//  Set format
@@ -219,6 +260,7 @@ namespace EXAFMM_NAMESPACE {
 		   << std::setw(logger::stringLength) << std::left//  Set format
 		   << "Tree depth" << " : " << numLevels << std::endl;//  Print number of levels
       }                                                         // End if for verbose flag
+#endif
     }
   };
 }

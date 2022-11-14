@@ -16,13 +16,16 @@ int real_main(int argc, char ** argv) {
   const complex_t wavek = complex_t(10.,1.) / real_t(2 * M_PI);
   Args args(argc, argv);
 
+  int my_rank = my_ityr::rank();
+  int n_ranks = my_ityr::n_ranks();
+
   my_ityr::iro::init(args.cache_size * 1024 * 1024);
 
-  Bodies bodies, bodies2, jbodies, buffer;
+  GBodies bodies, bodies2, jbodies, buffer;
   BoundBox boundBox;
   Bounds bounds;
   BuildTree buildTree(args.ncrit);
-  Cells cells, jcells;
+  GCells cells, jcells;
   Dataset data;
   Kernel kernel(args.P, eps2, wavek);
   Traversal traversal(kernel, args.theta, args.nspawn, args.images, args.path);
@@ -33,11 +36,21 @@ int real_main(int argc, char ** argv) {
   verify.verbose = args.verbose;
   logger::verbose = args.verbose;
   logger::path = args.path;
-  logger::printTitle("FMM Parameters");
-  args.print(logger::stringLength);
-  bodies = data.initBodies(args.numBodies, args.distribution, 0);
-  buffer.reserve(bodies.size());
+
+  if (my_rank == 0) {
+    logger::printTitle("FMM Parameters");
+    args.print(logger::stringLength);
+
+    bodies = my_ityr::root_spawn([=] {
+      return data.initBodies(args.numBodies, args.distribution, 0);
+    });
+  }
+  my_ityr::barrier();
+
+  buffer = {my_ityr::iro::malloc<Body>(bodies.size()), bodies.size()};
+
   if (args.IneJ) {
+#if 0
     for (B_iter B=bodies.begin(); B!=bodies.end(); B++) {
       B->X[0] += M_PI;
       B->X[0] *= 0.5;
@@ -47,7 +60,11 @@ int real_main(int argc, char ** argv) {
       B->X[0] -= M_PI;
       B->X[0] *= 0.5;
     }
+#endif
+    std::cout << "IneJ unimplemented" << std::endl;
+    abort();
   }
+
   bool pass = true;
   bool isTime = false;
   for (int t=0; t<args.repeat; t++) {
@@ -61,18 +78,24 @@ int real_main(int argc, char ** argv) {
       std::stringstream title;
       title << "Time average loop " << it;
       logger::printTitle(title.str());
-      bounds = boundBox.getBounds(bodies);
-      if (args.IneJ) {
-        bounds = boundBox.getBounds(jbodies, bounds);
+      if (my_rank == 0) {
+        bounds = boundBox.getBounds(bodies);
+        if (args.IneJ) {
+#if 0
+          bounds = boundBox.getBounds(jbodies, bounds);
+#endif
+        }
+        cells = buildTree.buildTree(bodies, buffer, bounds);
       }
-      cells = buildTree.buildTree(bodies, buffer, bounds);
       upDownPass.upwardPass(cells);
       traversal.initListCount(cells);
       traversal.initWeight(cells);
       if (args.IneJ) {
+#if 0
         jcells = buildTree.buildTree(jbodies, buffer, bounds);
         upDownPass.upwardPass(jcells);
         traversal.traverse(cells, jcells, cycle, args.dual);
+#endif
       } else {
         traversal.traverse(cells, cells, cycle, args.dual);
         jbodies = bodies;

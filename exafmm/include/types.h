@@ -9,12 +9,18 @@
 #include <vector>
 #include "vec.h"
 
+#include "pcg_random.hpp"
+
 #include "ityr/ityr.hpp"
 
 namespace EXAFMM_NAMESPACE {
   using my_ityr = ityr::ityr_if<ityr::ityr_policy>;
   template <typename T>
-  using global_ptr = my_ityr::iro::global_ptr<T>;
+  using global_ptr = my_ityr::global_ptr<T>;
+  template <typename T>
+  using global_span = my_ityr::global_span<T>;
+  template <typename T>
+  using raw_span = ityr::raw_span<T>;
 
   // Basic type definitions
 #if EXAFMM_SINGLE
@@ -94,8 +100,12 @@ namespace EXAFMM_NAMESPACE {
     kvec4   TRG;                                                //!< Scalar+vector3 real values
 #endif
   };
-  typedef std::vector<Body> Bodies;                             //!< Vector of bodies
+
+  typedef raw_span<Body> Bodies;                             //!< Vector of bodies
   typedef typename Bodies::iterator B_iter;                     //!< Iterator of body vector
+
+  typedef global_span<Body> GBodies;
+  typedef typename GBodies::iterator GB_iter;
 
   /*
 #ifdef EXAFMM_PMAX
@@ -121,7 +131,7 @@ namespace EXAFMM_NAMESPACE {
     real_t   WEIGHT;                                            //!< Weight for partitioning
     vec3     X;                                                 //!< Cell center
     real_t   R;                                                 //!< Cell radius
-    B_iter   BODY;                                              //!< Iterator of first body
+    GB_iter   BODY;                                              //!< Iterator of first body
   };
   //! Structure of cells
   struct Cell : public CellBase {
@@ -129,9 +139,15 @@ namespace EXAFMM_NAMESPACE {
     std::vector<complex_t> L;                                   //!< Local expansion coefs
     using CellBase::operator=;
   };
-  typedef std::vector<Cell> Cells;                              //!< Vector of cells
-  typedef std::vector<CellBase> CellBases;                      //!< Vector of cell bases
+
+  typedef raw_span<Cell> Cells;                              //!< Vector of cells
+  typedef raw_span<CellBase> CellBases;                      //!< Vector of cell bases
   typedef typename Cells::iterator C_iter;                      //!< Iterator of cell vector
   typedef typename CellBases::iterator CB_iter;                 //!< Iterator of cell vector
+                                                                //
+  typedef global_span<Cell> GCells;
+  typedef global_span<CellBase> GCellBases;
+  typedef typename GCells::iterator GC_iter;
+  typedef typename GCellBases::iterator GCB_iter;
 }
 #endif
