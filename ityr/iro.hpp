@@ -302,11 +302,11 @@ public:
   void collect_deallocated() {}
 
   template <typename T>
-  global_ptr<T> malloc(std::size_t nelems) { return (T*)std::malloc(nelems * sizeof(T)); }
+  global_ptr<T> malloc(std::size_t nelems) { return reinterpret_cast<T*>(std::malloc(nelems * sizeof(T))); }
   template <typename T>
   global_ptr<T> malloc_local(std::size_t nelems) { return malloc<T>(nelems); }
   template <typename T>
-  void free(global_ptr<T> ptr, std::size_t nelmes [[maybe_unused]]) { std::free(ptr); }
+  void free(global_ptr<T> ptr, std::size_t) { std::free(ptr); }
 
   template <typename ConstT, typename T>
   void get(global_ptr<ConstT> from_ptr, T* to_ptr, std::size_t nelems) {

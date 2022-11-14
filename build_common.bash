@@ -11,10 +11,10 @@ CFLAGS="${CFLAGS:+$CFLAGS} -DITYR_BLOCK_SIZE=$KOCHI_PARAM_BLOCK_SIZE"
 
 case $KOCHI_PARAM_CACHE_POLICY in
   serial)         CFLAGS="${CFLAGS:+$CFLAGS} -DITYR_POLICY=ityr_policy_serial" ;;
-  nocache)        CFLAGS="${CFLAGS:+$CFLAGS} -DITYR_POLICY=ityr_policy_workfirst -DITYR_IRO_DISABLE_CACHE=1" ;;
+  nocache)        CFLAGS="${CFLAGS:+$CFLAGS} -DITYR_POLICY=ityr_policy_workfirst -DITYR_IRO_DISABLE_CACHE=1 -DITYR_AUTO_CHECKOUT=0" ;;
   writethrough)   CFLAGS="${CFLAGS:+$CFLAGS} -DITYR_POLICY=ityr_policy_workfirst -DITYR_ENABLE_WRITE_THROUGH=1" ;;
   writeback)      CFLAGS="${CFLAGS:+$CFLAGS} -DITYR_POLICY=ityr_policy_workfirst" ;;
   writeback_lazy) CFLAGS="${CFLAGS:+$CFLAGS} -DITYR_POLICY=ityr_policy_workfirst_lazy" ;;
-  getput)         CFLAGS="${CFLAGS:+$CFLAGS} -DITYR_POLICY=ityr_policy_workfirst_lazy -DITYR_IRO_GETPUT=1" ;;
+  getput)         CFLAGS="${CFLAGS:+$CFLAGS} -DITYR_POLICY=ityr_policy_workfirst_lazy -DITYR_IRO_GETPUT=1 -DITYR_AUTO_CHECKOUT=0" ;;
   *)              echo "Unknown cache policy ($KOCHI_PARAM_CACHE_POLICY)"; exit 1 ;;
 esac

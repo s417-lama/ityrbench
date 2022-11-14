@@ -70,6 +70,7 @@ class ityr_if {
     static int rank() { return P::rank(); }
     static int n_ranks() { return P::n_ranks(); }
     static void barrier() { P::barrier(); }
+    static constexpr bool auto_checkout = P::auto_checkout;
   };
   using ito_pattern_ = ito_pattern_if<ito_pattern_policy>;
 
@@ -223,7 +224,9 @@ struct ityr_policy_serial {
   template <typename Fn, typename... Args>
   static void main(Fn&& f, Args&&... args) { f(std::forward<Args>(args)...); }
 
-  static void barrier() {};
+  static void barrier() {}
+
+  static constexpr bool auto_checkout = true;
 };
 
 // Naive
@@ -246,19 +249,22 @@ struct ityr_policy_naive {
 #if ITYR_IRO_DISABLE_CACHE
   template <typename P>
   using iro_t = iro_pcas_nocache<P>;
+  template <typename P>
+  using iro_context_t = iro_context_disabled<P>;
 #elif ITYR_IRO_GETPUT
   template <typename P>
   using iro_t = iro_pcas_getput<P>;
+  template <typename P>
+  using iro_context_t = iro_context_disabled<P>;
 #else
   template <typename P>
   using iro_t = iro_pcas_default<P>;
+  template <typename P>
+  using iro_context_t = iro_context_enabled<P>;
 #endif
 
 #undef ITYR_IRO_DISABLE_CACHE
 #undef ITYR_IRO_GETPUT
-
-  template <typename P>
-  using iro_context_t = iro_context_enabled<P>;
 
   using wallclock_t = wallclock_madm;
 
@@ -286,7 +292,13 @@ struct ityr_policy_naive {
 
   static void barrier() {
     madm::uth::barrier();
-  };
+  }
+
+#ifndef ITYR_AUTO_CHECKOUT
+#define ITYR_AUTO_CHECKOUT true
+#endif
+  static constexpr bool auto_checkout = ITYR_AUTO_CHECKOUT;
+#undef ITYR_AUTO_CHECKOUT
 };
 
 // Work-first fence elimination

@@ -143,19 +143,18 @@ std::size_t node_size(int n_children) {
 }
 
 global_ptr<dynamic_node> new_dynamic_node(int n_children) {
-  auto gptr = static_cast<global_ptr<dynamic_node>>(
+  auto gptr = global_ptr<dynamic_node>(
       my_ityr::iro::malloc_local<std::byte>(node_size(n_children)));
   gptr->*(&dynamic_node::n_children) = n_children;
   return gptr;
 }
 
 void delete_dynamic_node(global_ptr<dynamic_node> node, int n_children) {
-  my_ityr::iro::free(static_cast<global_ptr<std::byte>>(node),
-                     node_size(n_children));
+  my_ityr::iro::free(global_ptr<std::byte>(node), node_size(n_children));
 }
 
 global_ptr<global_ptr<dynamic_node>> get_children(global_ptr<dynamic_node> node) {
-  return &(node->*(&dynamic_node::children));
+  return global_ptr<global_ptr<dynamic_node>>(&(node->*(&dynamic_node::children)));
 }
 
 #endif
