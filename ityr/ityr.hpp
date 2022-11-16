@@ -249,22 +249,19 @@ struct ityr_policy_naive {
 #if ITYR_IRO_DISABLE_CACHE
   template <typename P>
   using iro_t = iro_pcas_nocache<P>;
-  template <typename P>
-  using iro_context_t = iro_context_disabled<P>;
 #elif ITYR_IRO_GETPUT
   template <typename P>
   using iro_t = iro_pcas_getput<P>;
-  template <typename P>
-  using iro_context_t = iro_context_disabled<P>;
 #else
   template <typename P>
   using iro_t = iro_pcas_default<P>;
-  template <typename P>
-  using iro_context_t = iro_context_enabled<P>;
 #endif
 
 #undef ITYR_IRO_DISABLE_CACHE
 #undef ITYR_IRO_GETPUT
+
+  template <typename P>
+  using iro_context_t = iro_context_enabled<P>;
 
   using wallclock_t = wallclock_madm;
 

@@ -190,7 +190,6 @@ public:
   void acquire() {}
   void acquire(release_handler) {}
   void poll() {}
-  void collect_deallocated() {}
   template <typename T>
   void willread(global_ptr<T>, std::size_t) {}
 
