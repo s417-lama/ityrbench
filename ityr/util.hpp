@@ -2,7 +2,8 @@
 
 #include <iostream>
 #include <sstream>
-#include <signal.h>
+#include <ctime>
+#include <csignal>
 #include <dlfcn.h>
 
 #define BACKWARD_HAS_BFD 1
@@ -46,6 +47,31 @@ inline T get_env(const char* env_var, T default_val, int rank) {
   return val;
 }
 
+inline timer_t* abort_timer_instance() {
+  static timer_t timer;
+  return &timer;
+}
+
+inline void init_abort_timer() {
+  struct sigevent sev;
+  sev.sigev_notify = SIGEV_SIGNAL;
+  sev.sigev_signo = SIGABRT;
+  if (timer_create(CLOCK_REALTIME, &sev, abort_timer_instance()) == -1) {
+    perror("timer_create");
+    exit(1);
+  }
+}
+
+inline void set_abort_timeout(int timeout_sec) {
+  struct itimerspec its;
+  its.it_value.tv_sec = timeout_sec;
+  its.it_value.tv_nsec = 0;
+  its.it_interval.tv_sec = 0;
+  its.it_interval.tv_nsec = 0;
+
+  timer_settime(*abort_timer_instance(), 0, &its, NULL);
+}
+
 inline void print_backtrace() {
   backward::StackTrace st;
   st.load_here(32);
@@ -53,13 +79,25 @@ inline void print_backtrace() {
   p.object = true;
   p.color_mode = backward::ColorMode::always;
   p.address = true;
-  p.print(st, stdout);
+  p.print(st, stderr);
+  fflush(stderr);
 }
 
 inline void signal_handler(int sig) {
-  printf("Signal %d received.\n", sig);
+  // cancel signal handler for SIGABRT
+  signal(SIGABRT, SIG_DFL);
+
+  // Set timeout so as not to get stuck in the signal handler.
+  // Non-async-signal-safe functions (e.g., printf) are called in the following,
+  // which can result in a deadlock.
+  set_abort_timeout(10);
+
+  fprintf(stderr, "Signal %d received.\n", sig);
+  fflush(stderr);
+
   print_backtrace();
-  exit(1);
+
+  std::abort();
 }
 
 inline void set_signal_handler(int sig) {
@@ -74,6 +112,8 @@ inline void set_signal_handler(int sig) {
 }
 
 inline void set_signal_handlers() {
+  init_abort_timer();
+
   set_signal_handler(SIGSEGV);
   set_signal_handler(SIGABRT);
   set_signal_handler(SIGBUS);
