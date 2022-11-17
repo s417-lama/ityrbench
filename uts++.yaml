@@ -30,7 +30,7 @@ default_params:
   # common params
   cache_policy: writeback_lazy # serial/nocache/writethrough/writeback/writeback_lazy/getput
   dist_policy: cyclic # block/cyclic
-  cache_size: 128 # MB
+  cache_size: 32 # MB
   block_size: 65536 # bytes
   max_dirty: $cache_size # MB
   shared_mem: 1
