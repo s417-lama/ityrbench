@@ -54,12 +54,12 @@ batches:
     duplicates: 1
     artifacts:
       - type: stdout
-        dest: ${batch_name}/tree_${tree}_p_${cache_policy}_${duplicate}.log
+        dest: uts++/${batch_name}/tree_${tree}_p_${cache_policy}_${duplicate}.log
       - type: stats
-        dest: ${batch_name}/tree_${tree}_p_${cache_policy}_${duplicate}.stats
+        dest: uts++/${batch_name}/tree_${tree}_p_${cache_policy}_${duplicate}.stats
       - type: file
         src: mpirun_out.txt
-        dest: ${batch_name}/tree_${tree}_p_${cache_policy}_${duplicate}.out
+        dest: uts++/${batch_name}/tree_${tree}_p_${cache_policy}_${duplicate}.out
 
   T1L:
     name: uts++_${batch_name}
@@ -72,12 +72,12 @@ batches:
       cache_policy: [nocache, writethrough, writeback, writeback_lazy]
     artifacts:
       - type: stdout
-        dest: ${batch_name}/nodes_${nodes}_p_${cache_policy}_${duplicate}.log
+        dest: uts++/${batch_name}/nodes_${nodes}_p_${cache_policy}_${duplicate}.log
       - type: stats
-        dest: ${batch_name}/nodes_${nodes}_p_${cache_policy}_${duplicate}.stats
+        dest: uts++/${batch_name}/nodes_${nodes}_p_${cache_policy}_${duplicate}.stats
       - type: file
         src: mpirun_out.txt
-        dest: ${batch_name}/nodes_${nodes}_p_${cache_policy}_${duplicate}.out
+        dest: uts++/${batch_name}/nodes_${nodes}_p_${cache_policy}_${duplicate}.out
 
 build:
   depend_params: [exec_type, use_vector, cache_policy, dist_policy, block_size, logger]
