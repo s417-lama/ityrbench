@@ -34,15 +34,16 @@ namespace EXAFMM_NAMESPACE {
           ityr::count_iterator<int>(end),
           bodies.begin() + begin,
           [&](int i, const auto& B) {
-            vec3 x = B.X;                                   //  Coordinates of body
-            if (B.ICELL < 0) {                                //  If using residual index
-              auto mp_X = static_cast<vec3 Body::*>(&Source::X);
-              x = (&bodies[i+B.ICELL])->*(mp_X);                      //   Use coordinates of first body in residual group
-            }
-            int octant = (x[0] > X[0]) + ((x[1] > X[1]) << 1) + ((x[2] > X[2]) << 2);// Which octant body belongs to
-            NBODY[octant]++;                                        //  Increment body count in octant
-          },
-          my_ityr::iro::block_size);
+
+        vec3 x = B.X;                                   //  Coordinates of body
+        if (B.ICELL < 0) {                                //  If using residual index
+          auto mp_X = static_cast<vec3 Body::*>(&Source::X);
+          x = (&bodies[i+B.ICELL])->*(mp_X);                      //   Use coordinates of first body in residual group
+        }
+        int octant = (x[0] > X[0]) + ((x[1] > X[1]) << 1) + ((x[2] > X[2]) << 2);// Which octant body belongs to
+        NBODY[octant]++;                                        //  Increment body count in octant
+                                                                //
+      }, my_ityr::iro::block_size);
     }
 
     //! Sorting bodies according to octant (Morton order)
@@ -54,29 +55,31 @@ namespace EXAFMM_NAMESPACE {
           ityr::count_iterator<int>(end),
           bodies.begin() + begin,
           [&](int i, const auto& B) {
-            vec3 x = B.X;                                   //  Coordinates of body
-            if (B.ICELL < 0) {                                //  If using residual index
-              auto mp_X = static_cast<vec3 Body::*>(&Source::X);
-              x = (&bodies[i+B.ICELL])->*(mp_X);                      //   Use coordinates of first body in residual group
-            }
-            int octant = (x[0] > X[0]) + ((x[1] > X[1]) << 1) + ((x[2] > X[2]) << 2);// Which octant body belongs to`
-            buffer[octantOffset[octant]] = B;               //   Permute bodies out-of-place according to octant
-            octantOffset[octant]++;                                 //  Increment body count in octant
-          },
-          my_ityr::iro::block_size);
+
+        vec3 x = B.X;                                   //  Coordinates of body
+        if (B.ICELL < 0) {                                //  If using residual index
+          auto mp_X = static_cast<vec3 Body::*>(&Source::X);
+          x = (&bodies[i+B.ICELL])->*(mp_X);                      //   Use coordinates of first body in residual group
+        }
+        int octant = (x[0] > X[0]) + ((x[1] > X[1]) << 1) + ((x[2] > X[2]) << 2);// Which octant body belongs to`
+        buffer[octantOffset[octant]] = B;               //   Permute bodies out-of-place according to octant
+        octantOffset[octant]++;                                 //  Increment body count in octant
+                                                                //
+      }, my_ityr::iro::block_size);
     }
 
     //! Create an octree node
     global_ptr<OctreeNode> makeOctNode(int begin, int end, vec3 X, bool nochild) {
       global_ptr<OctreeNode> octNode = my_ityr::iro::malloc_local<OctreeNode>(1);
-      my_ityr::with_checkout<my_ityr::access_mode::write>(
-          octNode, 1, [&](OctreeNode* octNode) {
+      my_ityr::with_checkout_tied<my_ityr::access_mode::write>(
+          octNode, 1, [&](OctreeNode* octNode_) {
+        OctreeNode* octNode = new (octNode_) OctreeNode();
         octNode->IBODY = begin;                                   // Index of first body in node
         octNode->NBODY = end - begin;                             // Number of bodies in node
         octNode->NNODE = 1;                                       // Initialize counter for decendant nodes
         octNode->X = X;                                           // Center coordinates of node
         if (nochild) {                                            // If node has no children
-          for (int i=0; i<8; i++) octNode->CHILD[i] = NULL;       //  Initialize pointers to children
+          for (int i=0; i<8; i++) octNode->CHILD[i] = nullptr;       //  Initialize pointers to children
         }                                                         // End if for node children
       });
       return octNode;                                           // Return node
@@ -102,9 +105,9 @@ namespace EXAFMM_NAMESPACE {
       if (end - begin <= ncrit) {                               // If number of bodies is less than threshold
         if (direction) {                                          //  If direction of data is from bodies to buffer
           my_ityr::parallel_transform(bodies.begin() + begin,
-                                      bodies.end() + end,
+                                      bodies.begin() + end,
                                       buffer.begin() + begin,
-                                      [=](const auto& B) { return B; },
+                                      [](const auto& B) { return B; },
                                       my_ityr::iro::block_size);
         }
         return makeOctNode(begin,end,X,true);        //  Create an octree node and assign it's pointer
@@ -220,22 +223,21 @@ namespace EXAFMM_NAMESPACE {
       logger::startTimer("Grow tree");                          // Start timer
 
       Box box = bounds2box(bounds);                             // Get box from bounds
-      N0 = my_ityr::master_do([&]() {
-        if (bodies.empty()) {                                     // If bodies vector is empty
-          N0 = nullptr;                                              //  Reinitialize N0 with NULL
-        } else {                                                  // If bodies vector is not empty
+      if (bodies.empty()) {                                     // If bodies vector is empty
+        N0 = nullptr;                                              //  Reinitialize N0 with NULL
+      } else {                                                  // If bodies vector is not empty
 #if 0
-          if (bodies.size() > buffer.size()) buffer.resize(bodies.size());// Enlarge buffer if necessary
+        if (bodies.size() > buffer.size()) buffer.resize(bodies.size());// Enlarge buffer if necessary
 #else
-          assert(bodies.size() <= buffer.size());
+        assert(bodies.size() <= buffer.size());
 #endif
-          assert(box.R > 0);                                      // Check for bounds validity
-          B0 = bodies.begin();                                    // Bodies iterator
-          N0 = buildNodes(bodies, buffer, 0, bodies.size(),        // Build octree nodes
-                     box.X, box.R);
-        }                                                         // End if for empty root
-        return N0;
-      });
+        assert(box.R > 0);                                      // Check for bounds validity
+        B0 = bodies.begin();                                    // Bodies iterator
+        N0 = my_ityr::master_do([=]() {
+          return buildNodes(bodies, buffer, 0, bodies.size(),        // Build octree nodes
+                            box.X, box.R);
+        });
+      }
 
       logger::stopTimer("Grow tree");                           // Stop timer
       logger::startTimer("Link tree");                          // Start timer
@@ -258,17 +260,16 @@ namespace EXAFMM_NAMESPACE {
 
     //! Print tree structure statistics
     void printTreeData(GCells cells) {
-#if 0
       if (logger::verbose && !cells.empty()) {                  // If verbose flag is true
 	logger::printTitle("Tree stats");                       //  Print title
+        int nbody = cells.begin()->*(static_cast<int Cell::*>(&CellBase::NBODY));
 	std::cout  << std::setw(logger::stringLength) << std::left//  Set format
-		   << "Bodies"     << " : " << cells.front().NBODY << std::endl// Print number of bodies
+		   << "Bodies"     << " : " << nbody << std::endl// Print number of bodies
 		   << std::setw(logger::stringLength) << std::left//  Set format
 		   << "Cells"      << " : " << cells.size() << std::endl// Print number of cells
 		   << std::setw(logger::stringLength) << std::left//  Set format
 		   << "Tree depth" << " : " << numLevels << std::endl;//  Print number of levels
       }                                                         // End if for verbose flag
-#endif
     }
   };
 }

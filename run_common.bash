@@ -3,7 +3,7 @@
 
 MPIEXEC=${MPIEXEC:-mpiexec}
 
-$MPIEXEC --version
+$MPIEXEC --version || true
 
 export MADM_RUN__=1
 export MADM_PRINT_ENV=1

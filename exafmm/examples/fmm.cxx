@@ -10,16 +10,13 @@
 #include "verify.h"
 using namespace EXAFMM_NAMESPACE;
 
-int real_main(int argc, char ** argv) {
+void run_fmm(const Args& args) {
   const vec3 cycle = 2 * M_PI;
   const real_t eps2 = 0.0;
   const complex_t wavek = complex_t(10.,1.) / real_t(2 * M_PI);
-  Args args(argc, argv);
 
   int my_rank = my_ityr::rank();
   /* int n_ranks = my_ityr::n_ranks(); */
-
-  my_ityr::iro::init(args.cache_size * 1024 * 1024);
 
   global_vec<Body> bodies_vec(global_vec_coll_opts);
   global_vec<Body> jbodies_vec(global_vec_coll_opts);
@@ -41,9 +38,6 @@ int real_main(int argc, char ** argv) {
   verify.verbose = args.verbose;
   logger::verbose = args.verbose;
   logger::path = args.path;
-
-  logger::printTitle("FMM Parameters");
-  args.print(logger::stringLength);
 
   bodies_vec.resize(args.numBodies);
   bodies = {bodies_vec.begin(), bodies_vec.end()};
@@ -80,18 +74,23 @@ int real_main(int argc, char ** argv) {
   bool pass = true;
   bool isTime = false;
   for (int t=0; t<args.repeat; t++) {
-    logger::printTitle("FMM Profiling");
-    logger::startTimer("Total FMM");
-    logger::startPAPI();
-    logger::startDAG();
+    if (my_rank == 0) {
+      logger::printTitle("FMM Profiling");
+      logger::startTimer("Total FMM");
+      logger::startPAPI();
+      logger::startDAG();
+    }
     int numIteration = 1;
     if (isTime) numIteration = 10;
     for (int it=0; it<numIteration; it++) {
-      std::stringstream title;
-      title << "Time average loop " << it;
-      logger::printTitle(title.str());
+      if (my_rank == 0) {
+        std::stringstream title;
+        title << "Time average loop " << it;
+        logger::printTitle(title.str());
+      }
 
       bounds = boundBox.getBounds(bodies);
+
       if (args.IneJ) {
 #if 0
         bounds = boundBox.getBounds(jbodies, bounds);
@@ -208,9 +207,15 @@ int real_main(int argc, char ** argv) {
     logger::writeDAG();
   }
   my_ityr::barrier();
+}
+
+int real_main(int argc, char ** argv) {
+  Args args(argc, argv);
+  my_ityr::iro::init(args.cache_size * 1024 * 1024);
+
+  run_fmm(args);
 
   my_ityr::iro::fini();
-
   return 0;
 }
 
