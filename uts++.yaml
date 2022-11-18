@@ -79,6 +79,24 @@ batches:
         src: mpirun_out.txt
         dest: uts++/${batch_name}/nodes_${nodes}_p_${cache_policy}_${duplicate}.out
 
+  T1XL:
+    name: uts++_${batch_name}
+    params:
+      nodes:
+        - value: [2x3x2:torus, 3x4x3:torus, 6x6x4:torus]
+          machines: [wisteria-o]
+      tree: T1XL
+      repeats: 11
+      cache_policy: [nocache, writeback_lazy]
+    artifacts:
+      - type: stdout
+        dest: uts++/${batch_name}/nodes_${nodes}_p_${cache_policy}_${duplicate}.log
+      - type: stats
+        dest: uts++/${batch_name}/nodes_${nodes}_p_${cache_policy}_${duplicate}.stats
+      - type: file
+        src: mpirun_out.txt
+        dest: uts++/${batch_name}/nodes_${nodes}_p_${cache_policy}_${duplicate}.out
+
 build:
   depend_params: [exec_type, use_vector, cache_policy, dist_policy, block_size, logger]
   script: |
