@@ -118,7 +118,7 @@ namespace EXAFMM_NAMESPACE {
       ivec8 octantOffset = exclusiveScan(NBODY, begin);         // Exclusive scan to obtain offset from octant count
       moveBodies(bodies, buffer, begin, end, octantOffset, X);  // Sort bodies according to octant
                                                                 //
-      global_ptr<global_ptr<OctreeNode>> children = &(octNode->*(&OctreeNode::CHILD));
+      auto children = global_ptr<global_ptr<OctreeNode>>(&(octNode->*(&OctreeNode::CHILD)));
       for (int i=0; i<8; i++) {                                 // Loop over children
         vec3 Xchild = X;                                        //  Initialize center coordinates of child node
         real_t r = R0 / (1 << (level + 1));                     //  Radius of cells for child's level

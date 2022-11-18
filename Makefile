@@ -66,3 +66,7 @@ exafmm:
 clean:
 	rm -rf $(MAIN_TARGETS)
 	[ ! -f exafmm/Makefile ] || make clean -C exafmm
+
+distclean:
+	rm -rf $(MAIN_TARGETS)
+	[ ! -f exafmm/Makefile ] || make distclean -C exafmm

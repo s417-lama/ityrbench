@@ -234,7 +234,7 @@ public:
 
   template <access_mode Mode, typename T, typename Fn>
   static auto with_checkout_tied(global_ptr<T> p, std::size_t n, Fn&& f) {
-    return with_checkout(p, n, std::forward<Fn>(f));
+    return with_checkout<Mode>(p, n, std::forward<Fn>(f));
   }
 
   template <typename Fn, typename... Args>

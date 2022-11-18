@@ -86,9 +86,12 @@ template <typename T>
 inline constexpr bool is_global_ptr_move_iterator_v = is_global_ptr_move_iterator<T>::value;
 
 template <typename GPtrT>
-inline global_ptr_move_iterator<GPtrT> make_move_iterator(GPtrT p) {
-  static_assert(pcas::is_global_ptr_v<GPtrT>);
-  return global_ptr_move_iterator<GPtrT>(p);
+inline auto make_move_iterator(GPtrT p) {
+  if constexpr (pcas::is_global_ptr_v<GPtrT>) {
+    return global_ptr_move_iterator<GPtrT>(p);
+  } else {
+    return std::make_move_iterator(p);
+  }
 }
 
 template <typename GPtrT, typename Iter>
@@ -220,7 +223,9 @@ public:
         ret = root_spawn(std::forward<Fn>(f), std::forward<Args>(args)...);
       }
       P::barrier();
-      MPI_Bcast(&ret, sizeof(ret_t), MPI_BYTE, 0, MPI_COMM_WORLD);
+      if (P::n_ranks() > 1) {
+        MPI_Bcast(&ret, sizeof(ret_t), MPI_BYTE, 0, MPI_COMM_WORLD);
+      }
       return ret;
     }
   }

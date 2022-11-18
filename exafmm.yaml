@@ -9,8 +9,6 @@ depends:
     recipe: v1.6
   - name: jemalloc
     recipe: v5.3.0
-  - name: pcg
-    recipe: master
   - name: boost
     recipe: v1.80.0
 
@@ -48,7 +46,7 @@ build:
 
     CFLAGS="${CFLAGS:+$CFLAGS} -DNDEBUG"
 
-    make clean
+    make distclean
     MPICXX=$MPICXX CFLAGS=$CFLAGS make exafmm
 
 run:

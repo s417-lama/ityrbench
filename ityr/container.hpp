@@ -26,8 +26,8 @@ public:
   using reference    = T&;
 
 private:
-  pointer ptr_;
-  size_type n_;
+  pointer ptr_ = nullptr;
+  size_type n_ = 0;
 
 public:
   raw_span() {}
@@ -172,8 +172,8 @@ struct global_container_if {
     using policy = P;
 
   private:
-    pointer ptr_;
-    size_type n_;
+    pointer ptr_ = nullptr;
+    size_type n_ = 0;
 
   public:
     global_span() {}
@@ -233,16 +233,16 @@ struct global_container_if {
     using const_pointer   = global_ptr<std::add_const_t<T>>;
     using iterator        = pointer;
     using const_iterator  = const_pointer;
-    using difference_type = typename pointer::difference_type;
-    using reference       = typename pointer::reference;
-    using const_reference = typename const_pointer::reference;
+    using difference_type = typename std::iterator_traits<pointer>::difference_type;
+    using reference       = typename std::iterator_traits<pointer>::reference;
+    using const_reference = typename std::iterator_traits<const_pointer>::reference;
 
     using policy = P;
 
   private:
-    pointer begin_;
-    pointer end_;
-    pointer reserved_end_;
+    pointer begin_        = nullptr;
+    pointer end_          = nullptr;
+    pointer reserved_end_ = nullptr;
 
     global_vector_options opts_;
 
