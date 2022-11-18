@@ -14,12 +14,12 @@ namespace EXAFMM_NAMESPACE {
   private:
     long filePosition;                                          //!< Position of file stream
 
-    template <typename T, typename Rng>
-    std::enable_if_t<std::is_floating_point_v<T>, T>
-    gen_random_elem(Rng& r) const {
-      static std::uniform_real_distribution<T> dist(0, 1.0);
-      return dist(r);
-    }
+    /* template <typename T, typename Rng> */
+    /* std::enable_if_t<std::is_floating_point_v<T>, T> */
+    /* gen_random_elem(Rng& r) const { */
+    /*   static std::uniform_real_distribution<T> dist(0, 1.0); */
+    /*   return dist(r); */
+    /* } */
 
     //! Split range and return partial range
     void splitRange(int & begin, int & end, int iSplit, int numSplit) const {
@@ -63,19 +63,28 @@ namespace EXAFMM_NAMESPACE {
 	int begin = 0;                                          //  Begin index of bodies
 	int end = bodies.size();                                //  End index of bodies
 	splitRange(begin, end, i, numSplit);                    //  Split range of bodies
+	srand48(seed);                                          //  Set seed for random number generator
 
-        my_ityr::parallel_for<my_ityr::iro::access_mode::read,
-                              my_ityr::iro::access_mode::write>(
-            ityr::count_iterator<int>(begin),
-            ityr::count_iterator<int>(end),
+        my_ityr::serial_for<my_ityr::iro::access_mode::write>(
             bodies.begin() + begin,
-            [=](int i, auto&& B) {
-          pcg32 rng(seed, i);
-	  for (int d = 0; d < 3; d++) {
-	    B.X[d] = gen_random_elem<real_t>(rng) * 2 * M_PI - M_PI;
-	  }
+            bodies.begin() + end,
+            [&](auto&& B) {
+	  for (int d=0; d<3; d++) {                             //   Loop over dimension
+	    B.X[d] = drand48() * 2 * M_PI - M_PI;              //    Initialize coordinates
+	  }                                                     //   End loop over dimension
         }, my_ityr::iro::block_size);
 
+        /* my_ityr::parallel_for<my_ityr::iro::access_mode::read, */
+        /*                       my_ityr::iro::access_mode::write>( */
+        /*     ityr::count_iterator<int>(begin), */
+        /*     ityr::count_iterator<int>(end), */
+        /*     bodies.begin() + begin, */
+        /*     [=](int i, auto&& B) { */
+        /*   pcg32 rng(seed, i); */
+	  /* for (int d = 0; d < 3; d++) { */
+	    /* B.X[d] = gen_random_elem<real_t>(rng) * 2 * M_PI - M_PI; */
+	  /* } */
+        /* }, my_ityr::iro::block_size); */
       }                                                         // End loop over partitions
     }
 
@@ -160,36 +169,46 @@ namespace EXAFMM_NAMESPACE {
 	int begin = 0;                                          //  Begin index of bodies
 	int end = bodies.size();                                //  End index of bodies
 	splitRange(begin, end, i, numSplit);                    //  Split range of bodies
+	srand48(seed);                                          //  Set seed for random number generator
 
 #if EXAFMM_LAPLACE
 
-        my_ityr::parallel_for<my_ityr::iro::access_mode::read,
-                              my_ityr::iro::access_mode::read_write>(
-            ityr::count_iterator<int>(begin),
-            ityr::count_iterator<int>(end),
+	real_t average = 0;                                     //  Initialize average charge
+        my_ityr::serial_for<my_ityr::iro::access_mode::read_write>(
             bodies.begin() + begin,
-            [=](int i, auto&& B) {
-              pcg32 rng(seed, i);
-              B.SRC = gen_random_elem<real_t>(rng) - .5;
-            },
-            my_ityr::iro::block_size);
+            bodies.begin() + end,
+            [&](auto&& B) {
+          B.SRC = drand48() - .5;                              //   Initialize charge
+          average += B.SRC;                                    //   Accumulate average
+        }, my_ityr::iro::block_size);
 
-        real_t average =
-          my_ityr::parallel_reduce(bodies.begin() + begin,
-                                   bodies.begin() + end,
-                                   real_t(0),
-                                   std::plus<real_t>{},
-                                   [=](const auto& B) { return B.SRC; },
-                                   my_ityr::iro::block_size);
+        /* my_ityr::parallel_for<my_ityr::iro::access_mode::read, */
+        /*                       my_ityr::iro::access_mode::read_write>( */
+        /*     ityr::count_iterator<int>(begin), */
+        /*     ityr::count_iterator<int>(end), */
+        /*     bodies.begin() + begin, */
+        /*     [=](int i, auto&& B) { */
+        /*       pcg32 rng(seed, i); */
+        /*       B.SRC = gen_random_elem<real_t>(rng) - .5; */
+        /*     }, */
+        /*     my_ityr::iro::block_size); */
+
+        /* real_t average = */
+        /*   my_ityr::parallel_reduce(bodies.begin() + begin, */
+        /*                            bodies.begin() + end, */
+        /*                            real_t(0), */
+        /*                            std::plus<real_t>{}, */
+        /*                            [=](const auto& B) { return B.SRC; }, */
+        /*                            my_ityr::iro::block_size); */
+
         average /= (end - begin);
 
         my_ityr::parallel_for<my_ityr::iro::access_mode::read_write>(
             bodies.begin() + begin,
             bodies.begin() + end,
             [=](auto&& B) {
-              B.SRC -= average;
-            },
-            my_ityr::iro::block_size);
+          B.SRC -= average;
+        }, my_ityr::iro::block_size);
 
 #elif EXAFMM_HELMHOLTZ
 
@@ -202,19 +221,29 @@ namespace EXAFMM_NAMESPACE {
 
 #elif EXAFMM_BIOTSAVART
 
-        my_ityr::parallel_for<my_ityr::iro::access_mode::read,
-                              my_ityr::iro::access_mode::read_write>(
-            ityr::count_iterator<int>(begin),
-            ityr::count_iterator<int>(end),
+        my_ityr::serial_for<my_ityr::iro::access_mode::read_write>(
             bodies.begin() + begin,
-            [=](int i, auto&& B) {
-              pcg32 rng(seed, i);
-              for (int d = 0; d < 3; d++) {
-                B.SRC[d] = gen_random_elem<real_t>(rng) / bodies.size();
-              }
-              B.SRC[3] = powf(bodies.size() * numSplit, -1./3) * 2 * M_PI * 0.01; // Initialize core radius
-            },
-            my_ityr::iro::block_size);
+            bodies.begin() + end,
+            [&](auto&& B) {
+	  for (int d=0; d<3; d++) {                             //   Loop over dimensions
+	    B.SRC[d] = drand48() / bodies.size();              //    Initialize source
+	  }                                                     //   End loop over dimensions
+	  B.SRC[3] = powf(bodies.size() * numSplit, -1./3) * 2 * M_PI * 0.01; // Initialize core radius
+        }, my_ityr::iro::block_size);
+
+        /* my_ityr::parallel_for<my_ityr::iro::access_mode::read, */
+        /*                       my_ityr::iro::access_mode::read_write>( */
+        /*     ityr::count_iterator<int>(begin), */
+        /*     ityr::count_iterator<int>(end), */
+        /*     bodies.begin() + begin, */
+        /*     [=](int i, auto&& B) { */
+        /*       pcg32 rng(seed, i); */
+        /*       for (int d = 0; d < 3; d++) { */
+        /*         B.SRC[d] = gen_random_elem<real_t>(rng) / bodies.size(); */
+        /*       } */
+        /*       B.SRC[3] = powf(bodies.size() * numSplit, -1./3) * 2 * M_PI * 0.01; // Initialize core radius */
+        /*     }, */
+        /*     my_ityr::iro::block_size); */
 
 #endif
       }                                                         // End loop over partitions
