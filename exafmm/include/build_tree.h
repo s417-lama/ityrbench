@@ -69,8 +69,8 @@ namespace EXAFMM_NAMESPACE {
     //! Create an octree node
     global_ptr<OctreeNode> makeOctNode(int begin, int end, vec3 X, bool nochild) {
       global_ptr<OctreeNode> octNode = my_ityr::iro::malloc_local<OctreeNode>(1);
-      ityr::with_checkout<my_ityr::iro::access_mode::write>(
-          global_span<OctreeNode>(octNode, 1), [&](OctreeNode* octNode) {
+      my_ityr::with_checkout<my_ityr::access_mode::write>(
+          octNode, 1, [&](OctreeNode* octNode) {
         octNode->IBODY = begin;                                   // Index of first body in node
         octNode->NBODY = end - begin;                             // Number of bodies in node
         octNode->NNODE = 1;                                       // Initialize counter for decendant nodes
@@ -104,7 +104,7 @@ namespace EXAFMM_NAMESPACE {
           my_ityr::parallel_transform(bodies.begin() + begin,
                                       bodies.end() + end,
                                       buffer.begin() + begin,
-                                      [=](const auto&& B) { return B; },
+                                      [=](const auto& B) { return B; },
                                       my_ityr::iro::block_size);
         }
         return makeOctNode(begin,end,X,true);        //  Create an octree node and assign it's pointer
@@ -149,9 +149,9 @@ namespace EXAFMM_NAMESPACE {
     void nodes2cells(global_ptr<OctreeNode> octNode, GC_iter C,
                      GC_iter C0, GC_iter CN, vec3 X0, real_t R0,
                      int & maxLevel, int level=0, int iparent=0) {
-      ityr::with_checkout<my_ityr::iro::access_mode::read,
-                          my_ityr::iro::access_mode::write>(
-          global_span<OctreeNode>(octNode, 1), global_span<Cell>(C, 1),
+      my_ityr::with_checkout<my_ityr::access_mode::read,
+                             my_ityr::access_mode::write>(
+          octNode, 1, C, 1,
           [&](const OctreeNode* o, Cell* c) {
         c->IPARENT = iparent;                                     //  Index of parent cell
         c->R       = R0 / (1 << level);                           //  Cell radius
@@ -214,38 +214,46 @@ namespace EXAFMM_NAMESPACE {
     BuildTree(int _ncrit) : ncrit(_ncrit), numLevels(0) {}
 
     //! Build tree structure top down
-    GCells buildTree(GBodies bodies, GBodies buffer, Bounds bounds) {
+    global_vec<Cell> buildTree(GBodies bodies, GBodies buffer, Bounds bounds) {
+      int my_rank = my_ityr::rank();
+
       logger::startTimer("Grow tree");                          // Start timer
+
       Box box = bounds2box(bounds);                             // Get box from bounds
-      if (bodies.empty()) {                                     // If bodies vector is empty
-	N0 = nullptr;                                              //  Reinitialize N0 with NULL
-      } else {                                                  // If bodies vector is not empty
+      N0 = my_ityr::master_do([&]() {
+        if (bodies.empty()) {                                     // If bodies vector is empty
+          N0 = nullptr;                                              //  Reinitialize N0 with NULL
+        } else {                                                  // If bodies vector is not empty
 #if 0
-	if (bodies.size() > buffer.size()) buffer.resize(bodies.size());// Enlarge buffer if necessary
+          if (bodies.size() > buffer.size()) buffer.resize(bodies.size());// Enlarge buffer if necessary
 #else
-        assert(bodies.size() <= buffer.size());
+          assert(bodies.size() <= buffer.size());
 #endif
-        assert(box.R > 0);                                      // Check for bounds validity
-        B0 = bodies.begin();                                    // Bodies iterator
-        N0 = buildNodes(bodies, buffer, 0, bodies.size(),        // Build octree nodes
-                   box.X, box.R);
-      }                                                         // End if for empty root
+          assert(box.R > 0);                                      // Check for bounds validity
+          B0 = bodies.begin();                                    // Bodies iterator
+          N0 = buildNodes(bodies, buffer, 0, bodies.size(),        // Build octree nodes
+                     box.X, box.R);
+        }                                                         // End if for empty root
+        return N0;
+      });
+
       logger::stopTimer("Grow tree");                           // Stop timer
       logger::startTimer("Link tree");                          // Start timer
-      GCells cells;                                              // Initialize cell array
+
+      global_vec<Cell> cells_vec(global_vec_coll_opts);                                              // Initialize cell array
+
       if (N0 != NULL) {                                         // If the node tree is not empty
         std::size_t ncells = N0->*(&OctreeNode::NNODE);
-        cells = {my_ityr::iro::malloc<Cell>(ncells), ncells};
-        // TODO: common impl for new
-        my_ityr::parallel_for<my_ityr::iro::access_mode::write>(cells.begin(), cells.end(), [=](auto&& c) {
-          new (&c) Cell{};
-        });
-	GC_iter C0 = cells.begin();                              //  Cell begin iterator
-	nodes2cells(N0, C0, C0, C0+1, box.X, box.R, numLevels); // Instantiate recursive functor
-        my_ityr::iro::free(N0, 1);
+        cells_vec.resize(ncells);
+        if (my_rank == 0) {
+          GC_iter C0 = cells_vec.begin();                              //  Cell begin iterator
+          nodes2cells(N0, C0, C0, C0+1, box.X, box.R, numLevels); // Instantiate recursive functor
+          my_ityr::iro::free(N0, 1);
+        }
       }                                                         // End if for empty node tree
+
       logger::stopTimer("Link tree");                           // Stop timer
-      return cells;                                             // Return cells array
+      return cells_vec;                                             // Return cells array
     }
 
     //! Print tree structure statistics

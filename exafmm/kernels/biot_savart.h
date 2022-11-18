@@ -147,212 +147,246 @@ namespace EXAFMM_NAMESPACE {
       }                                                         // End loop over in j in Cjknm
     }
 
-    void P2P(C_iter Ci, C_iter Cj) {
-      B_iter Bi = Ci->BODY;
-      B_iter Bj = Cj->BODY;
+    void P2P(const Cell* Ci, const Cell* Cj) {
+      GB_iter GBi = Ci->BODY;
+      GB_iter GBj = Cj->BODY;
       int ni = Ci->NBODY;
       int nj = Cj->NBODY;
-      int i = 0;
-      for ( ; i<ni; i++) {
-        kreal_t ax = 0;
-        kreal_t ay = 0;
-        kreal_t az = 0;
-        for (int j=0; j<nj; j++) {
-          vec3 dX = Bi[i].X - Bj[j].X - Xperiodic;
-          real_t R2 = norm(dX) + eps2;
-          if (R2 != 0) {
-            real_t invR2 = 1.0 / R2;
-            real_t S2 = 2 * Bj[j].SRC[3] * Bj[j].SRC[3];
-            real_t RS = R2 / S2;
-            real_t cutoff = invR2 * std::sqrt(invR2) * (erf( std::sqrt(RS) ) - std::sqrt(4 / M_PI * RS) * std::exp(-RS));
-            ax += (dX[1] * Bj[j].SRC[2] - dX[2] * Bj[j].SRC[1]) * cutoff;
-            ay += (dX[2] * Bj[j].SRC[0] - dX[0] * Bj[j].SRC[2]) * cutoff;
-            az += (dX[0] * Bj[j].SRC[1] - dX[1] * Bj[j].SRC[0]) * cutoff;
+      my_ityr::with_checkout_tied<my_ityr::access_mode::read_write,
+                                  my_ityr::access_mode::read>(
+          GBi, ni, GBj, nj,
+          [&](Body* Bi, const Body* Bj) {
+        int i = 0;
+        for ( ; i<ni; i++) {
+          kreal_t ax = 0;
+          kreal_t ay = 0;
+          kreal_t az = 0;
+          for (int j=0; j<nj; j++) {
+            vec3 dX = Bi[i].X - Bj[j].X - Xperiodic;
+            real_t R2 = norm(dX) + eps2;
+            if (R2 != 0) {
+              real_t invR2 = 1.0 / R2;
+              real_t S2 = 2 * Bj[j].SRC[3] * Bj[j].SRC[3];
+              real_t RS = R2 / S2;
+              real_t cutoff = invR2 * std::sqrt(invR2) * (erf( std::sqrt(RS) ) - std::sqrt(4 / M_PI * RS) * std::exp(-RS));
+              ax += (dX[1] * Bj[j].SRC[2] - dX[2] * Bj[j].SRC[1]) * cutoff;
+              ay += (dX[2] * Bj[j].SRC[0] - dX[0] * Bj[j].SRC[2]) * cutoff;
+              az += (dX[0] * Bj[j].SRC[1] - dX[1] * Bj[j].SRC[0]) * cutoff;
+            }
+          }
+          Bi[i].TRG[0] = 1;
+          Bi[i].TRG[1] += ax;
+          Bi[i].TRG[2] += ay;
+          Bi[i].TRG[3] += az;
+        }
+      });
+    }
+
+    void P2M(const Cell* C) {
+      complex_t Ynm[P*P], YnmTheta[P*P];
+
+      my_ityr::with_checkout_tied<my_ityr::access_mode::read_write,
+                                  my_ityr::access_mode::read>(
+          C->M.data(), C->M.size(), C->BODY, C->NBODY,
+          [&](complex_t* CM, const Body* Bp) {
+        for (auto B=Bp; B!=Bp+C->NBODY; B++) {
+          vec3 dX = B->X - C->X;
+          real_t rho, alpha, beta;
+          cart2sph(dX, rho, alpha, beta);
+          evalMultipole(rho, alpha, -beta, Ynm, YnmTheta);
+          for (int n=0; n<P; n++) {
+            for (int m=0; m<=n; m++) {
+              int nm  = n * n + n + m;
+              int nms = n * (n + 1) / 2 + m;
+              for (int d=0; d<3; d++) {
+                CM[3*nms+d] += B->SRC[d] * Ynm[nm];
+              }
+            }
           }
         }
-        Bi[i].TRG[0] = 1;
-        Bi[i].TRG[1] += ax;
-        Bi[i].TRG[2] += ay;
-        Bi[i].TRG[3] += az;
-      }
+      });
     }
 
-    void P2M(C_iter C) {
+    void M2M(const Cell* Ci, const Cell* C0) {
       complex_t Ynm[P*P], YnmTheta[P*P];
-      for (B_iter B=C->BODY; B!=C->BODY+C->NBODY; B++) {
-	vec3 dX = B->X - C->X;
-	real_t rho, alpha, beta;
-	cart2sph(dX, rho, alpha, beta);
-	evalMultipole(rho, alpha, -beta, Ynm, YnmTheta);
-	for (int n=0; n<P; n++) {
-	  for (int m=0; m<=n; m++) {
-	    int nm  = n * n + n + m;
-	    int nms = n * (n + 1) / 2 + m;
-	    for (int d=0; d<3; d++) {
-	      C->M[3*nms+d] += B->SRC[d] * Ynm[nm];
-	    }
-	  }
-	}
-      }
-    }
-
-    void M2M(C_iter Ci, C_iter C0) {
-      complex_t Ynm[P*P], YnmTheta[P*P];
-      for (C_iter Cj=C0+Ci->ICHILD; Cj!=C0+Ci->ICHILD+Ci->NCHILD; Cj++) {
+      for (const Cell* Cj=C0+Ci->ICHILD; Cj!=C0+Ci->ICHILD+Ci->NCHILD; Cj++) {
         vec3 dX = Ci->X - Cj->X;
         real_t rho, alpha, beta;
         cart2sph(dX, rho, alpha, beta);
         evalMultipole(rho, alpha, -beta, Ynm, YnmTheta);
-        for (int j=0; j<P; j++) {
-          for (int k=0; k<=j; k++) {
-            int jk = j * j + j + k;
-            int jks = j * (j + 1) / 2 + k;
-            complex_t M[3] = {0, 0, 0};
-            for (int n=0; n<=j; n++) {
-              for (int m=-n; m<=std::min(k-1,n); m++) {
-                if (j-n >= k-m) {
-                  int jnkm  = (j - n) * (j - n) + j - n + k - m;
-                  int jnkms = (j - n) * (j - n + 1) / 2 + k - m;
-                  int nm    = n * n + n + m;
-                  for (int d=0; d<3; d++) {
-                    M[d] += Cj->M[3*jnkms+d] * std::pow(I,real_t(m-abs(m))) * Ynm[nm]
-                      * real_t(oddOrEven(n) * Anm[nm] * Anm[jnkm] / Anm[jk]);
+
+        my_ityr::with_checkout_tied<my_ityr::access_mode::read_write,
+                                    my_ityr::access_mode::read>(
+            Ci->M.data(), Ci->M.size(), Cj->M.data(), Cj->M.size(),
+            [&](complex_t* CiM, const complex_t* CjM) {
+          for (int j=0; j<P; j++) {
+            for (int k=0; k<=j; k++) {
+              int jk = j * j + j + k;
+              int jks = j * (j + 1) / 2 + k;
+              complex_t M[3] = {0, 0, 0};
+              for (int n=0; n<=j; n++) {
+                for (int m=-n; m<=std::min(k-1,n); m++) {
+                  if (j-n >= k-m) {
+                    int jnkm  = (j - n) * (j - n) + j - n + k - m;
+                    int jnkms = (j - n) * (j - n + 1) / 2 + k - m;
+                    int nm    = n * n + n + m;
+                    for (int d=0; d<3; d++) {
+                      M[d] += CjM[3*jnkms+d] * std::pow(I,real_t(m-abs(m))) * Ynm[nm]
+                        * real_t(oddOrEven(n) * Anm[nm] * Anm[jnkm] / Anm[jk]);
+                    }
+                  }
+                }
+                for (int m=k; m<=n; m++) {
+                  if (j-n >= m-k) {
+                    int jnkm  = (j - n) * (j - n) + j - n + k - m;
+                    int jnkms = (j - n) * (j - n + 1) / 2 - k + m;
+                    int nm    = n * n + n + m;
+                    for (int d=0; d<3; d++) {
+                      M[d] += std::conj(CjM[3*jnkms+d]) * Ynm[nm]
+                        * real_t(oddOrEven(k+n+m) * Anm[nm] * Anm[jnkm] / Anm[jk]);
+                    }
                   }
                 }
               }
-              for (int m=k; m<=n; m++) {
-                if (j-n >= m-k) {
-                  int jnkm  = (j - n) * (j - n) + j - n + k - m;
-                  int jnkms = (j - n) * (j - n + 1) / 2 - k + m;
-                  int nm    = n * n + n + m;
-                  for (int d=0; d<3; d++) {
-                    M[d] += std::conj(Cj->M[3*jnkms+d]) * Ynm[nm]
-                      * real_t(oddOrEven(k+n+m) * Anm[nm] * Anm[jnkm] / Anm[jk]);
-                  }
-                }
+              for (int d=0; d<3; d++) {
+                CiM[3*jks+d] += M[d] * EPS;
               }
-            }
-	    for (int d=0; d<3; d++) {
-              Ci->M[3*jks+d] += M[d] * EPS;
             }
           }
-        }
+        });
       }
     }
 
-    void M2L(C_iter Ci, C_iter Cj) {
+    void M2L(const Cell* Ci, const Cell* Cj) {
       complex_t Ynm2[4*P*P];
       vec3 dX = Ci->X - Cj->X - Xperiodic;
       real_t rho, alpha, beta;
       cart2sph(dX, rho, alpha, beta);
       evalLocal(rho, alpha, beta, Ynm2);
-      for (int j=0; j<P; j++) {
-        for (int k=0; k<=j; k++) {
-          int jk = j * j + j + k;
-          int jks = j * (j + 1) / 2 + k;
-          complex_t L[3] = {0, 0, 0};
-          for (int n=0; n<P; n++) {
-            for (int m=-n; m<0; m++) {
-              int nm   = n * n + n + m;
-              int nms  = n * (n + 1) / 2 - m;
-              int jknm = jk * P * P + nm;
-              int jnkm = (j + n) * (j + n) + j + n + m - k;
-              for (int d=0; d<3; d++) {
-                L[d] += std::conj(Cj->M[3*nms+d]) * Cnm[jknm] * Ynm2[jnkm];
+
+      my_ityr::with_checkout_tied<my_ityr::access_mode::read_write,
+                                  my_ityr::access_mode::read>(
+          Ci->L.data(), Ci->L.size(), Cj->M.data(), Cj->M.size(),
+          [&](complex_t* CiL, const complex_t* CjM) {
+        for (int j=0; j<P; j++) {
+          for (int k=0; k<=j; k++) {
+            int jk = j * j + j + k;
+            int jks = j * (j + 1) / 2 + k;
+            complex_t L[3] = {0, 0, 0};
+            for (int n=0; n<P; n++) {
+              for (int m=-n; m<0; m++) {
+                int nm   = n * n + n + m;
+                int nms  = n * (n + 1) / 2 - m;
+                int jknm = jk * P * P + nm;
+                int jnkm = (j + n) * (j + n) + j + n + m - k;
+                for (int d=0; d<3; d++) {
+                  L[d] += std::conj(CjM[3*nms+d]) * Cnm[jknm] * Ynm2[jnkm];
+                }
+              }
+              for (int m=0; m<=n; m++) {
+                int nm   = n * n + n + m;
+                int nms  = n * (n + 1) / 2 + m;
+                int jknm = jk * P * P + nm;
+                int jnkm = (j + n) * (j + n) + j + n + m - k;
+                for (int d=0; d<3; d++) {
+                  L[d] += CjM[3*nms+d] * Cnm[jknm] * Ynm2[jnkm];
+                }
               }
             }
-            for (int m=0; m<=n; m++) {
-              int nm   = n * n + n + m;
-              int nms  = n * (n + 1) / 2 + m;
-              int jknm = jk * P * P + nm;
-              int jnkm = (j + n) * (j + n) + j + n + m - k;
-              for (int d=0; d<3; d++) {
-                L[d] += Cj->M[3*nms+d] * Cnm[jknm] * Ynm2[jnkm];
-              }
+            for (int d=0; d<3; d++) {
+              CiL[3*jks+d] += L[d];
             }
-          }
-          for (int d=0; d<3; d++) {
-            Ci->L[3*jks+d] += L[d];
           }
         }
-      }
+      });
     }
 
-    void L2L(C_iter Ci, C_iter C0) {
+    void L2L(const Cell* Ci, const Cell* C0) {
       complex_t Ynm[P*P], YnmTheta[P*P];
-      C_iter Cj = C0 + Ci->IPARENT;
+      const Cell* Cj = C0 + Ci->IPARENT;
       vec3 dX = Ci->X - Cj->X;
       real_t rho, alpha, beta;
       cart2sph(dX, rho, alpha, beta);
       evalMultipole(rho, alpha, beta, Ynm, YnmTheta);
-      for (int j=0; j<P; j++) {
-        for (int k=0; k<=j; k++) {
-          int jk = j * j + j + k;
-          int jks = j * (j + 1) / 2 + k;
-          complex_t L[3] = {0, 0, 0};
-          for (int n=j; n<P; n++) {
-            for (int m=j+k-n; m<0; m++) {
-              int jnkm = (n - j) * (n - j) + n - j + m - k;
-              int nm   = n * n + n - m;
-              int nms  = n * (n + 1) / 2 - m;
-              for (int d=0; d<3; d++) {
-                L[d] += std::conj(Cj->L[3*nms+d]) * Ynm[jnkm]
-                  * real_t(oddOrEven(k) * Anm[jnkm] * Anm[jk] / Anm[nm]);
+
+      my_ityr::with_checkout_tied<my_ityr::access_mode::read_write,
+                                  my_ityr::access_mode::read>(
+          Ci->L.data(), Ci->L.size(), Cj->L.data(), Cj->L.size(),
+          [&](complex_t* CiL, const complex_t* CjL) {
+        for (int j=0; j<P; j++) {
+          for (int k=0; k<=j; k++) {
+            int jk = j * j + j + k;
+            int jks = j * (j + 1) / 2 + k;
+            complex_t L[3] = {0, 0, 0};
+            for (int n=j; n<P; n++) {
+              for (int m=j+k-n; m<0; m++) {
+                int jnkm = (n - j) * (n - j) + n - j + m - k;
+                int nm   = n * n + n - m;
+                int nms  = n * (n + 1) / 2 - m;
+                for (int d=0; d<3; d++) {
+                  L[d] += std::conj(CjL[3*nms+d]) * Ynm[jnkm]
+                    * real_t(oddOrEven(k) * Anm[jnkm] * Anm[jk] / Anm[nm]);
+                }
+              }
+              for (int m=0; m<=n; m++) {
+                if (n-j >= abs(m-k)) {
+                  int jnkm = (n - j) * (n - j) + n - j + m - k;
+                  int nm   = n * n + n + m;
+                  int nms  = n * (n + 1) / 2 + m;
+                  for (int d=0; d<3; d++) {
+                    L[d] += CjL[3*nms+d] * std::pow(I,real_t(m-k-abs(m-k)))
+                      * Ynm[jnkm] * Anm[jnkm] * Anm[jk] / Anm[nm];
+                  }
+                }
               }
             }
-            for (int m=0; m<=n; m++) {
-              if (n-j >= abs(m-k)) {
-                int jnkm = (n - j) * (n - j) + n - j + m - k;
-                int nm   = n * n + n + m;
-                int nms  = n * (n + 1) / 2 + m;
-                for (int d=0; d<3; d++) {
-                  L[d] += Cj->L[3*nms+d] * std::pow(I,real_t(m-k-abs(m-k)))
-                    * Ynm[jnkm] * Anm[jnkm] * Anm[jk] / Anm[nm];
-                }
+            for (int d=0; d<3; d++) {
+              CiL[3*jks+d] += L[d] * EPS;
+            }
+          }
+        }
+      });
+    }
+
+    void L2P(const Cell* C) {
+      complex_t Ynm[P*P], YnmTheta[P*P];
+      my_ityr::with_checkout_tied<my_ityr::access_mode::read_write,
+                                  my_ityr::access_mode::read>(
+          C->BODY, C->NBODY, C->L.data(), C->L.size(),
+          [&](Body* Bp, const complex_t* CL) {
+        for (auto B=Bp; B!=Bp+C->NBODY; B++) {
+          vec3 dX = B->X - C->X + EPS;
+          vec3 spherical[3] = {0, 0, 0};
+          vec3 cartesian[3] = {0, 0, 0};
+          real_t r, theta, phi;
+          cart2sph(dX, r, theta, phi);
+          evalMultipole(r, theta, phi, Ynm, YnmTheta);
+          for (int n=0; n<P; n++) {
+            int nm  = n * n + n;
+            int nms = n * (n + 1) / 2;
+            for (int d=0; d<3; d++) {
+              spherical[d][0] += std::real(CL[3*nms+d] * Ynm[nm]) / r * n;
+              spherical[d][1] += std::real(CL[3*nms+d] * YnmTheta[nm]);
+            }
+            for( int m=1; m<=n; m++) {
+              nm  = n * n + n + m;
+              nms = n * (n + 1) / 2 + m;
+              for (int d=0; d<3; d++) {
+                spherical[d][0] += 2 * std::real(CL[3*nms+d] * Ynm[nm]) / r * n;
+                spherical[d][1] += 2 * std::real(CL[3*nms+d] * YnmTheta[nm]);
+                spherical[d][2] += 2 * std::real(CL[3*nms+d] * Ynm[nm] * I) * m;
               }
             }
           }
           for (int d=0; d<3; d++) {
-            Ci->L[3*jks+d] += L[d] * EPS;
+            sph2cart(r, theta, phi, spherical[d], cartesian[d]);
           }
+          B->TRG[0] = 1;
+          B->TRG[1] += cartesian[1][2] - cartesian[2][1];
+          B->TRG[2] += cartesian[2][0] - cartesian[0][2];
+          B->TRG[3] += cartesian[0][1] - cartesian[1][0];
         }
-      }
-    }
-
-    void L2P(C_iter Ci) {
-      complex_t Ynm[P*P], YnmTheta[P*P];
-      for (B_iter B=Ci->BODY; B!=Ci->BODY+Ci->NBODY; B++) {
-	vec3 dX = B->X - Ci->X + EPS;
-	vec3 spherical[3] = {0, 0, 0};
-	vec3 cartesian[3] = {0, 0, 0};
-	real_t r, theta, phi;
-	cart2sph(dX, r, theta, phi);
-	evalMultipole(r, theta, phi, Ynm, YnmTheta);
-	for (int n=0; n<P; n++) {
-	  int nm  = n * n + n;
-	  int nms = n * (n + 1) / 2;
-	  for (int d=0; d<3; d++) {
-	    spherical[d][0] += std::real(Ci->L[3*nms+d] * Ynm[nm]) / r * n;
-	    spherical[d][1] += std::real(Ci->L[3*nms+d] * YnmTheta[nm]);
-	  }
-	  for( int m=1; m<=n; m++) {
-	    nm  = n * n + n + m;
-	    nms = n * (n + 1) / 2 + m;
-	    for (int d=0; d<3; d++) {
-	      spherical[d][0] += 2 * std::real(Ci->L[3*nms+d] * Ynm[nm]) / r * n;
-	      spherical[d][1] += 2 * std::real(Ci->L[3*nms+d] * YnmTheta[nm]);
-	      spherical[d][2] += 2 * std::real(Ci->L[3*nms+d] * Ynm[nm] * I) * m;
-	    }
-	  }
-	}
-	for (int d=0; d<3; d++) {
-	  sph2cart(r, theta, phi, spherical[d], cartesian[d]);
-	}
-	B->TRG[0] = 1;
-	B->TRG[1] += cartesian[1][2] - cartesian[2][1];
-	B->TRG[2] += cartesian[2][0] - cartesian[0][2];
-	B->TRG[3] += cartesian[0][1] - cartesian[1][0];
-      }
+      });
     }
   };
 }

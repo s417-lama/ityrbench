@@ -359,8 +359,8 @@ struct global_container_if {
       reserved_end_ = begin_ + count;
 
       if (old_end - old_begin > 0) {
-        construct_elems_from_iter(make_move_iterator(old_begin),
-                                  make_move_iterator(old_end),
+        construct_elems_from_iter(ityr::make_move_iterator(old_begin),
+                                  ityr::make_move_iterator(old_end),
                                   begin());
 
         destruct_elems(old_begin, old_end);
@@ -471,8 +471,8 @@ struct global_container_if {
     iterator begin() const noexcept { return begin_; }
     iterator end() const noexcept { return end_; }
 
-    const_iterator cbegin() const noexcept { return begin_; }
-    const_iterator cend() const noexcept { return end_; }
+    const_iterator cbegin() const noexcept { return const_iterator(begin_); }
+    const_iterator cend() const noexcept { return const_iterator(end_); }
 
     reference operator[](size_type i) const {
       assert(i <= size());

@@ -21,6 +21,15 @@ namespace EXAFMM_NAMESPACE {
   using global_span = my_ityr::global_span<T>;
   template <typename T>
   using raw_span = ityr::raw_span<T>;
+  template <typename T>
+  using global_vec = my_ityr::global_vector<T>;
+
+  inline constexpr ityr::global_vector_options global_vec_coll_opts {
+    .collective         = true,
+    .parallel_construct = true,
+    .parallel_destruct  = true,
+    .cutoff             = my_ityr::iro::block_size,
+  };
 
   // Basic type definitions
 #if EXAFMM_SINGLE
@@ -135,8 +144,8 @@ namespace EXAFMM_NAMESPACE {
   };
   //! Structure of cells
   struct Cell : public CellBase {
-    std::vector<complex_t> M;                                   //!< Multipole expansion coefs
-    std::vector<complex_t> L;                                   //!< Local expansion coefs
+    global_vec<complex_t> M;                                   //!< Multipole expansion coefs
+    global_vec<complex_t> L;                                   //!< Local expansion coefs
     using CellBase::operator=;
   };
 

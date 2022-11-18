@@ -14,10 +14,6 @@ namespace EXAFMM_NAMESPACE {
   private:
     long filePosition;                                          //!< Position of file stream
 
-    GBodies alloc_bodies(std::size_t n) const {
-      return {my_ityr::iro::malloc<Body>(n), n};
-    }
-
     template <typename T, typename Rng>
     std::enable_if_t<std::is_floating_point_v<T>, T>
     gen_random_elem(Rng& r) const {
@@ -62,8 +58,7 @@ namespace EXAFMM_NAMESPACE {
 #endif
 
     //! Random distribution in [-1,1]^3 cube
-    GBodies cube(int numBodies, int seed, int numSplit) const {
-      GBodies bodies(alloc_bodies(numBodies));                                 // Initialize bodies
+    void cube(GBodies bodies, int seed, int numSplit) const {
       for (int i=0; i<numSplit; i++, seed++) {                  // Loop over partitions (if there are any)
 	int begin = 0;                                          //  Begin index of bodies
 	int end = bodies.size();                                //  End index of bodies
@@ -82,7 +77,6 @@ namespace EXAFMM_NAMESPACE {
         }, my_ityr::iro::block_size);
 
       }                                                         // End loop over partitions
-      return bodies;                                            // Return bodies
     }
 
 #if 0
@@ -274,12 +268,14 @@ namespace EXAFMM_NAMESPACE {
 
     //! Initialize target values
     void initTarget(GBodies bodies) const {
-      my_ityr::parallel_for<my_ityr::iro::access_mode::read_write>(
+      my_ityr::parallel_for<my_ityr::iro::access_mode::read_write,
+                            my_ityr::iro::access_mode::read>(
           bodies.begin(),
           bodies.end(),
-          [=](auto&& B) {
+          ityr::count_iterator<int>(0),
+          [=](auto&& B, int i) {
             B.TRG = 0;                                             //  Clear target values
-            B.IBODY = B-bodies.begin();                            //  Initial body numbering
+            B.IBODY = i;                            //  Initial body numbering
             B.ICELL = 0;                                           //  Initial cell index
             B.WEIGHT = 1;                                          //  Initial weight
           },
@@ -287,9 +283,8 @@ namespace EXAFMM_NAMESPACE {
     }
 
     //! Initialize dsitribution, source & target value of bodies
-    GBodies initBodies(int numBodies, const char * distribution,
-	 	       int mpirank=0, int mpisize=1, int numSplit=1) const {
-      GBodies bodies;                                            // Initialize bodies
+    void initBodies(GBodies bodies, const char * distribution,
+	 	    int mpirank=0, int mpisize=1, int numSplit=1) const {
       switch (distribution[0]) {                                // Switch between data distribution type
 #if 0
       case 'l':                                                 // Case for lattice
@@ -297,7 +292,7 @@ namespace EXAFMM_NAMESPACE {
 	break;                                                  // End case for lattice
 #endif
       case 'c':                                                 // Case for cube
-	bodies = cube(numBodies,mpirank,numSplit);              //  Random distribution in [-1,1]^3 cube
+	cube(bodies,mpirank,numSplit);              //  Random distribution in [-1,1]^3 cube
 	break;                                                  // End case for cube
 #if 0
       case 's':                                                 // Case for sphere
@@ -315,7 +310,6 @@ namespace EXAFMM_NAMESPACE {
       }                                                         // End switch between data distribution type
       initSource(bodies,mpirank,numSplit);                      // Initialize source values
       initTarget(bodies);                                       // Initialize target values
-      return bodies;                                            // Return bodies
     }
 
     //! Read target values from file
@@ -351,14 +345,18 @@ namespace EXAFMM_NAMESPACE {
     }
 
     //! Downsize target bodies by even sampling
-    void sampleBodies(Bodies & bodies, int numTargets) {
+    global_vec<Body> sampleBodies(GBodies bodies, int numTargets) {
       if (numTargets < int(bodies.size())) {                    // If target size is smaller than current
-	int stride = bodies.size() / numTargets;                //  Stride of sampling
-	for (int i=0; i<numTargets; i++) {                      //  Loop over target samples
-	  bodies[i] = bodies[i*stride];                         //   Sample targets
-	}                                                       //  End loop over target samples
-	bodies.resize(numTargets);                              //  Resize bodies to target size
-      }                                                         // End if for target size
+        global_vec<Body> sampled(numTargets);
+        int stride = bodies.size() / numTargets;                //  Stride of sampling
+        for (int i=0; i<numTargets; i++) {                      //  Loop over target samples
+          sampled[i] = bodies[i*stride];                         //   Sample targets
+        }                                                       //  End loop over target samples
+        return sampled;
+      } else {
+        global_vec<Body> sampled(bodies.begin(), bodies.end());
+        return sampled;
+      }
     }
   };
 }

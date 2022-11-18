@@ -17,11 +17,16 @@ int real_main(int argc, char ** argv) {
   Args args(argc, argv);
 
   int my_rank = my_ityr::rank();
-  int n_ranks = my_ityr::n_ranks();
+  /* int n_ranks = my_ityr::n_ranks(); */
 
   my_ityr::iro::init(args.cache_size * 1024 * 1024);
 
-  GBodies bodies, bodies2, jbodies, buffer;
+  global_vec<Body> bodies_vec(global_vec_coll_opts);
+  global_vec<Body> jbodies_vec(global_vec_coll_opts);
+  global_vec<Body> buffer_vec(global_vec_coll_opts);
+  global_vec<Cell> cells_vec(global_vec_coll_opts);
+
+  GBodies bodies, jbodies, buffer;
   BoundBox boundBox;
   Bounds bounds;
   BuildTree buildTree(args.ncrit);
@@ -37,17 +42,24 @@ int real_main(int argc, char ** argv) {
   logger::verbose = args.verbose;
   logger::path = args.path;
 
+  logger::printTitle("FMM Parameters");
+  args.print(logger::stringLength);
+
+  bodies_vec.resize(args.numBodies);
+  bodies = {bodies_vec.begin(), bodies_vec.end()};
+
   if (my_rank == 0) {
     logger::printTitle("FMM Parameters");
     args.print(logger::stringLength);
 
-    bodies = my_ityr::root_spawn([=] {
-      return data.initBodies(args.numBodies, args.distribution, 0);
+    my_ityr::root_spawn([=] {
+      data.initBodies(bodies, args.distribution, 0);
     });
   }
   my_ityr::barrier();
 
-  buffer = {my_ityr::iro::malloc<Body>(bodies.size()), bodies.size()};
+  buffer_vec.resize(bodies.size());
+  buffer = {buffer_vec.begin(), buffer_vec.end()};
 
   if (args.IneJ) {
 #if 0
@@ -78,18 +90,24 @@ int real_main(int argc, char ** argv) {
       std::stringstream title;
       title << "Time average loop " << it;
       logger::printTitle(title.str());
-      if (my_rank == 0) {
-        bounds = boundBox.getBounds(bodies);
-        if (args.IneJ) {
+
+      bounds = boundBox.getBounds(bodies);
+      if (args.IneJ) {
 #if 0
-          bounds = boundBox.getBounds(jbodies, bounds);
+        bounds = boundBox.getBounds(jbodies, bounds);
 #endif
-        }
-        cells = buildTree.buildTree(bodies, buffer, bounds);
       }
-      upDownPass.upwardPass(cells);
-      traversal.initListCount(cells);
-      traversal.initWeight(cells);
+
+      cells_vec = buildTree.buildTree(bodies, buffer, bounds);
+      cells = {cells_vec.begin(), cells_vec.end()};
+
+      if (my_rank == 0) {
+        upDownPass.upwardPass(cells);
+        traversal.initListCount(cells);
+        traversal.initWeight(cells);
+      }
+      my_ityr::barrier();
+
       if (args.IneJ) {
 #if 0
         jcells = buildTree.buildTree(jbodies, buffer, bounds);
@@ -97,10 +115,19 @@ int real_main(int argc, char ** argv) {
         traversal.traverse(cells, jcells, cycle, args.dual);
 #endif
       } else {
-        traversal.traverse(cells, cells, cycle, args.dual);
-        jbodies = bodies;
+        if (my_rank == 0) {
+          traversal.traverse(cells, cells, cycle, args.dual);
+        }
+        my_ityr::barrier();
+
+        jbodies_vec = bodies_vec;
+        jbodies = {jbodies_vec.begin(), jbodies_vec.end()};
       }
-      upDownPass.downwardPass(cells);
+
+      if (my_rank == 0) {
+        upDownPass.downwardPass(cells);
+      }
+      my_ityr::barrier();
     }
     logger::printTitle("Total runtime");
     logger::stopDAG();
@@ -113,55 +140,74 @@ int real_main(int argc, char ** argv) {
     }
     traversal.writeList(cells, 0);
 
-    if (!isTime) {
-      const int numTargets = 100;
-      buffer = bodies;
-      data.sampleBodies(bodies, numTargets);
-      bodies2 = bodies;
+    if (my_rank == 0) {
+      if (!isTime) {
+        const int numTargets = 100;
+
+        global_vec<Body> bodies_sampled_vec = data.sampleBodies(bodies, numTargets);
+        GBodies bodies_sampled = {bodies_sampled_vec.begin(), bodies_sampled_vec.end()};
+
+        global_vec<Body> bodies2_vec = bodies_sampled_vec;
+        GBodies bodies2 = {bodies2_vec.begin(), bodies2_vec.end()};
+
+        data.initTarget(bodies_sampled);
+        logger::startTimer("Total Direct");
+        traversal.direct(bodies_sampled, jbodies, cycle);
+        logger::stopTimer("Total Direct");
+
+        ityr::with_checkout<my_ityr::access_mode::read_write, my_ityr::access_mode::read_write>(
+            bodies_sampled, bodies2, [&](auto bodies_sampled_, auto bodies2_) {
+          double potDif = verify.getDifScalar(bodies_sampled_, bodies2_);
+          double potNrm = verify.getNrmScalar(bodies_sampled_);
+          double accDif = verify.getDifVector(bodies_sampled_, bodies2_);
+          double accNrm = verify.getNrmVector(bodies_sampled_);
+          double potRel = std::sqrt(potDif/potNrm);
+          double accRel = std::sqrt(accDif/accNrm);
+          logger::printTitle("FMM vs. direct");
+          verify.print("Rel. L2 Error (pot)",potRel);
+          verify.print("Rel. L2 Error (acc)",accRel);
+
+          buildTree.printTreeData(cells);
+          traversal.printTraversalData();
+          logger::printPAPI();
+
+          pass = verify.regression(args.getKey(), isTime, t, potRel, accRel);
+        });
+
+        if (pass) {
+          if (verify.verbose) std::cout << "passed accuracy regression at t: " << t << std::endl;
+          if (args.accuracy) break;
+          t = -1;
+          isTime = true;
+        }
+      } else {
+        pass = verify.regression(args.getKey(), isTime, t, totalFMM);
+        if (pass) {
+          if (verify.verbose) std::cout << "passed time regression at t: " << t << std::endl;
+          break;
+        }
+      }
       data.initTarget(bodies);
-      logger::startTimer("Total Direct");
-      traversal.direct(bodies, jbodies, cycle);
-      logger::stopTimer("Total Direct");
-      double potDif = verify.getDifScalar(bodies, bodies2);
-      double potNrm = verify.getNrmScalar(bodies);
-      double accDif = verify.getDifVector(bodies, bodies2);
-      double accNrm = verify.getNrmVector(bodies);
-      double potRel = std::sqrt(potDif/potNrm);
-      double accRel = std::sqrt(accDif/accNrm);
-      logger::printTitle("FMM vs. direct");
-      verify.print("Rel. L2 Error (pot)",potRel);
-      verify.print("Rel. L2 Error (acc)",accRel);
-      buildTree.printTreeData(cells);
-      traversal.printTraversalData();
-      logger::printPAPI();
-      bodies = buffer;
-      pass = verify.regression(args.getKey(), isTime, t, potRel, accRel);
-      if (pass) {
-        if (verify.verbose) std::cout << "passed accuracy regression at t: " << t << std::endl;
-        if (args.accuracy) break;
-        t = -1;
-        isTime = true;
-      }
-    } else {
-      pass = verify.regression(args.getKey(), isTime, t, totalFMM);
-      if (pass) {
-        if (verify.verbose) std::cout << "passed time regression at t: " << t << std::endl;
-        break;
-      }
     }
-    data.initTarget(bodies);
+    my_ityr::barrier();
   }
-  if (!pass) {
-    if (verify.verbose) {
-      if(!isTime) std::cout << "failed accuracy regression" << std::endl;
-      else std::cout << "failed time regression" << std::endl;
+
+  if (my_rank == 0) {
+    if (!pass) {
+      if (verify.verbose) {
+        if(!isTime) std::cout << "failed accuracy regression" << std::endl;
+        else std::cout << "failed time regression" << std::endl;
+      }
+      abort();
     }
-    abort();
+    if (args.getMatrix) {
+#if 0
+      traversal.writeMatrix(bodies, jbodies);
+#endif
+    }
+    logger::writeDAG();
   }
-  if (args.getMatrix) {
-    traversal.writeMatrix(bodies, jbodies);
-  }
-  logger::writeDAG();
+  my_ityr::barrier();
 
   my_ityr::iro::fini();
 

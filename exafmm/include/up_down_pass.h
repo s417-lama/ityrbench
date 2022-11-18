@@ -11,22 +11,40 @@ namespace EXAFMM_NAMESPACE {
 
   private:
     //! Post-order traversal for upward pass
-    void postOrderTraversal(C_iter C, C_iter C0) {
-      for (C_iter CC=C0+C->ICHILD; CC!=C0+C->ICHILD+C->NCHILD; CC++) { // Loop over child cells
+    void postOrderTraversal(GC_iter C, GC_iter C0) {
+      int ichild = C->*(static_cast<int Cell::*>(&CellBase::ICHILD));
+      int nchild = C->*(static_cast<int Cell::*>(&CellBase::NCHILD));
+      for (GC_iter CC=C0+ichild; CC!=C0+ichild+nchild; CC++) { // Loop over child cells
         postOrderTraversal(CC, C0);                             //  Recursive call for child cell
       }                                                         // End loop over child cells
-      if(C->NCHILD==0) kernel.P2M(C);                           // P2M kernel
-      else {                                                    // If not leaf cell
-        kernel.M2M(C, C0);                                      //  M2M kernel
+      if(nchild==0) {
+        my_ityr::with_checkout_tied<my_ityr::access_mode::read>(
+            C, 1, [&](const Cell* C_) {
+          kernel.P2M(C_);                           // P2M kernel
+        });
+      } else {                                                    // If not leaf cell
+        my_ityr::with_checkout_tied<my_ityr::access_mode::read>(
+            C, C0 - C, [&](const Cell* C_) {
+          kernel.M2M(C_, C_ + (C0 - C));                                      //  M2M kernel
+        });
       }                                                         // End if for non leaf cell
     };
 
     //! Pre-order traversal for downward pass
-    void preOrderTraversal(C_iter C, C_iter C0) {
-      kernel.L2L(C, C0);                                        //  L2L kernel
-      if (C->NCHILD==0) {                                       //  If leaf cell
-        kernel.L2P(C);                                          //  L2P kernel
+    void preOrderTraversal(GC_iter C, GC_iter C0) {
+      int ichild = C->*(static_cast<int Cell::*>(&CellBase::ICHILD));
+      int nchild = C->*(static_cast<int Cell::*>(&CellBase::NCHILD));
+      my_ityr::with_checkout_tied<my_ityr::access_mode::read>(
+          C, C0 - C, [&](const Cell* C_) {
+        kernel.L2L(C_, C_ + (C0 - C));                                        //  L2L kernel
+      });
+      if (nchild==0) {                                       //  If leaf cell
+        my_ityr::with_checkout_tied<my_ityr::access_mode::read>(
+            C, 1, [&](const Cell* C_) {
+          kernel.L2P(C_);                                          //  L2P kernel
+        });
       }                                                         // End if for leaf cell
+#if 0
 #if EXAFMM_USE_WEIGHT
       C_iter CP = C0 + C->IPARENT;                              // Parent cell
       C->WEIGHT += CP->WEIGHT;                                  // Add parent's weight
@@ -36,7 +54,8 @@ namespace EXAFMM_NAMESPACE {
         }                                                       //  End loop over bodies in cell
       }                                                         // End if for leaf cell
 #endif
-      for (C_iter CC=C0+C->ICHILD; CC!=C0+C->ICHILD+C->NCHILD; CC++) {// Loop over child cells
+#endif
+      for (GC_iter CC=C0+ichild; CC!=C0+ichild+nchild; CC++) {// Loop over child cells
         preOrderTraversal(CC, C0);                              //  Recursive call for child cell
       }                                                         // End loop over chlid cells
     };
@@ -48,29 +67,39 @@ namespace EXAFMM_NAMESPACE {
     //! Upward pass (P2M, M2M)
     void upwardPass(GCells cells) {
       logger::startTimer("Upward pass");                        // Start timer
-      if (!cells.empty()) {                                     // If cell vector is not empty
-	GC_iter C0 = cells.begin();                              //  Set iterator of target root cell
-        for (GC_iter C=cells.begin(); C!=cells.end(); C++) {     //  Loop over cells
-          C->M.resize(kernel.NTERM, 0.0);                       //   Allocate & initialize M coefs
-          C->L.resize(kernel.NTERM, 0.0);                       //   Allocate & initialize L coefs
-        }                                                       //  End loop over cells
-	postOrderTraversal(C0, C0);                             //  Start post-order traversal from root
-      }                                                         // End if for empty cell vector
+      my_ityr::root_spawn([=] {
+        if (!cells.empty()) {                                     // If cell vector is not empty
+          GC_iter C0 = cells.begin();                              //  Set iterator of target root cell
+          my_ityr::serial_for<my_ityr::access_mode::read_write>(
+              cells.begin(), cells.end(), [=](Cell& c) {
+            c.M.resize(kernel.NTERM, 0.0);                       //   Allocate & initialize M coefs
+            c.L.resize(kernel.NTERM, 0.0);                       //   Allocate & initialize L coefs
+          }, my_ityr::iro::block_size);                                                       //  End loop over cells
+          postOrderTraversal(C0, C0);                             //  Start post-order traversal from root
+        }                                                         // End if for empty cell vector
+      });
       logger::stopTimer("Upward pass");                         // Stop timer
     }
 
     //! Downward pass (L2L, L2P)
-    void downwardPass(Cells & cells) {
+    void downwardPass(GCells cells) {
       logger::startTimer("Downward pass");                      // Start timer
-      if (!cells.empty()) {                                     // If cell vector is not empty
-	C_iter C0 = cells.begin();                              //  Root cell
-	if (C0->NCHILD == 0 ) {                                 //  If root is the only cell
-          kernel.L2P(C0);                                       //   L2P kernel
-        }                                                       //  End if root is the only cell
-	for (C_iter CC=C0+C0->ICHILD; CC!=C0+C0->ICHILD+C0->NCHILD; CC++) {// Loop over child cells
-	  preOrderTraversal(CC, C0);                            //   Start pre-order traversal from root
-	}                                                       //  End loop over child cells
-      }                                                         // End if for empty cell vector
+      my_ityr::root_spawn([=] {
+        if (!cells.empty()) {                                     // If cell vector is not empty
+          GC_iter C0 = cells.begin();                              //  Root cell
+          int ichild = C0->*(static_cast<int Cell::*>(&CellBase::ICHILD));
+          int nchild = C0->*(static_cast<int Cell::*>(&CellBase::NCHILD));
+          if (nchild == 0 ) {                                 //  If root is the only cell
+            my_ityr::with_checkout_tied<my_ityr::access_mode::read>(
+                C0, 1, [&](const Cell* C0_) {
+              kernel.L2P(C0_);                                       //   L2P kernel
+            });
+          }                                                       //  End if root is the only cell
+          for (GC_iter CC=C0+ichild; CC!=C0+ichild+nchild; CC++) {// Loop over child cells
+            preOrderTraversal(CC, C0);                            //   Start pre-order traversal from root
+          }                                                       //  End loop over child cells
+        }                                                         // End if for empty cell vector
+      });
       logger::stopTimer("Downward pass");                       // Stop timer
     }
 

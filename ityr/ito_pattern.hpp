@@ -70,6 +70,7 @@ using iterator_diff_t = typename std::iterator_traits<Iterator>::difference_type
 
 template <typename GPtrT>
 class global_ptr_move_iterator : public GPtrT {
+  static_assert(pcas::is_global_ptr_v<GPtrT>);
 public:
   explicit global_ptr_move_iterator(const GPtrT& p) : GPtrT(p) {}
   constexpr static bool is_global_ptr_move_iterator_v = true;
@@ -86,6 +87,7 @@ inline constexpr bool is_global_ptr_move_iterator_v = is_global_ptr_move_iterato
 
 template <typename GPtrT>
 inline global_ptr_move_iterator<GPtrT> make_move_iterator(GPtrT p) {
+  static_assert(pcas::is_global_ptr_v<GPtrT>);
   return global_ptr_move_iterator<GPtrT>(p);
 }
 
