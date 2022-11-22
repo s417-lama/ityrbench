@@ -109,7 +109,9 @@ namespace EXAFMM_NAMESPACE {
               bodies.begin() + begin, end - begin,
               buffer.begin() + begin, end - begin,
               [&](const Body* b_src, Body* b_dest) {
-            *b_dest = *b_src;
+            for (int i = 0; i < end - begin; i++) {
+              b_dest[i] = b_src[i];
+            }
           });
           /* my_ityr::parallel_transform(bodies.begin() + begin, */
           /*                             bodies.begin() + end, */
