@@ -378,32 +378,42 @@ namespace EXAFMM_NAMESPACE {
     //! Evaluate P2P and M2L using list based traversal
     void traverse(GCells icells, GCells jcells, vec3 cycle, bool dual, real_t remote=1) {
       if (icells.empty() || jcells.empty()) return;             // Quit if either of the cell vectors are empty
-      logger::startTimer("Traverse");                           // Start timer
+      int my_rank = my_ityr::rank();
+      if (my_rank == 0) {
+        logger::startTimer("Traverse");                           // Start timer
+      }
       logger::initTracer();                                     // Initialize tracer
       int prange = .5 / theta + 1;                              // Periodic range
       prange = 1;
       Ci0 = icells.begin();                                     // Iterator of first target cell
       Cj0 = jcells.begin();                                     // Iterator of first source cell
       kernel.Xperiodic = 0;                                     // Set periodic coordinate offset to 0
-      my_ityr::root_spawn([=] {
-        if (images == 0) {                                        //  If non-periodic boundary condition
-          dualTreeTraversal(Ci0, Cj0, remote);                    //   Traverse the tree
-        } else {                                                  //  If periodic boundary condition
-          for (int ix=-prange; ix<=prange; ix++) {                //   Loop over x periodic direction
-            for (int iy=-prange; iy<=prange; iy++) {              //    Loop over y periodic direction
-              for (int iz=-prange; iz<=prange; iz++) {            //     Loop over z periodic direction
-                kernel.Xperiodic[0] = ix * cycle[0];              //      Coordinate shift for x periodic direction
-                kernel.Xperiodic[1] = iy * cycle[1];              //      Coordinate shift for y periodic direction
-                kernel.Xperiodic[2] = iz * cycle[2];              //      Coordinate shift for z periodic direction
-                dualTreeTraversal(Ci0, Cj0, remote);              //      Traverse the tree for this periodic image
-              }                                                   //     End loop over z periodic direction
-            }                                                     //    End loop over y periodic direction
-          }                                                       //   End loop over x periodic direction
-          traversePeriodic(cycle);                                //   Traverse tree for periodic images
-        }                                                         //  End if for periodic boundary condition
-      });
-      logger::stopTimer("Traverse");                            // Stop timer
-      logger::writeTracer();                                    // Write tracer to file
+
+      if (my_rank == 0) {
+        my_ityr::root_spawn([=] {
+          if (images == 0) {                                        //  If non-periodic boundary condition
+            dualTreeTraversal(Ci0, Cj0, remote);                    //   Traverse the tree
+          } else {                                                  //  If periodic boundary condition
+            for (int ix=-prange; ix<=prange; ix++) {                //   Loop over x periodic direction
+              for (int iy=-prange; iy<=prange; iy++) {              //    Loop over y periodic direction
+                for (int iz=-prange; iz<=prange; iz++) {            //     Loop over z periodic direction
+                  kernel.Xperiodic[0] = ix * cycle[0];              //      Coordinate shift for x periodic direction
+                  kernel.Xperiodic[1] = iy * cycle[1];              //      Coordinate shift for y periodic direction
+                  kernel.Xperiodic[2] = iz * cycle[2];              //      Coordinate shift for z periodic direction
+                  dualTreeTraversal(Ci0, Cj0, remote);              //      Traverse the tree for this periodic image
+                }                                                   //     End loop over z periodic direction
+              }                                                     //    End loop over y periodic direction
+            }                                                       //   End loop over x periodic direction
+            traversePeriodic(cycle);                                //   Traverse tree for periodic images
+          }                                                         //  End if for periodic boundary condition
+        });
+      }
+      my_ityr::barrier();
+
+      if (my_rank == 0) {
+        logger::stopTimer("Traverse");                            // Stop timer
+        logger::writeTracer();                                    // Write tracer to file
+      }
     }
 
     //! Direct summation

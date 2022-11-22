@@ -277,7 +277,7 @@ struct global_container_if {
       end_ = begin_ + count;
       reserved_end_ = begin_ + count;
 
-      master_do_if_coll([&]() {
+      master_do_if_coll([=]() {
         construct_elems(begin(), end(), std::forward<Args>(args)...);
       });
     }
@@ -300,7 +300,7 @@ struct global_container_if {
       end_ = begin_ + d;
       reserved_end_ = begin_ + d;
 
-      master_do_if_coll([&]() {
+      master_do_if_coll([=]() {
         construct_elems_from_iter(first, last, begin());
       });
     }
@@ -359,11 +359,13 @@ struct global_container_if {
       reserved_end_ = begin_ + count;
 
       if (old_end - old_begin > 0) {
-        construct_elems_from_iter(ityr::make_move_iterator(old_begin),
-                                  ityr::make_move_iterator(old_end),
-                                  begin());
+        master_do_if_coll([=]() {
+          construct_elems_from_iter(ityr::make_move_iterator(old_begin),
+                                    ityr::make_move_iterator(old_end),
+                                    begin());
 
-        destruct_elems(old_begin, old_end);
+          destruct_elems(old_begin, old_end);
+        });
       }
 
       if (old_capacity > 0) {
@@ -378,13 +380,13 @@ struct global_container_if {
           size_type new_cap = next_size(count);
           realloc_mem(new_cap);
         }
-        master_do_if_coll([&]() {
+        master_do_if_coll([=]() {
           construct_elems(end(), begin() + count, std::forward<Args>(args)...);
         });
         end_ = begin() + count;
 
       } else if (count < size()) {
-        master_do_if_coll([&]() {
+        master_do_if_coll([=]() {
           destruct_elems(begin() + count, end());
         });
         end_ = begin() + count;
@@ -428,7 +430,9 @@ struct global_container_if {
 
     ~global_vector() {
       if (begin() != nullptr) {
-        destruct_elems(begin(), end());
+        master_do_if_coll([=]() {
+          destruct_elems(begin(), end());
+        });
         free_mem(begin(), capacity());
       }
     }

@@ -70,7 +70,10 @@ namespace EXAFMM_NAMESPACE {
 
     //! Get Xmin and Xmax of bodies
     Bounds getBounds(GBodies bodies) {
-      logger::startTimer("Get bounds");                         // Start timer
+      int my_rank = my_ityr::rank();
+      if (my_rank == 0) {
+        logger::startTimer("Get bounds");                         // Start timer
+      }
       Bounds bounds;                                            // Bounds : Contains Xmin, Xmax
       if (bodies.empty()) {                                     // If body vector is empty
 	bounds.Xmin = bounds.Xmax = 0;                          //  Set bounds to 0
@@ -82,25 +85,35 @@ namespace EXAFMM_NAMESPACE {
           bounds.Xmax = max(B->*(mp_X), bounds.Xmax + 1e-5);          //   Update Xmax
         }                                                       //  End loop over bodies
       }                                                         // End if for empty body vector
-      logger::stopTimer("Get bounds");                          // Stop timer
+      if (my_rank == 0) {
+        logger::stopTimer("Get bounds");                          // Stop timer
+      }
       return bounds;                                            // Return Xmin and Xmax
     }
 
     //! Update Xmin and Xmax of bodies
     Bounds getBounds(GBodies bodies, Bounds bounds) {
-      logger::startTimer("Get bounds");                         // Start timer
+      int my_rank = my_ityr::rank();
+      if (my_rank == 0) {
+        logger::startTimer("Get bounds");                         // Start timer
+      }
       auto mp_X = static_cast<vec3 Body::*>(&Source::X);
       for (GB_iter B=bodies.begin(); B!=bodies.end(); B++) {     // Loop over bodies
         bounds.Xmin = min(B->*(mp_X), bounds.Xmin - 1e-5);            //  Update Xmin
         bounds.Xmax = max(B->*(mp_X), bounds.Xmax + 1e-5);            //  Update Xmax
       }                                                         // End loop over bodies
-      logger::stopTimer("Get bounds");                          // Stop timer
+      if (my_rank == 0) {
+        logger::stopTimer("Get bounds");                          // Stop timer
+      }
       return bounds;                                            // Return Xmin and Xmax
     }
 
     //! Get Xmin and Xmax of cells
     Bounds getBounds(GCells cells) {
-      logger::startTimer("Get bounds");                         // Start timer
+      int my_rank = my_ityr::rank();
+      if (my_rank == 0) {
+        logger::startTimer("Get bounds");                         // Start timer
+      }
       Bounds bounds;                                            // Bounds : Contains Xmin, Xmax
       if (cells.empty()) {                                      // If cell vector is empty
 	bounds.Xmin = bounds.Xmax = 0;                          //  Set bounds to 0
@@ -112,19 +125,26 @@ namespace EXAFMM_NAMESPACE {
           bounds.Xmax = max(vec3(C->*(mp_X)) + 1e-5, bounds.Xmax);          //   Update Xmax
         }                                                       //  End loop over cells
       }                                                         // End if for empty body vector
-      logger::stopTimer("Get bounds");                          // Stop timer
+      if (my_rank == 0) {
+        logger::stopTimer("Get bounds");                          // Stop timer
+      }
       return bounds;                                            // Return Xmin and Xmax
     }
 
     //! Update Xmin and Xmax of cells
     Bounds getBounds(GCells cells, Bounds bounds) {
-      logger::startTimer("Get bounds");                         // Start timer
+      int my_rank = my_ityr::rank();
+      if (my_rank == 0) {
+        logger::startTimer("Get bounds");                         // Start timer
+      }
       auto mp_X = static_cast<vec3 Cell::*>(&CellBase::X);
       for (GC_iter C=cells.begin(); C!=cells.end(); C++) {       // Loop over cells
         bounds.Xmin = min(vec3(C->*(mp_X)) - 1e-5, bounds.Xmin);            //  Update Xmin
         bounds.Xmax = max(vec3(C->*(mp_X)) + 1e-5, bounds.Xmax);            //  Update Xmax
       }                                                         // End loop over cells
-      logger::stopTimer("Get bounds");                          // Stop timer
+      if (my_rank == 0) {
+        logger::stopTimer("Get bounds");                          // Stop timer
+      }
       return bounds;                                            // Return Xmin and Xmax
     }
   };

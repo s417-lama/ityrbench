@@ -45,6 +45,7 @@ build:
     source build_common.bash
 
     CFLAGS="${CFLAGS:+$CFLAGS} -DNDEBUG"
+    CFLAGS="${CFLAGS:+$CFLAGS} -DITYR_USE_MPI_WIN_DYNAMIC=false"
 
     make distclean
     MPICXX=$MPICXX CFLAGS=$CFLAGS make exafmm
@@ -53,6 +54,8 @@ run:
   depend_params: [nodes, cores, n_input, repeats, theta, nspawn, ncrit, cache_size, max_dirty, shared_mem, logger, allocator, debugger]
   script: |
     source run_common.bash
+
+    export PCAS_ALLOCATOR_MAX_LOCAL_SIZE=32
 
     commands="
       ./exafmm/examples/laplace

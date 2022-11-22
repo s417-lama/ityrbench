@@ -114,10 +114,7 @@ void run_fmm(const Args& args) {
         traversal.traverse(cells, jcells, cycle, args.dual);
 #endif
       } else {
-        if (my_rank == 0) {
-          traversal.traverse(cells, cells, cycle, args.dual);
-        }
-        my_ityr::barrier();
+        traversal.traverse(cells, cells, cycle, args.dual);
 
         jbodies_vec = bodies_vec;
         jbodies = {jbodies_vec.begin(), jbodies_vec.end()};
@@ -128,18 +125,19 @@ void run_fmm(const Args& args) {
       }
       my_ityr::barrier();
     }
-    logger::printTitle("Total runtime");
-    logger::stopDAG();
-    logger::stopPAPI();
-    double totalFMM = logger::stopTimer("Total FMM");
-    totalFMM /= numIteration;
-    logger::resetTimer("Total FMM");
-    if (args.write) {
-      logger::writeTime();
-    }
-    traversal.writeList(cells, 0);
 
-    if (my_rank == 0) {
+    int should_break = my_ityr::master_do([&]() {
+      logger::printTitle("Total runtime");
+      logger::stopDAG();
+      logger::stopPAPI();
+      double totalFMM = logger::stopTimer("Total FMM");
+      totalFMM /= numIteration;
+      logger::resetTimer("Total FMM");
+      if (args.write) {
+        logger::writeTime();
+      }
+      traversal.writeList(cells, 0);
+
       if (!isTime) {
         const int numTargets = 100;
 
@@ -175,7 +173,7 @@ void run_fmm(const Args& args) {
 
         if (pass) {
           if (verify.verbose) std::cout << "passed accuracy regression at t: " << t << std::endl;
-          if (args.accuracy) break;
+          if (args.accuracy) return 1;
           t = -1;
           isTime = true;
         }
@@ -183,12 +181,14 @@ void run_fmm(const Args& args) {
         pass = verify.regression(args.getKey(), isTime, t, totalFMM);
         if (pass) {
           if (verify.verbose) std::cout << "passed time regression at t: " << t << std::endl;
-          break;
+          return 1;
         }
       }
       data.initTarget(bodies);
-    }
-    my_ityr::barrier();
+      return 0;
+    });
+
+    if (should_break) break;
   }
 
   if (my_rank == 0) {

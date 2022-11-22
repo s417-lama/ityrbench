@@ -297,18 +297,18 @@ namespace EXAFMM_NAMESPACE {
 
     //! Initialize target values
     void initTarget(GBodies bodies) const {
-      my_ityr::parallel_for<my_ityr::iro::access_mode::read_write,
-                            my_ityr::iro::access_mode::read>(
+      // TODO: parallelize?
+      my_ityr::serial_for<my_ityr::iro::access_mode::read_write,
+                          my_ityr::iro::access_mode::read>(
           bodies.begin(),
           bodies.end(),
           ityr::count_iterator<int>(0),
           [=](auto&& B, int i) {
-            B.TRG = 0;                                             //  Clear target values
-            B.IBODY = i;                            //  Initial body numbering
-            B.ICELL = 0;                                           //  Initial cell index
-            B.WEIGHT = 1;                                          //  Initial weight
-          },
-          my_ityr::iro::block_size);
+        B.TRG = 0;                                             //  Clear target values
+        B.IBODY = i;                            //  Initial body numbering
+        B.ICELL = 0;                                           //  Initial cell index
+        B.WEIGHT = 1;                                          //  Initial weight
+      }, my_ityr::iro::block_size);
     }
 
     //! Initialize dsitribution, source & target value of bodies

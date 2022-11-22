@@ -104,11 +104,18 @@ namespace EXAFMM_NAMESPACE {
       }                                                         // End if for no bodies
       if (end - begin <= ncrit) {                               // If number of bodies is less than threshold
         if (direction) {                                          //  If direction of data is from bodies to buffer
-          my_ityr::parallel_transform(bodies.begin() + begin,
-                                      bodies.begin() + end,
-                                      buffer.begin() + begin,
-                                      [](const auto& B) { return B; },
-                                      my_ityr::iro::block_size);
+          my_ityr::with_checkout_tied<my_ityr::access_mode::read,
+                                      my_ityr::access_mode::write>(
+              bodies.begin() + begin, end - begin,
+              buffer.begin() + begin, end - begin,
+              [&](const Body* b_src, Body* b_dest) {
+            *b_dest = *b_src;
+          });
+          /* my_ityr::parallel_transform(bodies.begin() + begin, */
+          /*                             bodies.begin() + end, */
+          /*                             buffer.begin() + begin, */
+          /*                             [](const auto& B) { return B; }, */
+          /*                             my_ityr::iro::block_size); */
         }
         return makeOctNode(begin,end,X,true);        //  Create an octree node and assign it's pointer
       }                                                         // End if for number of bodies
@@ -220,7 +227,9 @@ namespace EXAFMM_NAMESPACE {
     global_vec<Cell> buildTree(GBodies bodies, GBodies buffer, Bounds bounds) {
       int my_rank = my_ityr::rank();
 
-      logger::startTimer("Grow tree");                          // Start timer
+      if (my_rank == 0) {
+        logger::startTimer("Grow tree");                          // Start timer
+      }
 
       Box box = bounds2box(bounds);                             // Get box from bounds
       if (bodies.empty()) {                                     // If bodies vector is empty
@@ -239,13 +248,16 @@ namespace EXAFMM_NAMESPACE {
         });
       }
 
-      logger::stopTimer("Grow tree");                           // Stop timer
-      logger::startTimer("Link tree");                          // Start timer
+      if (my_rank == 0) {
+        logger::stopTimer("Grow tree");                           // Stop timer
+        logger::startTimer("Link tree");                          // Start timer
+      }
 
       global_vec<Cell> cells_vec(global_vec_coll_opts);                                              // Initialize cell array
 
-      if (N0 != NULL) {                                         // If the node tree is not empty
+      if (N0 != nullptr) {                                         // If the node tree is not empty
         std::size_t ncells = N0->*(&OctreeNode::NNODE);
+        /* if (my_rank == 0) printf("ncells: %ld\n", ncells); */
         cells_vec.resize(ncells);
         if (my_rank == 0) {
           GC_iter C0 = cells_vec.begin();                              //  Cell begin iterator
@@ -253,8 +265,11 @@ namespace EXAFMM_NAMESPACE {
           my_ityr::iro::free(N0, 1);
         }
       }                                                         // End if for empty node tree
+      my_ityr::barrier();
 
-      logger::stopTimer("Link tree");                           // Stop timer
+      if (my_rank == 0) {
+        logger::stopTimer("Link tree");                           // Stop timer
+      }
       return cells_vec;                                             // Return cells array
     }
 

@@ -111,7 +111,7 @@ public:
     P::main(f, args...);
   }
 
-  static void barrier() { return P::barrier(); }
+  static void barrier() { P::barrier(); }
 
   template <access_mode Mode, typename... Args>
   static auto with_checkout(Args&&... args) {

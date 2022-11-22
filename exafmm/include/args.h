@@ -340,6 +340,8 @@ namespace EXAFMM_NAMESPACE {
 		  << std::setw(stringLength)
 		  << "write" << " : " << write << std::endl
 		  << std::setw(stringLength)
+		  << "# of processes" << " : " << my_ityr::n_ranks() << std::endl
+		  << std::setw(stringLength)
 		  << "cache_size" << " : " << cache_size << " MB" << std::endl;
       }
     }

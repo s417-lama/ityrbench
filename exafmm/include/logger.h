@@ -89,6 +89,7 @@ namespace EXAFMM_NAMESPACE {
 		  << std::setfill('-')                          //  Set to fill with '-'
 		  << title << std::setw(10) << "-"              //  Fill until end of line
 		  << std::setfill(' ') << std::endl;            //  Set back to fill with ' '
+        fflush(stdout);
       }                                                         // End if for verbose flag
     }
 
@@ -103,6 +104,7 @@ namespace EXAFMM_NAMESPACE {
 	std::cout << std::setw(stringLength) << std::left       //  Set format
 		  << event << " : " << std::setprecision(decimal) << std::fixed
 		  << timer[event] << " s" << std::endl;         //  Print event and timer
+        fflush(stdout);
       }                                                         // End if for verbose flag
     }
 

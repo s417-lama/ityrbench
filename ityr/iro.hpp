@@ -144,6 +144,12 @@ struct my_pcas_policy : public pcas::policy_default {
 #endif
   constexpr static bool enable_write_through = ITYR_ENABLE_WRITE_THROUGH;
 #undef ITYR_ENABLE_WRITE_THROUGH
+
+#ifndef ITYR_USE_MPI_WIN_DYNAMIC
+#define ITYR_USE_MPI_WIN_DYNAMIC 1
+#endif
+  constexpr static bool use_mpi_win_dynamic = ITYR_USE_MPI_WIN_DYNAMIC;
+#undef ITYR_USE_MPI_WIN_DYNAMIC
 };
 
 template <typename P>
