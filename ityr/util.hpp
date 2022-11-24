@@ -87,6 +87,8 @@ inline void signal_handler(int sig) {
   // cancel signal handler for SIGABRT
   signal(SIGABRT, SIG_DFL);
 
+  /* sleep(1000000); */
+
   // Set timeout so as not to get stuck in the signal handler.
   // Non-async-signal-safe functions (e.g., printf) are called in the following,
   // which can result in a deadlock.

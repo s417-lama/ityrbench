@@ -254,23 +254,26 @@ namespace EXAFMM_NAMESPACE {
 	} else {                                                //  If many cells are in the range
 	  GC_iter CiMid = CiBegin + (CiEnd - CiBegin) / 2;       //   Split range of Ci cells in half
 	  GC_iter CjMid = CjBegin + (CjEnd - CjBegin) / 2;       //   Split range of Cj cells in half
-	  mk_task_group;                                        //   Initialize task group
-	  {
+
+          my_ityr::parallel_invoke([=]() {
 	    TraverseRange leftBranch(traversal, CiBegin, CiMid, //    Instantiate recursive functor
 				     CjBegin, CjMid, remote);
+            leftBranch();
+          }, [=]() {
 	    TraverseRange rightBranch(traversal, CiMid, CiEnd,  //    Instantiate recursive functor
 				      CjMid, CjEnd, remote);
-            my_ityr::parallel_invoke(leftBranch, rightBranch);
-	    wait_tasks;                                         //    Synchronize task group
-	  }
-	  {
+            rightBranch();
+          });
+
+          my_ityr::parallel_invoke([=]() {
 	    TraverseRange leftBranch(traversal, CiBegin, CiMid, //    Instantiate recursive functor
 				     CjMid, CjEnd, remote);
+            leftBranch();
+          }, [=]() {
             TraverseRange rightBranch(traversal, CiMid, CiEnd,  //    Instantiate recursive functor
                                       CjBegin, CjMid, remote);
-            my_ityr::parallel_invoke(leftBranch, rightBranch);
-	    wait_tasks;                                         //    Synchronize task group
-	  }
+            rightBranch();
+          });
 	}                                                       //  End if for many cells in range
 	logger::stopTracer(tracer);                             //  Stop tracer
       }                                                         // End overload operator()
@@ -388,6 +391,9 @@ namespace EXAFMM_NAMESPACE {
       Ci0 = icells.begin();                                     // Iterator of first target cell
       Cj0 = jcells.begin();                                     // Iterator of first source cell
       kernel.Xperiodic = 0;                                     // Set periodic coordinate offset to 0
+
+      // wait for assignment of Ci0 and Cj0 in all processes
+      my_ityr::barrier();
 
       if (my_rank == 0) {
         my_ityr::root_spawn([=] {

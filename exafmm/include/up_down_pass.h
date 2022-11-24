@@ -70,11 +70,11 @@ namespace EXAFMM_NAMESPACE {
       my_ityr::root_spawn([=] {
         if (!cells.empty()) {                                     // If cell vector is not empty
           GC_iter C0 = cells.begin();                              //  Set iterator of target root cell
-          my_ityr::serial_for<my_ityr::access_mode::read_write>(
+          my_ityr::parallel_for<my_ityr::access_mode::read_write>(
               cells.begin(), cells.end(), [=](Cell& c) {
             c.M.resize(kernel.NTERM, 0.0);                       //   Allocate & initialize M coefs
             c.L.resize(kernel.NTERM, 0.0);                       //   Allocate & initialize L coefs
-          }, my_ityr::iro::block_size);                                                       //  End loop over cells
+          }, my_ityr::iro::block_size / sizeof(Cell));                                                       //  End loop over cells
           postOrderTraversal(C0, C0);                             //  Start post-order traversal from root
         }                                                         // End if for empty cell vector
       });

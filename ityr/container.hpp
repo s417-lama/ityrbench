@@ -310,7 +310,7 @@ struct global_container_if {
     void construct_elems(pointer b, pointer e, Args&&... args) const {
       master_do_if_coll([=]() {
         if (opts_.parallel_construct) {
-          ito_pattern::template parallel_for<access_mode::read_write>(
+          ito_pattern::template parallel_for<access_mode::write>(
               b, e, [=](auto&& x) { new (&x) T(args...); }, opts_.cutoff);
         } else {
           ito_pattern::template serial_for<access_mode::write>(

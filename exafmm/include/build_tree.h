@@ -259,6 +259,9 @@ namespace EXAFMM_NAMESPACE {
 #endif
         assert(box.R > 0);                                      // Check for bounds validity
         B0 = bodies.begin();                                    // Bodies iterator
+
+        my_ityr::barrier();
+
         N0 = my_ityr::master_do([=]() {
           return buildNodes(bodies, buffer, 0, bodies.size(),        // Build octree nodes
                             box.X, box.R);
