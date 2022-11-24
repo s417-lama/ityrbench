@@ -277,9 +277,7 @@ struct global_container_if {
       end_ = begin_ + count;
       reserved_end_ = begin_ + count;
 
-      master_do_if_coll([=]() {
-        construct_elems(begin(), end(), std::forward<Args>(args)...);
-      });
+      construct_elems(begin(), end(), std::forward<Args>(args)...);
     }
 
     template <typename InputIterator>
@@ -296,56 +294,65 @@ struct global_container_if {
     void initialize_from_iter(ForwardIterator first, ForwardIterator last, std::forward_iterator_tag) {
       auto d = std::distance(first, last);
 
-      begin_ = allocate_mem(d);
-      end_ = begin_ + d;
-      reserved_end_ = begin_ + d;
+      if (d > 0) {
+        begin_ = allocate_mem(d);
+        end_ = begin_ + d;
+        reserved_end_ = begin_ + d;
 
-      master_do_if_coll([=]() {
         construct_elems_from_iter(first, last, begin());
-      });
+
+      } else {
+        begin_ = end_ = reserved_end_ = nullptr;
+      }
     }
 
     template <typename... Args>
-    void construct_elems(pointer b, pointer e, Args&&... args) {
-      if (opts_.parallel_construct) {
-        ito_pattern::template parallel_for<access_mode::write>(
-            b, e, [=](auto&& x) { new (&x) T(args...); }, opts_.cutoff);
-      } else {
-        ito_pattern::template serial_for<access_mode::write>(
-            b, e, [&](auto&& x) { new (&x) T(std::forward<Args>(args)...); }, opts_.cutoff);
-      }
+    void construct_elems(pointer b, pointer e, Args&&... args) const {
+      master_do_if_coll([=]() {
+        if (opts_.parallel_construct) {
+          ito_pattern::template parallel_for<access_mode::read_write>(
+              b, e, [=](auto&& x) { new (&x) T(args...); }, opts_.cutoff);
+        } else {
+          ito_pattern::template serial_for<access_mode::write>(
+              b, e, [&](auto&& x) { new (&x) T(std::forward<Args>(args)...); }, opts_.cutoff);
+        }
+      });
     }
 
     template <typename ForwardIterator>
-    void construct_elems_from_iter(ForwardIterator first, ForwardIterator last, pointer b) {
-      if constexpr (is_const_iterator_v<ForwardIterator>) {
-        if (opts_.parallel_construct) {
-          ito_pattern::template parallel_for<access_mode::read, access_mode::write>(
-              first, last, b, [](const auto& src, auto&& x) { new (&x) T(src); }, opts_.cutoff);
+    void construct_elems_from_iter(ForwardIterator first, ForwardIterator last, pointer b) const {
+      master_do_if_coll([=]() {
+        if constexpr (is_const_iterator_v<ForwardIterator>) {
+          if (opts_.parallel_construct) {
+            ito_pattern::template parallel_for<access_mode::read, access_mode::write>(
+                first, last, b, [](const auto& src, auto&& x) { new (&x) T(src); }, opts_.cutoff);
+          } else {
+            ito_pattern::template serial_for<access_mode::read, access_mode::write>(
+                first, last, b, [](const auto& src, auto&& x) { new (&x) T(src); }, opts_.cutoff);
+          }
         } else {
-          ito_pattern::template serial_for<access_mode::read, access_mode::write>(
-              first, last, b, [](const auto& src, auto&& x) { new (&x) T(src); }, opts_.cutoff);
+          if (opts_.parallel_construct) {
+            ito_pattern::template parallel_for<access_mode::read_write, access_mode::write>(
+                first, last, b, [](auto&& src, auto&& x) { new (&x) T(std::forward<decltype(src)>(src)); }, opts_.cutoff);
+          } else {
+            ito_pattern::template serial_for<access_mode::read_write, access_mode::write>(
+                first, last, b, [](auto&& src, auto&& x) { new (&x) T(std::forward<decltype(src)>(src)); }, opts_.cutoff);
+          }
         }
-      } else {
-        if (opts_.parallel_construct) {
-          ito_pattern::template parallel_for<access_mode::read_write, access_mode::write>(
-              first, last, b, [](auto&& src, auto&& x) { new (&x) T(std::forward<decltype(src)>(src)); }, opts_.cutoff);
-        } else {
-          ito_pattern::template serial_for<access_mode::read_write, access_mode::write>(
-              first, last, b, [](auto&& src, auto&& x) { new (&x) T(std::forward<decltype(src)>(src)); }, opts_.cutoff);
-        }
-      }
+      });
     }
 
-    void destruct_elems(pointer b, pointer e) {
+    void destruct_elems(pointer b, pointer e) const {
       if constexpr (!std::is_trivially_destructible_v<T>) {
-        if (opts_.parallel_destruct) {
-          ito_pattern::template parallel_for<access_mode::read_write>(
-              b, e, [](auto&& x) { std::destroy_at(&x); }, opts_.cutoff);
-        } else {
-          ito_pattern::template serial_for<access_mode::read_write>(
-              b, e, [](auto&& x) { std::destroy_at(&x); }, opts_.cutoff);
-        }
+        master_do_if_coll([=]() {
+          if (opts_.parallel_destruct) {
+            ito_pattern::template parallel_for<access_mode::read_write>(
+                b, e, [](auto&& x) { std::destroy_at(&x); }, opts_.cutoff);
+          } else {
+            ito_pattern::template serial_for<access_mode::read_write>(
+                b, e, [](auto&& x) { std::destroy_at(&x); }, opts_.cutoff);
+          }
+        });
       }
     }
 
@@ -359,13 +366,11 @@ struct global_container_if {
       reserved_end_ = begin_ + count;
 
       if (old_end - old_begin > 0) {
-        master_do_if_coll([=]() {
-          construct_elems_from_iter(ityr::make_move_iterator(old_begin),
-                                    ityr::make_move_iterator(old_end),
-                                    begin());
+        construct_elems_from_iter(ityr::make_move_iterator(old_begin),
+                                  ityr::make_move_iterator(old_end),
+                                  begin());
 
-          destruct_elems(old_begin, old_end);
-        });
+        destruct_elems(old_begin, old_end);
       }
 
       if (old_capacity > 0) {
@@ -380,15 +385,11 @@ struct global_container_if {
           size_type new_cap = next_size(count);
           realloc_mem(new_cap);
         }
-        master_do_if_coll([=]() {
-          construct_elems(end(), begin() + count, std::forward<Args>(args)...);
-        });
+        construct_elems(end(), begin() + count, std::forward<Args>(args)...);
         end_ = begin() + count;
 
       } else if (count < size()) {
-        master_do_if_coll([=]() {
-          destruct_elems(begin() + count, end());
-        });
+        destruct_elems(begin() + count, end());
         end_ = begin() + count;
       }
     }
@@ -430,9 +431,7 @@ struct global_container_if {
 
     ~global_vector() {
       if (begin() != nullptr) {
-        master_do_if_coll([=]() {
-          destruct_elems(begin(), end());
-        });
+        destruct_elems(begin(), end());
         free_mem(begin(), capacity());
       }
     }
@@ -454,7 +453,7 @@ struct global_container_if {
         end_(other.end_),
         reserved_end_(other.reserved_end_),
         opts_(other.opts_) {
-      other.begin_ = nullptr;
+      other.begin_ = other.end_ = other.reserved_end_ = nullptr;
     }
     this_t& operator=(this_t&& other) {
       this->~global_vector();
@@ -462,7 +461,7 @@ struct global_container_if {
       end_ = other.end_;
       reserved_end_ = other.reserved_end_;
       opts_ = other.opts_;
-      other.begin_ = nullptr;
+      other.begin_ = other.end_ = other.reserved_end_ = nullptr;
       return *this;
     }
 

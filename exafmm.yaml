@@ -45,6 +45,7 @@ build:
     source build_common.bash
 
     CFLAGS="${CFLAGS:+$CFLAGS} -DNDEBUG"
+    # CFLAGS="${CFLAGS:+$CFLAGS} -O0"
     CFLAGS="${CFLAGS:+$CFLAGS} -DITYR_USE_MPI_WIN_DYNAMIC=false"
 
     make distclean
