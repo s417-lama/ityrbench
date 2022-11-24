@@ -68,11 +68,22 @@ namespace EXAFMM_NAMESPACE {
       }, my_ityr::iro::block_size);
     }
 
+    global_ptr<OctreeNode> alloc_node() const {
+      /* return my_ityr::iro::malloc_local<OctreeNode>(1); */
+      return reinterpret_cast<global_ptr<OctreeNode>>(std::malloc(sizeof(OctreeNode)));
+    }
+
+    void free_node(global_ptr<OctreeNode> node) const {
+      /* my_ityr::iro::free(node, 1); */
+      std::free(node);
+    }
+
     //! Create an octree node
     global_ptr<OctreeNode> makeOctNode(int begin, int end, vec3 X, bool nochild) {
-      global_ptr<OctreeNode> octNode = my_ityr::iro::malloc_local<OctreeNode>(1);
-      my_ityr::with_checkout_tied<my_ityr::access_mode::write>(
-          octNode, 1, [&](OctreeNode* octNode_) {
+      global_ptr<OctreeNode> octNode_ = alloc_node();
+      /* global_ptr<OctreeNode> octNode = alloc_node(); */
+      /* my_ityr::with_checkout_tied<my_ityr::access_mode::write>( */
+      /*     octNode, 1, [&](OctreeNode* octNode_) { */
         OctreeNode* octNode = new (octNode_) OctreeNode();
         octNode->IBODY = begin;                                   // Index of first body in node
         octNode->NBODY = end - begin;                             // Number of bodies in node
@@ -81,7 +92,7 @@ namespace EXAFMM_NAMESPACE {
         if (nochild) {                                            // If node has no children
           for (int i=0; i<8; i++) octNode->CHILD[i] = nullptr;       //  Initialize pointers to children
         }                                                         // End if for node children
-      });
+      /* }); */
       return octNode;                                           // Return node
     }
 
@@ -161,10 +172,14 @@ namespace EXAFMM_NAMESPACE {
     void nodes2cells(global_ptr<OctreeNode> octNode, GC_iter C,
                      GC_iter C0, GC_iter CN, vec3 X0, real_t R0,
                      int & maxLevel, int level=0, int iparent=0) {
-      my_ityr::with_checkout<my_ityr::access_mode::read,
-                             my_ityr::access_mode::write>(
-          octNode, 1, C, 1,
-          [&](const OctreeNode* o, Cell* c) {
+      const OctreeNode* o = octNode;
+      my_ityr::with_checkout<my_ityr::access_mode::write>(
+          C, 1,
+          [&](Cell* c) {
+      /* my_ityr::with_checkout<my_ityr::access_mode::read, */
+      /*                        my_ityr::access_mode::write>( */
+      /*     octNode, 1, C, 1, */
+      /*     [&](const OctreeNode* o, Cell* c) { */
         c->IPARENT = iparent;                                     //  Index of parent cell
         c->R       = R0 / (1 << level);                           //  Cell radius
         c->X       = o->X;                                  //  Cell center
@@ -200,7 +215,7 @@ namespace EXAFMM_NAMESPACE {
           }                                                       //   End loop over children
           for (int i=0; i<nchild; i++) {                          //   Loop over children
             int octant = octants[i];                              //    Get octant from child index
-            my_ityr::iro::free(o->CHILD[octant], 1);
+            free_node(o->CHILD[octant]);
           }                                                       //   End loop over children
           maxLevel = std::max(maxLevel, level+1);                 //   Update maximum level of tree
         }                                                         //  End if for child existance
@@ -258,13 +273,16 @@ namespace EXAFMM_NAMESPACE {
       global_vec<Cell> cells_vec(global_vec_coll_opts);                                              // Initialize cell array
 
       if (N0 != nullptr) {                                         // If the node tree is not empty
-        std::size_t ncells = N0->*(&OctreeNode::NNODE);
+        /* std::size_t ncells = N0->*(&OctreeNode::NNODE); */
+        std::size_t ncells = my_ityr::master_do([=]() { return N0->*(&OctreeNode::NNODE); });
+
         /* if (my_rank == 0) printf("ncells: %ld\n", ncells); */
+
         cells_vec.resize(ncells);
         if (my_rank == 0) {
           GC_iter C0 = cells_vec.begin();                              //  Cell begin iterator
           nodes2cells(N0, C0, C0, C0+1, box.X, box.R, numLevels); // Instantiate recursive functor
-          my_ityr::iro::free(N0, 1);
+          free_node(N0);
         }
       }                                                         // End if for empty node tree
       my_ityr::barrier();

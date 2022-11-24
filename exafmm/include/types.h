@@ -15,8 +15,14 @@
 
 namespace EXAFMM_NAMESPACE {
   using my_ityr = ityr::ityr_if<ityr::ityr_policy>;
+
+  // global_ptr is only used in build_tree.h, but no parallelization is currently done
+  // TODO: parallelize tree build
+  /* template <typename T> */
+  /* using global_ptr = my_ityr::global_ptr<T>; */
   template <typename T>
-  using global_ptr = my_ityr::global_ptr<T>;
+  using global_ptr = T*;
+
   template <typename T>
   using global_span = my_ityr::global_span<T>;
   template <typename T>
