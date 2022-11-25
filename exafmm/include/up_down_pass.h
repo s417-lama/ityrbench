@@ -24,8 +24,12 @@ namespace EXAFMM_NAMESPACE {
         });
       } else {                                                    // If not leaf cell
         my_ityr::with_checkout_tied<my_ityr::access_mode::read>(
-            C, C0 - C, [&](const Cell* C_) {
-          kernel.M2M(C_, C_ + (C0 - C));                                      //  M2M kernel
+            C, 1, [&](const Cell* C_) {
+          // TODO: refactor
+          my_ityr::with_checkout_tied<my_ityr::access_mode::read>(
+              C0 + C_->ICHILD, C_->NCHILD, [&](const Cell*) {
+            kernel.M2M(C_, C_ + (C0 - C));                                      //  M2M kernel
+          });
         });
       }                                                         // End if for non leaf cell
     };
@@ -35,8 +39,12 @@ namespace EXAFMM_NAMESPACE {
       int ichild = C->*(static_cast<int Cell::*>(&CellBase::ICHILD));
       int nchild = C->*(static_cast<int Cell::*>(&CellBase::NCHILD));
       my_ityr::with_checkout_tied<my_ityr::access_mode::read>(
-          C, C0 - C, [&](const Cell* C_) {
-        kernel.L2L(C_, C_ + (C0 - C));                                        //  L2L kernel
+          C, 1, [&](const Cell* C_) {
+        // TODO: refactor
+        my_ityr::with_checkout_tied<my_ityr::access_mode::read>(
+            C0 + C_->IPARENT, 1, [&](const Cell*) {
+          kernel.L2L(C_, C_ + (C0 - C));                                        //  L2L kernel
+        });
       });
       if (nchild==0) {                                       //  If leaf cell
         my_ityr::with_checkout_tied<my_ityr::access_mode::read>(
