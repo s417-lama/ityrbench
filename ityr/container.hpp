@@ -46,7 +46,7 @@ public:
   constexpr iterator begin() const noexcept { return ptr_; }
   constexpr iterator end() const noexcept { return ptr_ + n_; }
 
-  constexpr reference operator[](size_type i) const { assert(i < n_); return ptr_[i]; }
+  constexpr reference operator[](size_type i) const { assert(i <= n_); return ptr_[i]; }
 
   constexpr reference front() const { return *ptr_; }
   constexpr reference back() const { return *(ptr_ + n_ - 1); }
@@ -56,14 +56,6 @@ public:
   constexpr this_t subspan(size_type offset, size_type count) const {
     assert(offset + count <= n_);
     return {ptr_ + offset, count};
-  }
-
-  constexpr std::pair<this_t, this_t> divide(size_type at) const {
-    return {subspan(0, at), subspan(at, n_ - at)};
-  }
-
-  constexpr std::pair<this_t, this_t> divide_two() const {
-    return divide(n_ / 2);
   }
 };
 
