@@ -139,6 +139,12 @@ struct my_pcas_policy : public pcas::policy_default {
   constexpr static std::size_t block_size = ITYR_BLOCK_SIZE;
 #undef ITYR_BLOCK_SIZE
 
+#ifndef ITYR_SUB_BLOCK_SIZE
+#define ITYR_SUB_BLOCK_SIZE 4096
+#endif
+  constexpr static std::size_t sub_block_size = ITYR_SUB_BLOCK_SIZE;
+#undef ITYR_SUB_BLOCK_SIZE
+
 #ifndef ITYR_ENABLE_WRITE_THROUGH
 #define ITYR_ENABLE_WRITE_THROUGH 0
 #endif
