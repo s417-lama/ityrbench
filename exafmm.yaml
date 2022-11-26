@@ -59,7 +59,7 @@ run:
   script: |
     source run_common.bash
 
-    export PCAS_ALLOCATOR_MAX_LOCAL_SIZE=64
+    export PCAS_ALLOCATOR_MAX_LOCAL_SIZE=128
 
     commands="
       ./exafmm/examples/$KOCHI_PARAM_KERNEL
