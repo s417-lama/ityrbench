@@ -22,10 +22,12 @@ default_params:
     - value: 6
       machines: [local]
   n_input: 10000
-  repeats: 10
+  repeats: 1
   theta: 0.2
-  nspawn: 3000
-  ncrit: 64
+  nspawn: 1000
+  ncrit: 32
+  P: 10
+  kernel: laplace # laplace/helmholtz/biotsavart
   # common params
   cache_policy: writeback_lazy # serial/nocache/writethrough/writeback/writeback_lazy/getput
   dist_policy: cyclic # block/cyclic
@@ -53,20 +55,21 @@ build:
     MPICXX=$MPICXX CFLAGS=$CFLAGS make exafmm
 
 run:
-  depend_params: [nodes, cores, n_input, repeats, theta, nspawn, ncrit, cache_size, max_dirty, shared_mem, logger, allocator, debugger]
+  depend_params: [nodes, cores, n_input, repeats, theta, nspawn, ncrit, P, kernel, cache_size, max_dirty, shared_mem, logger, allocator, debugger]
   script: |
     source run_common.bash
 
-    export PCAS_ALLOCATOR_MAX_LOCAL_SIZE=32
+    export PCAS_ALLOCATOR_MAX_LOCAL_SIZE=64
 
     commands="
-      ./exafmm/examples/laplace
+      ./exafmm/examples/$KOCHI_PARAM_KERNEL
         -v -T 1 -D -a
         -n $KOCHI_PARAM_N_INPUT
         -r $KOCHI_PARAM_REPEATS
         -t $KOCHI_PARAM_THETA
         -s $KOCHI_PARAM_NSPAWN
         -c $KOCHI_PARAM_NCRIT
+        -P $KOCHI_PARAM_P
         -x $KOCHI_PARAM_CACHE_SIZE"
 
     n_nodes=$(echo $KOCHI_PARAM_NODES | cut -f 1 -d ":" | sed 's/x/*/g' | bc)
