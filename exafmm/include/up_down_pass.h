@@ -14,9 +14,14 @@ namespace EXAFMM_NAMESPACE {
     void postOrderTraversal(GC_iter C, GC_iter C0) {
       int ichild = C->*(static_cast<int Cell::*>(&CellBase::ICHILD));
       int nchild = C->*(static_cast<int Cell::*>(&CellBase::NCHILD));
-      for (GC_iter CC=C0+ichild; CC!=C0+ichild+nchild; CC++) { // Loop over child cells
-        postOrderTraversal(CC, C0);                             //  Recursive call for child cell
-      }                                                         // End loop over child cells
+
+      my_ityr::parallel_for<my_ityr::access_mode::read>(
+          ityr::count_iterator<int>(0),
+          ityr::count_iterator<int>(nchild),
+          [=](int i) {
+        postOrderTraversal(C0 + ichild + i, C0);
+      });
+
       if(nchild==0) {
         my_ityr::with_checkout_tied<my_ityr::access_mode::read>(
             C, 1, [&](const Cell* C_) {
@@ -63,8 +68,15 @@ namespace EXAFMM_NAMESPACE {
       }                                                         // End if for leaf cell
 #endif
 #endif
+
+      my_ityr::parallel_for<my_ityr::access_mode::read>(
+          ityr::count_iterator<int>(0),
+          ityr::count_iterator<int>(nchild),
+          [=](int i) {
+        preOrderTraversal(C0 + ichild + i, C0);
+      });
+
       for (GC_iter CC=C0+ichild; CC!=C0+ichild+nchild; CC++) {// Loop over child cells
-        preOrderTraversal(CC, C0);                              //  Recursive call for child cell
       }                                                         // End loop over chlid cells
     };
 
