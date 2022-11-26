@@ -207,9 +207,9 @@ namespace EXAFMM_NAMESPACE {
       });
     }
 
-    void M2M(const Cell* Ci, const Cell* C0) {
+    void M2M(const Cell* Ci, const Cell* Cj0) {
       complex_t Ynm[P*P], YnmTheta[P*P];
-      for (const Cell* Cj=C0+Ci->ICHILD; Cj!=C0+Ci->ICHILD+Ci->NCHILD; Cj++) {
+      for (const Cell* Cj=Cj0; Cj!=Cj0+Ci->NCHILD; Cj++) {
         vec3 dX = Ci->X - Cj->X;
         real_t rho, alpha, beta;
         cart2sph(dX, rho, alpha, beta);
@@ -301,9 +301,9 @@ namespace EXAFMM_NAMESPACE {
       });
     }
 
-    void L2L(const Cell* Ci, const Cell* C0) {
+    void L2L(const Cell* Ci, const Cell* Cj0) {
       complex_t Ynm[P*P], YnmTheta[P*P];
-      const Cell* Cj = C0 + Ci->IPARENT;
+      const Cell* Cj = Cj0;
       vec3 dX = Ci->X - Cj->X;
       real_t rho, alpha, beta;
       cart2sph(dX, rho, alpha, beta);

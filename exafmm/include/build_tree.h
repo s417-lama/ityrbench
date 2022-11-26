@@ -175,11 +175,12 @@ namespace EXAFMM_NAMESPACE {
       const OctreeNode* o = octNode;
       my_ityr::with_checkout<my_ityr::access_mode::write>(
           C, 1,
-          [&](Cell* c) {
+          [&](Cell* c_) {
       /* my_ityr::with_checkout<my_ityr::access_mode::read, */
       /*                        my_ityr::access_mode::write>( */
       /*     octNode, 1, C, 1, */
-      /*     [&](const OctreeNode* o, Cell* c) { */
+      /*     [&](const OctreeNode* o, Cell* c_) { */
+        Cell* c = new (c_) Cell();
         c->IPARENT = iparent;                                     //  Index of parent cell
         c->R       = R0 / (1 << level);                           //  Cell radius
         c->X       = o->X;                                  //  Cell center

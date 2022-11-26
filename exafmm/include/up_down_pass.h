@@ -27,8 +27,8 @@ namespace EXAFMM_NAMESPACE {
             C, 1, [&](const Cell* C_) {
           // TODO: refactor
           my_ityr::with_checkout_tied<my_ityr::access_mode::read>(
-              C0 + C_->ICHILD, C_->NCHILD, [&](const Cell*) {
-            kernel.M2M(C_, C_ + (C0 - C));                                      //  M2M kernel
+              C0 + C_->ICHILD, C_->NCHILD, [&](const Cell* Cj0_) {
+            kernel.M2M(C_, Cj0_);                                      //  M2M kernel
           });
         });
       }                                                         // End if for non leaf cell
@@ -42,8 +42,8 @@ namespace EXAFMM_NAMESPACE {
           C, 1, [&](const Cell* C_) {
         // TODO: refactor
         my_ityr::with_checkout_tied<my_ityr::access_mode::read>(
-            C0 + C_->IPARENT, 1, [&](const Cell*) {
-          kernel.L2L(C_, C_ + (C0 - C));                                        //  L2L kernel
+            C0 + C_->IPARENT, 1, [&](const Cell* Cj0_) {
+          kernel.L2L(C_, Cj0_);                                        //  L2L kernel
         });
       });
       if (nchild==0) {                                       //  If leaf cell

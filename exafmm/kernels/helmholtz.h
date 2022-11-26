@@ -552,13 +552,13 @@ namespace EXAFMM_NAMESPACE {
       });
     }
 
-    void M2M(const Cell* Ci, const Cell* C0) {
+    void M2M(const Cell* Ci, const Cell* Cj0) {
       real_t Ynm[P*(P+1)/2];
       complex_t phitemp[2*P], hn[P], ephi[2*P];
       complex_t Mnm[P*P], Mrot[P*P];
       for (int n=0; n<P*P; n++) Mnm[n] = Mrot[n] = complex_t(0,0);
       real_t kscalei = 2 * Ci->R * abs(wavek);
-      for (const Cell* Cj=C0+Ci->ICHILD; Cj!=C0+Ci->ICHILD+Ci->NCHILD; Cj++) {
+      for (const Cell* Cj=Cj0; Cj!=Cj0+Ci->NCHILD; Cj++) {
 	real_t kscalej = 2 * Cj->R * abs(wavek);
 	real_t radius = 2 * Cj->R * sqrt(3.0);
 	vec3 dX = Ci->X - Cj->X;
@@ -764,13 +764,13 @@ namespace EXAFMM_NAMESPACE {
       });
     }
 
-    void L2L(const Cell* Ci, const Cell* C0) {
+    void L2L(const Cell* Ci, const Cell* Cj0) {
       real_t Ynm[P*(P+1)/2], Ynmd[P*(P+1)/2];
       complex_t phitemp[2*P], phitempn[2*P];
       complex_t jn[P+1], jnd[P+1], ephi[2*P];
       complex_t Lnm[P*P], Lrot[P*P], Lnmd[P*P];
       real_t kscalei = 2 * Ci->R * abs(wavek);
-      const Cell* Cj = C0 + Ci->IPARENT;
+      const Cell* Cj = Cj0;
       real_t kscalej = 2 * Cj->R * abs(wavek);
       real_t radius = 2 * Cj->R * sqrt(3.0) * .5;
       vec3 dX = Ci->X - Cj->X;
