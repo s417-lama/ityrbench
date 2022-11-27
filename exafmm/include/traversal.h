@@ -396,29 +396,23 @@ namespace EXAFMM_NAMESPACE {
       Cj0 = jcells.begin();                                     // Iterator of first source cell
       kernel.Xperiodic = 0;                                     // Set periodic coordinate offset to 0
 
-      // wait for assignment of Ci0 and Cj0 in all processes
-      my_ityr::barrier();
-
-      if (my_rank == 0) {
-        my_ityr::root_spawn([=] {
-          if (images == 0) {                                        //  If non-periodic boundary condition
-            dualTreeTraversal(Ci0, Cj0, remote);                    //   Traverse the tree
-          } else {                                                  //  If periodic boundary condition
-            for (int ix=-prange; ix<=prange; ix++) {                //   Loop over x periodic direction
-              for (int iy=-prange; iy<=prange; iy++) {              //    Loop over y periodic direction
-                for (int iz=-prange; iz<=prange; iz++) {            //     Loop over z periodic direction
-                  kernel.Xperiodic[0] = ix * cycle[0];              //      Coordinate shift for x periodic direction
-                  kernel.Xperiodic[1] = iy * cycle[1];              //      Coordinate shift for y periodic direction
-                  kernel.Xperiodic[2] = iz * cycle[2];              //      Coordinate shift for z periodic direction
-                  dualTreeTraversal(Ci0, Cj0, remote);              //      Traverse the tree for this periodic image
-                }                                                   //     End loop over z periodic direction
-              }                                                     //    End loop over y periodic direction
-            }                                                       //   End loop over x periodic direction
-            traversePeriodic(cycle);                                //   Traverse tree for periodic images
-          }                                                         //  End if for periodic boundary condition
-        });
-      }
-      my_ityr::barrier();
+      my_ityr::master_do([=] {
+        if (images == 0) {                                        //  If non-periodic boundary condition
+          dualTreeTraversal(Ci0, Cj0, remote);                    //   Traverse the tree
+        } else {                                                  //  If periodic boundary condition
+          for (int ix=-prange; ix<=prange; ix++) {                //   Loop over x periodic direction
+            for (int iy=-prange; iy<=prange; iy++) {              //    Loop over y periodic direction
+              for (int iz=-prange; iz<=prange; iz++) {            //     Loop over z periodic direction
+                kernel.Xperiodic[0] = ix * cycle[0];              //      Coordinate shift for x periodic direction
+                kernel.Xperiodic[1] = iy * cycle[1];              //      Coordinate shift for y periodic direction
+                kernel.Xperiodic[2] = iz * cycle[2];              //      Coordinate shift for z periodic direction
+                dualTreeTraversal(Ci0, Cj0, remote);              //      Traverse the tree for this periodic image
+              }                                                   //     End loop over z periodic direction
+            }                                                     //    End loop over y periodic direction
+          }                                                       //   End loop over x periodic direction
+          traversePeriodic(cycle);                                //   Traverse tree for periodic images
+        }                                                         //  End if for periodic boundary condition
+      });
 
       if (my_rank == 0) {
         logger::stopTimer("Traverse");                            // Stop timer

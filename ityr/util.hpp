@@ -83,7 +83,7 @@ inline void print_backtrace() {
   fflush(stderr);
 }
 
-inline void signal_handler(int sig) {
+inline void signal_handler(int sig, siginfo_t* si, void*) {
   // cancel signal handler for SIGABRT
   signal(SIGABRT, SIG_DFL);
 
@@ -94,7 +94,11 @@ inline void signal_handler(int sig) {
   // which can result in a deadlock.
   set_abort_timeout(10);
 
-  fprintf(stderr, "Signal %d received.\n", sig);
+  if (sig == 11) { // SIGSEGV
+    fprintf(stderr, "Signal %d received (at %p).\n", sig, si->si_addr);
+  } else {
+    fprintf(stderr, "Signal %d received.\n", sig);
+  }
   fflush(stderr);
 
   print_backtrace();
@@ -104,8 +108,8 @@ inline void signal_handler(int sig) {
 
 inline void set_signal_handler(int sig) {
   struct sigaction sa;
-  sa.sa_flags   = 0;
-  sa.sa_handler = signal_handler;
+  sa.sa_flags     = SA_SIGINFO;
+  sa.sa_sigaction = signal_handler;
   sigemptyset(&sa.sa_mask);
   if (sigaction(sig, &sa, NULL) == -1) {
     perror("sigacton");

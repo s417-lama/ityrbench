@@ -69,7 +69,7 @@ class ityr_if {
     using iro_context = iro_context_;
     static int rank() { return P::rank(); }
     static int n_ranks() { return P::n_ranks(); }
-    static void barrier() { P::barrier(); }
+    static void barrier() { iro::release(); P::barrier(); iro::acquire(); }
     static constexpr bool auto_checkout = P::auto_checkout;
   };
   using ito_pattern_ = ito_pattern_if<ito_pattern_policy>;
@@ -111,7 +111,11 @@ public:
     P::main(f, args...);
   }
 
-  static void barrier() { P::barrier(); }
+  static void barrier() {
+    iro::release();
+    P::barrier();
+    iro::acquire();
+  }
 
   template <access_mode Mode, typename... Args>
   static auto with_checkout(Args&&... args) {

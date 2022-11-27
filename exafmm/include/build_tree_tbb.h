@@ -150,9 +150,11 @@ namespace EXAFMM_NAMESPACE {
           Body* buffers[8];
           ivec8 offsets;
           for (int i = 0; i < 8; i++) {
-            buffers[i] = my_ityr::iro::checkout<my_ityr::access_mode::write>(
-                &buffer[octantOffset[i]], counts[i]);
-            offsets[i] = 0;
+            if (counts[i] > 0) {
+              buffers[i] = my_ityr::iro::checkout<my_ityr::access_mode::write>(
+                  &buffer[octantOffset[i]], counts[i]);
+              offsets[i] = 0;
+            }
           }
 
           my_ityr::serial_for<my_ityr::iro::access_mode::read,
@@ -176,8 +178,10 @@ namespace EXAFMM_NAMESPACE {
           }, my_ityr::iro::block_size);
 
           for (int i = 0; i < 8; i++) {
-            my_ityr::iro::checkin<my_ityr::access_mode::write>(
-                buffers[i], counts[i]);
+            if (counts[i] > 0) {
+              my_ityr::iro::checkin<my_ityr::access_mode::write>(
+                  buffers[i], counts[i]);
+            }
           }
 	} else {                                                //  Else if there are child nodes
 	  int mid = (begin + end) / 2;                          //   Split range of bodies in half
@@ -394,11 +398,13 @@ namespace EXAFMM_NAMESPACE {
             assert(c->NCHILD > 0);                                //   Check for childless non-leaf cells
             CN += nchild;                                         //   Increment next free memory address
 
+            global_ptr<OctreeNode> children[8];
             GC_iter CNs[8];
             for (int i=0; i<nchild; i++) {
               int octant = octants[i];                            //    Get octant from child index
+              children[i] = o->CHILD[octant];
               CNs[i] = CN;
-              CN += o->CHILD[octant]->*(&OctreeNode::NNODE) - 1;            //    Increment next free memory address
+              CN += children[i]->*(&OctreeNode::NNODE) - 1;            //    Increment next free memory address
             }                                                     //   End loop over octants
 
             int numLevels_ = my_ityr::parallel_reduce(
@@ -407,15 +413,13 @@ namespace EXAFMM_NAMESPACE {
                 int(0),
                 [](const int& v1, const int& v2) { return std::max(v1, v2); },
                 [=, *this](int i) {
-              int octant = octants[i];                            //    Get octant from child index
-              Nodes2cells nodes2cells(o->CHILD[octant],     //    Instantiate recursive functor
+              Nodes2cells nodes2cells(children[i],     //    Instantiate recursive functor
                                       B0, Ci+i, C0, CNs[i], X0, R0, nspawn, level+1, C-C0);
               return nodes2cells();
             });                                                     //   End loop over children
 
             for (int i=0; i<nchild; i++) {                        //   Loop over children
-              int octant = octants[i];                            //    Get octant from child index
-              free_octree_node(o->CHILD[octant]);
+              free_octree_node(children[i]);
             }                                                     //   End loop over children
             numLevels = std::max(numLevels_, level+1);             //   Update maximum level of tree
           }                                                       //  End if for child existance
@@ -443,12 +447,18 @@ namespace EXAFMM_NAMESPACE {
     void growTree(GBodies bodies, GBodies buffer, Box box) {
       int my_rank = my_ityr::rank();
 
+      my_ityr::barrier();
+      my_ityr::iro::collect_deallocated();
+      my_ityr::barrier();
+
       assert(box.R > 0);                                        // Check for bounds validity
       if (my_rank == 0) {
         logger::startTimer("Grow tree");                          // Start timer
       }
       B0 = bodies.begin();                                      // Bodies iterator
       int maxBinNode = (4 * bodies.size()) / nspawn;            // Get maximum size of binary tree
+
+      /* global_vec<BinaryTreeNode> bin_nodes_vec(maxBinNode); */
       global_vec<BinaryTreeNode> bin_nodes_vec(global_vec_coll_opts, maxBinNode);
 
       BinaryTreeNode root_node;
@@ -494,7 +504,11 @@ namespace EXAFMM_NAMESPACE {
       global_vec<Cell> cells_vec(global_vec_coll_opts);                                              // Initialize cell array
 
       if (N0 != nullptr) {                                         // If the node tree is not empty
-	cells_vec.resize(N0->*(&OctreeNode::NNODE));                                //  Allocate cells array
+        std::size_t ncells = N0->*(&OctreeNode::NNODE);
+
+        /* if (my_rank == 0) printf("ncells: %ld\n", ncells); */
+
+	cells_vec.resize(ncells);                                //  Allocate cells array
 	GC_iter C0 = cells_vec.begin();                              //  Cell begin iterator
 
         numLevels = my_ityr::master_do([=]() {
@@ -507,6 +521,11 @@ namespace EXAFMM_NAMESPACE {
       if (my_rank == 0) {
         logger::stopTimer("Link tree");                           // Stop timer
       }
+
+      my_ityr::barrier();
+      my_ityr::iro::collect_deallocated();
+      my_ityr::barrier();
+
       return cells_vec;                                             // Return cells array
     }
 
