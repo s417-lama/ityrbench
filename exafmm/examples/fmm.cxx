@@ -26,7 +26,7 @@ void run_fmm(const Args& args) {
   GBodies bodies, jbodies, buffer;
   BoundBox boundBox;
   Bounds bounds;
-  BuildTree buildTree(args.ncrit);
+  BuildTree buildTree(args.ncrit, args.nspawn);
   GCells cells, jcells;
   Dataset data;
   Kernel kernel(args.P, eps2, wavek);

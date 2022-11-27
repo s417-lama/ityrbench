@@ -255,25 +255,29 @@ namespace EXAFMM_NAMESPACE {
 	  GC_iter CiMid = CiBegin + (CiEnd - CiBegin) / 2;       //   Split range of Ci cells in half
 	  GC_iter CjMid = CjBegin + (CjEnd - CjBegin) / 2;       //   Split range of Cj cells in half
 
-          my_ityr::parallel_invoke([=]() {
-	    TraverseRange leftBranch(traversal, CiBegin, CiMid, //    Instantiate recursive functor
-				     CjBegin, CjMid, remote);
-            leftBranch();
-          }, [=]() {
-	    TraverseRange rightBranch(traversal, CiMid, CiEnd,  //    Instantiate recursive functor
-				      CjMid, CjEnd, remote);
-            rightBranch();
-          });
+          {
+            TraverseRange leftBranch(traversal, CiBegin, CiMid, //    Instantiate recursive functor
+                                     CjBegin, CjMid, remote);
+            TraverseRange rightBranch(traversal, CiMid, CiEnd,  //    Instantiate recursive functor
+                                      CjMid, CjEnd, remote);
 
-          my_ityr::parallel_invoke([=]() {
-	    TraverseRange leftBranch(traversal, CiBegin, CiMid, //    Instantiate recursive functor
-				     CjMid, CjEnd, remote);
-            leftBranch();
-          }, [=]() {
+            my_ityr::parallel_invoke(
+              [=]() { leftBranch(); },
+              [=]() { rightBranch(); }
+            );
+          }
+
+          {
+            TraverseRange leftBranch(traversal, CiBegin, CiMid, //    Instantiate recursive functor
+                                     CjMid, CjEnd, remote);
             TraverseRange rightBranch(traversal, CiMid, CiEnd,  //    Instantiate recursive functor
                                       CjBegin, CjMid, remote);
-            rightBranch();
-          });
+
+            my_ityr::parallel_invoke(
+              [=]() { leftBranch(); },
+              [=]() { rightBranch(); }
+            );
+          }
 	}                                                       //  End if for many cells in range
 	logger::stopTracer(tracer);                             //  Stop tracer
       }                                                         // End overload operator()

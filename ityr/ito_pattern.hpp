@@ -228,7 +228,7 @@ public:
 
   template <typename Fn, typename... Args>
   static auto master_do(Fn&& f, Args&&... args) {
-    PCAS_CHECK(MPI_Barrier(MPI_COMM_WORLD) == MPI_SUCCESS);
+    P::barrier();
 
     using ret_t = std::invoke_result_t<Fn, Args...>;
     if constexpr (std::is_void_v<ret_t>) {
