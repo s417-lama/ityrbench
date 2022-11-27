@@ -366,8 +366,13 @@ namespace EXAFMM_NAMESPACE {
       }
       int operator() () const {                                // Overload operator()
         int numLevels;
-        my_ityr::with_checkout<my_ityr::access_mode::read,
-                               my_ityr::access_mode::write>(
+        int nchild = 0;
+        global_ptr<OctreeNode> children[8];
+        GC_iter CNs[8];
+        GC_iter Ci = CN;                                       //   CN points to the next free memory address
+
+        my_ityr::with_checkout_tied<my_ityr::access_mode::read,
+                                    my_ityr::access_mode::write>(
             octNode, 1, C, 1,
             [&](const OctreeNode* o, Cell* c_) {
           Cell* c = new (c_) Cell();
@@ -384,7 +389,6 @@ namespace EXAFMM_NAMESPACE {
             assert(c->NBODY > 0);                                 //   Check for empty leaf cells
             numLevels = level;
           } else {                                                //  Else if node has children
-            int nchild = 0;                                       //   Initialize number of child cells
             int octants[8];                                       //   Map of child index to octants
             for (int i=0; i<8; i++) {                             //   Loop over octants
               if (o->CHILD[i]) {                            //    If child exists for that octant
@@ -392,38 +396,38 @@ namespace EXAFMM_NAMESPACE {
                 nchild++;                                         //     Increment child cell counter
               }                                                   //    End if for child existance
             }                                                     //   End loop over octants
-            GC_iter Ci = CN;                                       //   CN points to the next free memory address
             c->ICHILD = Ci - C0;                                  //   Set Index of first child cell
             c->NCHILD = nchild;                                   //   Number of child cells
             assert(c->NCHILD > 0);                                //   Check for childless non-leaf cells
             CN += nchild;                                         //   Increment next free memory address
 
-            global_ptr<OctreeNode> children[8];
-            GC_iter CNs[8];
             for (int i=0; i<nchild; i++) {
               int octant = octants[i];                            //    Get octant from child index
               children[i] = o->CHILD[octant];
               CNs[i] = CN;
               CN += children[i]->*(&OctreeNode::NNODE) - 1;            //    Increment next free memory address
             }                                                     //   End loop over octants
-
-            int numLevels_ = my_ityr::parallel_reduce(
-                ityr::count_iterator<int>(0),
-                ityr::count_iterator<int>(nchild),
-                int(0),
-                [](const int& v1, const int& v2) { return std::max(v1, v2); },
-                [=, *this](int i) {
-              Nodes2cells nodes2cells(children[i],     //    Instantiate recursive functor
-                                      B0, Ci+i, C0, CNs[i], X0, R0, nspawn, level+1, C-C0);
-              return nodes2cells();
-            });                                                     //   End loop over children
-
-            for (int i=0; i<nchild; i++) {                        //   Loop over children
-              free_octree_node(children[i]);
-            }                                                     //   End loop over children
-            numLevels = std::max(numLevels_, level+1);             //   Update maximum level of tree
-          }                                                       //  End if for child existance
+          }
         });
+
+        if (nchild > 0) {
+          int numLevels_ = my_ityr::parallel_reduce(
+              ityr::count_iterator<int>(0),
+              ityr::count_iterator<int>(nchild),
+              int(0),
+              [](const int& v1, const int& v2) { return std::max(v1, v2); },
+              [=, *this](int i) {
+            Nodes2cells nodes2cells(children[i],     //    Instantiate recursive functor
+                                    B0, Ci+i, C0, CNs[i], X0, R0, nspawn, level+1, C-C0);
+            return nodes2cells();
+          });                                                     //   End loop over children
+
+          for (int i=0; i<nchild; i++) {                        //   Loop over children
+            free_octree_node(children[i]);
+          }                                                     //   End loop over children
+          numLevels = std::max(numLevels_, level+1);             //   Update maximum level of tree
+        }
+
         return numLevels;
       }                                                         // End overload operator()
     };
