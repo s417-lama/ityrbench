@@ -42,18 +42,13 @@ void run_fmm(const Args& args) {
   bodies_vec.resize(args.numBodies);
   bodies = {bodies_vec.begin(), bodies_vec.end()};
 
+  buffer_vec.resize(args.numBodies);
+  buffer = {buffer_vec.begin(), buffer_vec.end()};
+
   if (my_rank == 0) {
     logger::printTitle("FMM Parameters");
     args.print(logger::stringLength);
-
-    my_ityr::root_spawn([=] {
-      data.initBodies(bodies, args.distribution, 0);
-    });
   }
-  my_ityr::barrier();
-
-  buffer_vec.resize(bodies.size());
-  buffer = {buffer_vec.begin(), buffer_vec.end()};
 
   if (args.IneJ) {
 #if 0
@@ -74,6 +69,10 @@ void run_fmm(const Args& args) {
   bool pass = true;
   bool isTime = false;
   for (int t=0; t<args.repeat; t++) {
+    my_ityr::master_do([=] {
+      data.initBodies(bodies, args.distribution, 0);
+    });
+
     if (my_rank == 0) {
       logger::printTitle("FMM Profiling");
       logger::startTimer("Total FMM");
@@ -85,7 +84,7 @@ void run_fmm(const Args& args) {
     for (int it=0; it<numIteration; it++) {
       if (my_rank == 0) {
         std::stringstream title;
-        title << "Time average loop " << it;
+        title << "Time average loop " << t;
         logger::printTitle(title.str());
       }
 
@@ -116,8 +115,10 @@ void run_fmm(const Args& args) {
       } else {
         traversal.traverse(cells, cells, cycle, args.dual);
 
-        jbodies_vec = bodies_vec;
-        jbodies = {jbodies_vec.begin(), jbodies_vec.end()};
+        if (args.accuracy) {
+          jbodies_vec = bodies_vec;
+          jbodies = {jbodies_vec.begin(), jbodies_vec.end()};
+        }
       }
 
       if (my_rank == 0) {
@@ -126,86 +127,95 @@ void run_fmm(const Args& args) {
       my_ityr::barrier();
     }
 
-    int should_break = my_ityr::master_do([&]() {
-      logger::printTitle("Total runtime");
-      logger::stopDAG();
-      logger::stopPAPI();
-      double totalFMM = logger::stopTimer("Total FMM");
-      totalFMM /= numIteration;
-      logger::resetTimer("Total FMM");
-      if (args.write) {
-        logger::writeTime();
-      }
-      traversal.writeList(cells, 0);
-
-      if (!isTime) {
-        const int numTargets = 100;
-
-        global_vec<Body> bodies_sampled_vec = data.sampleBodies(bodies, numTargets);
-        GBodies bodies_sampled = {bodies_sampled_vec.begin(), bodies_sampled_vec.end()};
-
-        global_vec<Body> bodies2_vec = bodies_sampled_vec;
-        GBodies bodies2 = {bodies2_vec.begin(), bodies2_vec.end()};
-
-        data.initTarget(bodies_sampled);
-        logger::startTimer("Total Direct");
-        traversal.direct(bodies_sampled, jbodies, cycle);
-        logger::stopTimer("Total Direct");
-
-        ityr::with_checkout<my_ityr::access_mode::read_write, my_ityr::access_mode::read_write>(
-            bodies_sampled, bodies2, [&](auto bodies_sampled_, auto bodies2_) {
-          double potDif = verify.getDifScalar(bodies_sampled_, bodies2_);
-          double potNrm = verify.getNrmScalar(bodies_sampled_);
-          double accDif = verify.getDifVector(bodies_sampled_, bodies2_);
-          double accNrm = verify.getNrmVector(bodies_sampled_);
-          double potRel = std::sqrt(potDif/potNrm);
-          double accRel = std::sqrt(accDif/accNrm);
-          logger::printTitle("FMM vs. direct");
-          verify.print("Rel. L2 Error (pot)",potRel);
-          verify.print("Rel. L2 Error (acc)",accRel);
-
-          buildTree.printTreeData(cells);
-          traversal.printTraversalData();
-          logger::printPAPI();
-
-          pass = verify.regression(args.getKey(), isTime, t, potRel, accRel);
-        });
-
-        if (pass) {
-          if (verify.verbose) std::cout << "passed accuracy regression at t: " << t << std::endl;
-          if (args.accuracy) return 1;
-          t = -1;
-          isTime = true;
+    if (args.accuracy) {
+      int should_break = my_ityr::master_do([&]() {
+        logger::printTitle("Total runtime");
+        logger::stopDAG();
+        logger::stopPAPI();
+        double totalFMM = logger::stopTimer("Total FMM");
+        totalFMM /= numIteration;
+        logger::resetTimer("Total FMM");
+        if (args.write) {
+          logger::writeTime();
         }
-      } else {
-        pass = verify.regression(args.getKey(), isTime, t, totalFMM);
-        if (pass) {
-          if (verify.verbose) std::cout << "passed time regression at t: " << t << std::endl;
-          return 1;
-        }
-      }
-      data.initTarget(bodies);
-      return 0;
-    });
+        traversal.writeList(cells, 0);
 
-    if (should_break) break;
+        if (!isTime) {
+          const int numTargets = 100;
+
+          global_vec<Body> bodies_sampled_vec = data.sampleBodies(bodies, numTargets);
+          GBodies bodies_sampled = {bodies_sampled_vec.begin(), bodies_sampled_vec.end()};
+
+          global_vec<Body> bodies2_vec = bodies_sampled_vec;
+          GBodies bodies2 = {bodies2_vec.begin(), bodies2_vec.end()};
+
+          data.initTarget(bodies_sampled);
+          logger::startTimer("Total Direct");
+          traversal.direct(bodies_sampled, jbodies, cycle);
+          logger::stopTimer("Total Direct");
+
+          ityr::with_checkout<my_ityr::access_mode::read_write, my_ityr::access_mode::read_write>(
+              bodies_sampled, bodies2, [&](auto bodies_sampled_, auto bodies2_) {
+            double potDif = verify.getDifScalar(bodies_sampled_, bodies2_);
+            double potNrm = verify.getNrmScalar(bodies_sampled_);
+            double accDif = verify.getDifVector(bodies_sampled_, bodies2_);
+            double accNrm = verify.getNrmVector(bodies_sampled_);
+            double potRel = std::sqrt(potDif/potNrm);
+            double accRel = std::sqrt(accDif/accNrm);
+            logger::printTitle("FMM vs. direct");
+            verify.print("Rel. L2 Error (pot)",potRel);
+            verify.print("Rel. L2 Error (acc)",accRel);
+
+            buildTree.printTreeData(cells);
+            traversal.printTraversalData();
+            logger::printPAPI();
+
+            pass = verify.regression(args.getKey(), isTime, t, potRel, accRel);
+          });
+
+          if (pass) {
+            if (verify.verbose) std::cout << "passed accuracy regression at t: " << t << std::endl;
+            /* if (args.accuracy) return 1; */
+            /* t = -1; */
+            /* isTime = true; */
+            return 0;
+          } else {
+            if (verify.verbose) std::cout << "failed accuracy regression" << std::endl;
+            return 1;
+          }
+        } else {
+          /* pass = verify.regression(args.getKey(), isTime, t, totalFMM); */
+          /* if (pass) { */
+          /*   if (verify.verbose) std::cout << "passed time regression at t: " << t << std::endl; */
+          /*   return 1; */
+          /* } */
+        }
+        return 1;
+      });
+
+      if (should_break) break;
+    } else {
+      if (my_rank == 0) {
+        buildTree.printTreeData(cells);
+      }
+    }
   }
 
-  if (my_rank == 0) {
-    if (!pass) {
-      if (verify.verbose) {
-        if(!isTime) std::cout << "failed accuracy regression" << std::endl;
-        else std::cout << "failed time regression" << std::endl;
-      }
-      abort();
-    }
-    if (args.getMatrix) {
-#if 0
-      traversal.writeMatrix(bodies, jbodies);
-#endif
-    }
-    logger::writeDAG();
-  }
+  /* if (my_rank == 0) { */
+  /*   if (!pass) { */
+  /*     if (verify.verbose) { */
+  /*       if(!isTime) std::cout << "failed accuracy regression" << std::endl; */
+  /*       else std::cout << "failed time regression" << std::endl; */
+  /*     } */
+  /*     abort(); */
+  /*   } */
+  /*   if (args.getMatrix) { */
+/* #if 0 */
+  /*     traversal.writeMatrix(bodies, jbodies); */
+/* #endif */
+  /*   } */
+  /*   logger::writeDAG(); */
+  /* } */
   my_ityr::barrier();
 }
 

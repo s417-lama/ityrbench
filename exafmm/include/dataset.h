@@ -297,9 +297,8 @@ namespace EXAFMM_NAMESPACE {
 
     //! Initialize target values
     void initTarget(GBodies bodies) const {
-      // TODO: parallelize?
-      my_ityr::serial_for<my_ityr::iro::access_mode::read_write,
-                          my_ityr::iro::access_mode::read>(
+      my_ityr::parallel_for<my_ityr::iro::access_mode::read_write,
+                            my_ityr::iro::access_mode::read>(
           bodies.begin(),
           bodies.end(),
           ityr::count_iterator<int>(0),

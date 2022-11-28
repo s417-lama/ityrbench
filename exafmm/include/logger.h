@@ -111,7 +111,8 @@ namespace EXAFMM_NAMESPACE {
     //! Stop timer for given event
     double stopTimer(std::string event, int print=1) {
       double endTimer = get_time();                             // Get time of day and store in endTimer
-      timer[event] += endTimer - beginTimer[event];             // Accumulate event time to timer
+      /* timer[event] += endTimer - beginTimer[event];             // Accumulate event time to timer */
+      timer[event] = endTimer - beginTimer[event];
       if (verbose && print) printTime(event);                   // Print event and timer to screen
       return endTimer - beginTimer[event];                      // Return the event time
     }

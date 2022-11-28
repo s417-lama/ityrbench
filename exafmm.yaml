@@ -28,6 +28,7 @@ default_params:
   ncrit: 32
   P: 10
   kernel: laplace # laplace/helmholtz/biotsavart
+  accuracy_test: 1
   # common params
   cache_policy: writeback_lazy # serial/nocache/writethrough/writeback/writeback_lazy/getput
   dist_policy: cyclic # block/cyclic
@@ -55,7 +56,7 @@ build:
     MPICXX=$MPICXX CFLAGS=$CFLAGS make exafmm
 
 run:
-  depend_params: [nodes, cores, n_input, repeats, theta, nspawn, ncrit, P, kernel, cache_size, max_dirty, shared_mem, logger, allocator, debugger]
+  depend_params: [nodes, cores, n_input, repeats, theta, nspawn, ncrit, P, kernel, accuracy_test, cache_size, max_dirty, shared_mem, logger, allocator, debugger]
   script: |
     source run_common.bash
 
@@ -63,7 +64,8 @@ run:
 
     commands="
       ./exafmm/examples/$KOCHI_PARAM_KERNEL
-        -v -T 1 -D -a
+        -v -T 1 -D
+        $([[ $KOCHI_PARAM_ACCURACY_TEST == 0 ]] || echo -a)
         -n $KOCHI_PARAM_N_INPUT
         -r $KOCHI_PARAM_REPEATS
         -t $KOCHI_PARAM_THETA
