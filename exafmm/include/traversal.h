@@ -439,7 +439,7 @@ namespace EXAFMM_NAMESPACE {
 	    Ci->NBODY = ibodies.size();                         //     Number of target bodies
 	    Cj->BODY = jbodies.begin();                         //     Iterator of first source body
 	    Cj->NBODY = jbodies.size();                         //     Number of source bodies
-            kernel.P2P(Ci, Cj);                                 //     Evaluate P2P kenrel
+            kernel.P2P_direct(Ci, Cj);                                 //     Evaluate P2P kenrel
 	  }                                                     //    End loop over z periodic direction
 	}                                                       //   End loop over y periodic direction
       }                                                         //  End loop over x periodic direction

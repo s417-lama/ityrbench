@@ -508,6 +508,137 @@ namespace EXAFMM_NAMESPACE {
       });
     }
 
+    void P2P_direct(const Cell* Ci, const Cell* Cj) {
+      real_t wave_r = std::real(wavek);
+      real_t wave_i = std::imag(wavek);
+      GB_iter GBi = Ci->BODY;
+      GB_iter GBj = Cj->BODY;
+      int ni = Ci->NBODY;
+      int nj = Cj->NBODY;
+      my_ityr::with_checkout_tied<my_ityr::access_mode::read_write>(
+          GBi, ni, [&](Body* Bi) {
+        int i = 0;
+#if EXAFMM_USE_SIMD
+        simdvec wave_rvec = wave_r;
+        simdvec wave_ivec = wave_i;
+        for ( ; i<=ni-NSIMD; i+=NSIMD) {
+          simdvec zero = 0.0;
+          simdvec one = 1.0;
+          ksimdvec pot_r = zero;
+          ksimdvec pot_i = zero;
+          ksimdvec ax_r = zero;
+          ksimdvec ax_i = zero;
+          ksimdvec ay_r = zero;
+          ksimdvec ay_i = zero;
+          ksimdvec az_r = zero;
+          ksimdvec az_i = zero;
+
+          simdvec xi = SIMD<simdvec,B_iter,0,NSIMD>::setBody(Bi,i);
+          simdvec yi = SIMD<simdvec,B_iter,1,NSIMD>::setBody(Bi,i);
+          simdvec zi = SIMD<simdvec,B_iter,2,NSIMD>::setBody(Bi,i);
+
+          simdvec dx = Xperiodic[0];
+          xi -= dx;
+          simdvec dy = Xperiodic[1];
+          yi -= dy;
+          simdvec dz = Xperiodic[2];
+          zi -= dz;
+
+          my_ityr::serial_for<my_ityr::access_mode::read>(
+              GBj, GBj + nj, [&](const Body& Bj) {
+            dx = Bj.X[0];
+            dx -= xi;
+            dy = Bj.X[1];
+            dy -= yi;
+            dz = Bj.X[2];
+            dz -= zi;
+
+            simdvec R2 = eps2;
+            R2 += dx * dx;
+            simdvec mj_r = std::real(Bj.SRC);
+            R2 += dy * dy;
+            simdvec mj_i = std::imag(Bj.SRC);
+            R2 += dz * dz;
+            simdvec invR = rsqrt(R2);
+            simdvec R = one / invR;
+            invR &= R2 > zero;
+            R &= R2 > zero;
+
+            simdvec tmp = invR / exp(wave_ivec * R);
+            simdvec coef_r = cos(wave_rvec * R) * tmp;
+            simdvec coef_i = sin(wave_rvec * R) * tmp;
+            tmp = mj_r * coef_r - mj_i * coef_i;
+            coef_i = mj_r * coef_i + mj_i * coef_r;
+            coef_r = tmp;
+            mj_r = (one + wave_ivec * R) * invR * invR;
+            mj_i = - wave_rvec * invR;
+            pot_r += coef_r;
+            pot_i += coef_i;
+            tmp = mj_r * coef_r - mj_i * coef_i;
+            coef_i = mj_r * coef_i + mj_i * coef_r;
+            coef_r = tmp;
+            ax_r += coef_r * dx;
+            ax_i += coef_i * dx;
+            ay_r += coef_r * dy;
+            ay_i += coef_i * dy;
+            az_r += coef_r * dz;
+            az_i += coef_i * dz;
+          }, my_ityr::iro::block_size);
+
+          for (int k=0; k<NSIMD; k++) {
+            Bi[i+k].TRG[0] += transpose(pot_r, pot_i, k);
+            Bi[i+k].TRG[1] -= transpose(ax_r, ax_i, k);
+            Bi[i+k].TRG[2] -= transpose(ay_r, ay_i, k);
+            Bi[i+k].TRG[3] -= transpose(az_r, az_i, k);
+          }
+        }
+#endif
+        for ( ; i<ni; i++) {
+          real_t pot_r = 0.0;
+          real_t pot_i = 0.0;
+          real_t ax_r = 0.0;
+          real_t ax_i = 0.0;
+          real_t ay_r = 0.0;
+          real_t ay_i = 0.0;
+          real_t az_r = 0.0;
+          real_t az_i = 0.0;
+
+          my_ityr::serial_for<my_ityr::access_mode::read>(
+              GBj, GBj + nj, [&](const Body& Bj) {
+            real_t mj_r = std::real(Bj.SRC);
+            real_t mj_i = std::imag(Bj.SRC);
+            vec3 dX = Bi[i].X - Bj.X - Xperiodic;
+            real_t R2 = norm(dX) + eps2;
+            if (R2 != 0) {
+              real_t R = sqrt(R2);
+              real_t expikr = std::exp(wave_i * R) * R;
+              real_t expikr_r = std::cos(wave_r * R) / expikr;
+              real_t expikr_i = std::sin(wave_r * R) / expikr;
+              real_t coef1_r = mj_r * expikr_r - mj_i * expikr_i;
+              real_t coef1_i = mj_r * expikr_i + mj_i * expikr_r;
+              real_t kr_r = (1 + wave_i * R) / R2;
+              real_t kr_i = - wave_r / R;
+              real_t coef2_r = kr_r * coef1_r - kr_i * coef1_i;
+              real_t coef2_i = kr_r * coef1_i + kr_i * coef1_r;
+              pot_r += coef1_r;
+              pot_i += coef1_i;
+              ax_r += coef2_r * dX[0];
+              ax_i += coef2_i * dX[0];
+              ay_r += coef2_r * dX[1];
+              ay_i += coef2_i * dX[1];
+              az_r += coef2_r * dX[2];
+              az_i += coef2_i * dX[2];
+            }
+          }, my_ityr::iro::block_size);
+
+          Bi[i].TRG[0] += complex_t(pot_r, pot_i);
+          Bi[i].TRG[1] += complex_t(ax_r, ax_i);
+          Bi[i].TRG[2] += complex_t(ay_r, ay_i);
+          Bi[i].TRG[3] += complex_t(az_r, az_i);
+        }
+      });
+    }
+
     void P2M(const Cell* C) {
       real_t Ynm[P*(P+1)/2];
       complex_t ephi[P], jn[P+1], jnd[P+1];

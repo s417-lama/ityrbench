@@ -239,6 +239,101 @@ namespace EXAFMM_NAMESPACE {
       });
     }
 
+    void P2P_direct(const Cell* Ci, const Cell* Cj) {
+      GB_iter GBi = Ci->BODY;
+      GB_iter GBj = Cj->BODY;
+      int ni = Ci->NBODY;
+      int nj = Cj->NBODY;
+      my_ityr::with_checkout_tied<my_ityr::access_mode::read_write>(
+          GBi, ni, [&](Body* Bi) {
+        int i = 0;
+#if EXAFMM_USE_SIMD
+        for ( ; i<=ni-NSIMD; i+=NSIMD) {
+          simdvec zero = 0.0;
+          ksimdvec pot = zero;
+          ksimdvec ax = zero;
+          ksimdvec ay = zero;
+          ksimdvec az = zero;
+
+          simdvec xi = SIMD<simdvec,B_iter,0,NSIMD>::setBody(Bi,i);
+          simdvec yi = SIMD<simdvec,B_iter,1,NSIMD>::setBody(Bi,i);
+          simdvec zi = SIMD<simdvec,B_iter,2,NSIMD>::setBody(Bi,i);
+
+          simdvec xj = Xperiodic[0];
+          xi -= xj;
+          simdvec yj = Xperiodic[1];
+          yi -= yj;
+          simdvec zj = Xperiodic[2];
+          zi -= zj;
+
+          my_ityr::serial_for<my_ityr::access_mode::read>(
+              GBj, GBj + nj, [&](const Body& Bj) {
+            simdvec dx = Bj.X[0];
+            dx -= xi;
+            simdvec dy = Bj.X[1];
+            dy -= yi;
+            simdvec dz = Bj.X[2];
+            dz -= zi;
+            simdvec mj = Bj.SRC;
+
+            simdvec R2 = eps2;
+            xj = dx;
+            R2 += dx * dx;
+            yj = dy;
+            R2 += dy * dy;
+            zj = dz;
+            R2 += dz * dz;
+            simdvec invR = rsqrt(R2);
+            invR &= R2 > zero;
+
+            mj *= invR;
+            pot += mj;
+            invR = invR * invR * mj;
+            xj *= invR;
+            ax += xj;
+            yj *= invR;
+            ay += yj;
+            zj *= invR;
+            az += zj;
+          }, my_ityr::iro::block_size);
+
+          for (int k=0; k<NSIMD; k++) {
+            Bi[i+k].TRG[0] += transpose(pot, k);
+            Bi[i+k].TRG[1] += transpose(ax, k);
+            Bi[i+k].TRG[2] += transpose(ay, k);
+            Bi[i+k].TRG[3] += transpose(az, k);
+          }
+        }
+#endif
+        for ( ; i<ni; i++) {
+          kreal_t pot = 0;
+          kreal_t ax = 0;
+          kreal_t ay = 0;
+          kreal_t az = 0;
+
+          my_ityr::serial_for<my_ityr::access_mode::read>(
+              GBj, GBj + nj, [&](const Body& Bj) {
+            vec3 dX = Bi[i].X - Bj.X - Xperiodic;
+            real_t R2 = norm(dX) + eps2;
+            if (R2 != 0) {
+              real_t invR2 = 1.0 / R2;
+              real_t invR = Bj.SRC * sqrt(invR2);
+              dX *= invR2 * invR;
+              pot += invR;
+              ax += dX[0];
+              ay += dX[1];
+              az += dX[2];
+            }
+          }, my_ityr::iro::block_size);
+
+          Bi[i].TRG[0] += pot;
+          Bi[i].TRG[1] -= ax;
+          Bi[i].TRG[2] -= ay;
+          Bi[i].TRG[3] -= az;
+        }
+      });
+    }
+
     void P2M(const Cell* C) {
       complex_t Ynm[P*P], YnmTheta[P*P];
       my_ityr::with_checkout_tied<my_ityr::access_mode::read_write,
