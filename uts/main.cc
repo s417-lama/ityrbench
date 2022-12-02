@@ -226,8 +226,9 @@ void real_main(int argc, char *argv[]) {
            "# of processes:                %d\n"
            "# of repeats:                  %d\n"
            "PCAS cache size:               %ld MB\n"
+           "PCAS sub-block size:           %ld bytes\n"
            "-------------------------------------------------------------\n",
-           n_ranks, numRepeats, cache_size);
+           n_ranks, numRepeats, cache_size, sub_block_size);
 
     if (type == GEO) {
       printf("t (Tree type):                 Geometric (%d)\n"
@@ -255,7 +256,7 @@ void real_main(int argc, char *argv[]) {
     fflush(stdout);
   }
 
-  my_ityr::iro::init(cache_size * 1024 * 1024);
+  my_ityr::iro::init(cache_size * 1024 * 1024, sub_block_size);
 
   for (int i = 0; i < numRepeats; i++) {
     Result r = uts_fj_main(&walltime);

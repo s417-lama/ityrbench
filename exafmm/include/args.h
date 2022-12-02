@@ -57,6 +57,7 @@ namespace EXAFMM_NAMESPACE {
     int verbose;
     int write;
     std::size_t cache_size;
+    std::size_t sub_block_size;
 
   private:
     void usage(char * name) const {
@@ -83,6 +84,7 @@ namespace EXAFMM_NAMESPACE {
 	      " --verbose (-v)                  : Print information to screen (%d)\n"
 	      " --write (-w)                    : Write timings to file (%d)\n"
 	      " --cache-size (-x)               : Cache size for PCAS (%ld)\n",
+	      " --sub-block-size (-y)           : Sub-block size for PCAS (%ld)\n",
 	      name,
               accuracy,
 	      ncrit,
@@ -102,7 +104,8 @@ namespace EXAFMM_NAMESPACE {
 	      threads,
 	      verbose,
 	      write,
-              cache_size);
+              cache_size,
+              sub_block_size);
     }
 
     const char * parseDistribution(const char * arg) const {
@@ -208,10 +211,11 @@ namespace EXAFMM_NAMESPACE {
       threads(16),
       verbose(0),
       write(0),
-      cache_size(16) {
+      cache_size(16),
+      sub_block_size(4096) {
       while (1) {
 	int option_index;
-	int c = getopt_long(argc, argv, "ab:c:d:De:gGhi:jmMn:op:P:r:s:t:T:vwx:", long_options, &option_index);
+	int c = getopt_long(argc, argv, "ab:c:d:De:gGhi:jmMn:op:P:r:s:t:T:vwx:y:", long_options, &option_index);
 	if (c == -1) break;
 	switch (c) {
 	case 'a':
@@ -273,6 +277,9 @@ namespace EXAFMM_NAMESPACE {
 	  break;
 	case 'x':
 	  cache_size = atoll(optarg);
+	  break;
+	case 'y':
+	  sub_block_size = atoll(optarg);
 	  break;
 	default:
 	  usage(argv[0]);
@@ -342,7 +349,9 @@ namespace EXAFMM_NAMESPACE {
 		  << std::setw(stringLength)
 		  << "# of processes" << " : " << my_ityr::n_ranks() << std::endl
 		  << std::setw(stringLength)
-		  << "cache_size" << " : " << cache_size << " MB" << std::endl;
+		  << "cache_size" << " : " << cache_size << " MB" << std::endl
+		  << std::setw(stringLength)
+		  << "sub_block_size" << " : " << sub_block_size << " bytes" << std::endl;
       }
     }
   };

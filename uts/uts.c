@@ -95,6 +95,7 @@ int computeGranularity = 1;
 
 int numRepeats = 1;
 uint64_t cache_size = 16;
+uint64_t sub_block_size = 4096;
 
 /* display parameters */
 int debug    = 0;
@@ -393,6 +394,8 @@ void uts_parseParams(int argc, char *argv[]){
         numRepeats = max(1,atoi(argv[i+1])); break;
       case 'c':
         cache_size = atoll(argv[i+1]); break;
+      case 's':
+        sub_block_size = atoll(argv[i+1]); break;
       default:
         err = i;
     }
@@ -428,6 +431,7 @@ void uts_helpMessage(void) {
   printf("   -x  int   debug level\n");
   printf("   -i  int   # of repeats\n");
   printf("   -c  int   cache size for itoyori (MB)\n");
+  printf("   -s  int   sub-block size for itoyori (bytes)\n");
 
   // Get help message from the implementation
   printf("\n  Additional Implementation Parameters:\n");

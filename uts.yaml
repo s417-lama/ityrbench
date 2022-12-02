@@ -41,7 +41,7 @@ default_params:
 default_name: uts
 
 build:
-  depend_params: [exec_type, cache_policy, dist_policy, block_size, sub_block_size, logger]
+  depend_params: [exec_type, cache_policy, dist_policy, block_size, logger]
   script: |
     source build_common.bash
 
@@ -57,7 +57,7 @@ build:
     MPICXX=$MPICXX CFLAGS=$CFLAGS make uts.out
 
 run:
-  depend_params: [nodes, cores, tree, repeats, cache_size, max_dirty, shared_mem, logger, allocator, debugger]
+  depend_params: [nodes, cores, tree, repeats, cache_size, sub_block_size, max_dirty, shared_mem, logger, allocator, debugger]
   script: |
     source run_common.bash
 
@@ -67,7 +67,8 @@ run:
       ./uts.out
         ${!KOCHI_PARAM_TREE}
         -i $KOCHI_PARAM_REPEATS
-        -c $KOCHI_PARAM_CACHE_SIZE"
+        -c $KOCHI_PARAM_CACHE_SIZE
+        -s $KOCHI_PARAM_SUB_BLOCK_SIZE"
 
     n_nodes=$(echo $KOCHI_PARAM_NODES | cut -f 1 -d ":" | sed 's/x/*/g' | bc)
 

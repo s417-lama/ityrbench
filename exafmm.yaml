@@ -44,7 +44,7 @@ default_params:
 default_name: exafmm
 
 build:
-  depend_params: [cache_policy, dist_policy, block_size, sub_block_size, logger]
+  depend_params: [cache_policy, dist_policy, block_size, logger]
   script: |
     source build_common.bash
 
@@ -56,7 +56,7 @@ build:
     MPICXX=$MPICXX CFLAGS=$CFLAGS make exafmm
 
 run:
-  depend_params: [nodes, cores, n_input, repeats, theta, nspawn, ncrit, P, kernel, accuracy_test, cache_size, max_dirty, shared_mem, logger, allocator, debugger]
+  depend_params: [nodes, cores, n_input, repeats, theta, nspawn, ncrit, P, kernel, accuracy_test, cache_size, sub_block_size, max_dirty, shared_mem, logger, allocator, debugger]
   script: |
     source run_common.bash
 
@@ -72,7 +72,8 @@ run:
         -s $KOCHI_PARAM_NSPAWN
         -c $KOCHI_PARAM_NCRIT
         -P $KOCHI_PARAM_P
-        -x $KOCHI_PARAM_CACHE_SIZE"
+        -x $KOCHI_PARAM_CACHE_SIZE
+        -y $KOCHI_PARAM_SUB_BLOCK_SIZE"
 
     n_nodes=$(echo $KOCHI_PARAM_NODES | cut -f 1 -d ":" | sed 's/x/*/g' | bc)
 

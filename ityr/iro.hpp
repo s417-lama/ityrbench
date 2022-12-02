@@ -30,9 +30,9 @@ public:
 
   static constexpr std::size_t block_size = impl_t::block_size;
 
-  static void init(size_t cache_size) {
+  static void init(size_t cache_size, size_t sub_block_size) {
     assert(!get_optional_instance().has_value());
-    get_optional_instance().emplace(cache_size);
+    get_optional_instance().emplace(cache_size, sub_block_size);
   }
 
   static void fini() {

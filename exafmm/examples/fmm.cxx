@@ -221,7 +221,7 @@ void run_fmm(const Args& args) {
 
 int real_main(int argc, char ** argv) {
   Args args(argc, argv);
-  my_ityr::iro::init(args.cache_size * 1024 * 1024);
+  my_ityr::iro::init(args.cache_size * 1024 * 1024, args.sub_block_size);
 
   run_fmm(args);
 

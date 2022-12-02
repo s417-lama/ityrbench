@@ -128,7 +128,7 @@ batches:
         dest: cilksort/${batch_name}/c_${cutoff_q}_p_${cache_policy}_${duplicate}.out
 
 build:
-  depend_params: [elem_type, cache_policy, dist_policy, block_size, sub_block_size, logger]
+  depend_params: [elem_type, cache_policy, dist_policy, block_size, logger]
   script: |
     source build_common.bash
 
@@ -139,7 +139,7 @@ build:
     MPICXX=$MPICXX CFLAGS=$CFLAGS make cilksort.out
 
 run:
-  depend_params: [nodes, cores, n_input, repeats, verify, cutoff_i, cutoff_m, cutoff_q, exec_type, cache_size, max_dirty, shared_mem, logger, allocator, debugger]
+  depend_params: [nodes, cores, n_input, repeats, verify, cutoff_i, cutoff_m, cutoff_q, exec_type, cache_size, sub_block_size, max_dirty, shared_mem, logger, allocator, debugger]
   script: |
     source run_common.bash
 
@@ -149,6 +149,7 @@ run:
         -r $KOCHI_PARAM_REPEATS
         -e $KOCHI_PARAM_EXEC_TYPE
         -c $KOCHI_PARAM_CACHE_SIZE
+        -s $KOCHI_PARAM_SUB_BLOCK_SIZE
         -v $KOCHI_PARAM_VERIFY
         -i $KOCHI_PARAM_CUTOFF_I
         -m $KOCHI_PARAM_CUTOFF_M

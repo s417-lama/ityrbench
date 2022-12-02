@@ -93,14 +93,15 @@ using elem_t = ITYR_BENCH_ELEM_TYPE;
 int my_rank = -1;
 int n_ranks = -1;
 
-size_t n_input       = 1024;
-int    n_repeats     = 10;
-exec_t exec_type     = exec_t::Parallel;
-size_t cache_size    = 16;
-int    verify_result = 1;
-size_t cutoff_insert = 64;
-size_t cutoff_merge  = 16 * 1024;
-size_t cutoff_quick  = 16 * 1024;
+size_t n_input        = 1024;
+int    n_repeats      = 10;
+exec_t exec_type      = exec_t::Parallel;
+size_t cache_size     = 16;
+size_t sub_block_size = 4096;
+int    verify_result  = 1;
+size_t cutoff_insert  = 64;
+size_t cutoff_merge   = 16 * 1024;
+size_t cutoff_quick   = 16 * 1024;
 
 #if !ITYR_BENCH_USE_SEQ_STL
 template <template <typename> typename Span, typename T>
@@ -137,7 +138,7 @@ std::pair<Span<T>, Span<T>> partition_seq(Span<T> s, T pivot) {
     if (l >= h) break;
     std::swap(s[l++], s[h--]);
   }
-  return s.divide(h + 1);
+  return divide(s, h + 1);
 }
 #endif
 
@@ -444,9 +445,10 @@ void show_help_and_exit(int argc, char** argv) {
            "  options:\n"
            "    -n : Input size (size_t)\n"
            "    -r : # of repeats (int)\n"
-           "    -c : check the result (int)\n"
            "    -e : execution type (0: serial, 1: std::sort(), 2: parallel (default))\n"
-           "    -s : serial execution (int)\n"
+           "    -c : PCAS cache size (size_t)\n"
+           "    -s : PCAS sub-block size (size_t)\n"
+           "    -v : verify the result (int)\n"
            "    -i : cutoff for insertion sort (size_t)\n"
            "    -m : cutoff for serial merge (size_t)\n"
            "    -q : cutoff for serial quicksort (size_t)\n", argv[0]);
@@ -461,7 +463,7 @@ int real_main(int argc, char **argv) {
   my_ityr::logger::init(my_rank, n_ranks);
 
   int opt;
-  while ((opt = getopt(argc, argv, "n:r:e:c:v:s:i:m:q:h")) != EOF) {
+  while ((opt = getopt(argc, argv, "n:r:e:c:s:v:i:m:q:h")) != EOF) {
     switch (opt) {
       case 'n':
         n_input = atoll(optarg);
@@ -474,6 +476,9 @@ int real_main(int argc, char **argv) {
         break;
       case 'c':
         cache_size = atoll(optarg);
+        break;
+      case 's':
+        sub_block_size = atoll(optarg);
         break;
       case 'v':
         verify_result = atoi(optarg);
@@ -503,13 +508,15 @@ int real_main(int argc, char **argv) {
            "# of repeats:                  %d\n"
            "Execution type:                %s\n"
            "PCAS cache size:               %ld MB\n"
+           "PCAS sub-block size:           %ld bytes\n"
            "Verify result:                 %d\n"
            "Cutoff (insertion sort):       %ld\n"
            "Cutoff (merge):                %ld\n"
            "Cutoff (quicksort):            %ld\n"
            "-------------------------------------------------------------\n",
            ityr::typename_str<elem_t>(), sizeof(elem_t),
-           n_ranks, n_input, n_repeats, to_str(exec_type).c_str(), cache_size, verify_result,
+           n_ranks, n_input, n_repeats, to_str(exec_type).c_str(),
+           cache_size, sub_block_size, verify_result,
            cutoff_insert, cutoff_merge, cutoff_quick);
     printf("uth options:\n");
     madm::uth::print_options(stdout);
@@ -518,7 +525,7 @@ int real_main(int argc, char **argv) {
     fflush(stdout);
   }
 
-  my_ityr::iro::init(cache_size * 1024 * 1024);
+  my_ityr::iro::init(cache_size * 1024 * 1024, sub_block_size);
 
   if (exec_type == exec_t::Parallel) {
     ityr::global_vector_options opts {
