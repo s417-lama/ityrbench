@@ -27,6 +27,7 @@ default_params:
   repeats: 10
   exec_type: parallel # serial/parallel
   use_vector: 0
+  rebuild_tree: 1
   use_win_dynamic: 0
   local_alloc_size: 256
   # common params
@@ -101,7 +102,7 @@ batches:
         dest: uts++/${batch_name}/nodes_${nodes}_p_${cache_policy}_${duplicate}.out
 
 build:
-  depend_params: [exec_type, use_vector, use_win_dynamic, cache_policy, dist_policy, block_size, logger]
+  depend_params: [exec_type, rebuild_tree, use_vector, use_win_dynamic, cache_policy, dist_policy, block_size, logger]
   script: |
     source build_common.bash
 
@@ -115,6 +116,7 @@ build:
       *)        echo "Unknown exec type ($KOCHI_PARAM_EXEC_TYPE)"; exit 1 ;;
     esac
 
+    CFLAGS="${CFLAGS:+$CFLAGS} -DUTS_REBUILD_TREE=$KOCHI_PARAM_REBUILD_TREE"
     CFLAGS="${CFLAGS:+$CFLAGS} -DUTS_USE_VECTOR=$KOCHI_PARAM_USE_VECTOR"
 
     make clean

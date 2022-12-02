@@ -31,6 +31,10 @@ using global_ptr = my_ityr::global_ptr<T>;
 #define UTS_USE_VECTOR 0
 #endif
 
+#ifndef UTS_REBUILD_TREE
+#define UTS_REBUILD_TREE 0
+#endif
+
 #ifndef UTS_RUN_SEQ
 #define UTS_RUN_SEQ 0
 #endif
@@ -223,10 +227,14 @@ void destroy_tree(global_ptr<dynamic_node> this_node) {
 void uts_run() {
   int my_rank = my_ityr::rank();
 
-  for (int i = 0; i < numRepeats; i++) {
-    global_ptr<dynamic_node> root_node;
+  global_ptr<dynamic_node> root_node;
 
+  for (int i = 0; i < numRepeats; i++) {
+#if UTS_REBUILD_TREE
     if (my_rank == 0) {
+#else
+    if (my_rank == 0 && i == 0) {
+#endif
       uint64_t t1 = uts_wctime();
       Node root;
       uts_initRoot(&root, type);
@@ -258,7 +266,11 @@ void uts_run() {
 
     my_ityr::barrier();
 
+#if UTS_REBUILD_TREE
     if (my_rank == 0) {
+#else
+    if (my_rank == 0 && i == numRepeats - 1) {
+#endif
       uint64_t t1 = uts_wctime();
       my_ityr::root_spawn([=]() { destroy_tree(root_node); });
       uint64_t t2 = uts_wctime();
