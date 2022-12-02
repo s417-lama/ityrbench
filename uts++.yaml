@@ -27,6 +27,8 @@ default_params:
   repeats: 10
   exec_type: parallel # serial/parallel
   use_vector: 0
+  use_win_dynamic: 0
+  local_alloc_size: 256
   # common params
   cache_policy: writeback_lazy # serial/nocache/writethrough/writeback/writeback_lazy/getput
   dist_policy: cyclic # block/cyclic
@@ -99,12 +101,13 @@ batches:
         dest: uts++/${batch_name}/nodes_${nodes}_p_${cache_policy}_${duplicate}.out
 
 build:
-  depend_params: [exec_type, use_vector, cache_policy, dist_policy, block_size, logger]
+  depend_params: [exec_type, use_vector, use_win_dynamic, cache_policy, dist_policy, block_size, logger]
   script: |
     source build_common.bash
 
     CFLAGS="${CFLAGS:+$CFLAGS} -DNDEBUG"
     CFLAGS="${CFLAGS:+$CFLAGS} -DITYR_AUTO_CHECKOUT=false"
+    CFLAGS="${CFLAGS:+$CFLAGS} -DITYR_USE_MPI_WIN_DYNAMIC=$KOCHI_PARAM_USE_WIN_DYNAMIC"
 
     case $KOCHI_PARAM_EXEC_TYPE in
       serial)   CFLAGS="${CFLAGS:+$CFLAGS} -DUTS_RUN_SEQ=1 -DUTS_RECURSIVE_FOR=1" ;;
@@ -118,7 +121,7 @@ build:
     MPICXX=$MPICXX CFLAGS=$CFLAGS make uts++.out
 
 run:
-  depend_params: [nodes, cores, tree, repeats, cache_size, sub_block_size, max_dirty, shared_mem, logger, allocator, debugger]
+  depend_params: [nodes, cores, tree, repeats, local_alloc_size, cache_size, sub_block_size, max_dirty, shared_mem, logger, allocator, debugger]
   script: |
     source run_common.bash
 
@@ -127,6 +130,8 @@ run:
     # export OMPI_MCA_common_tofu_num_mrq_entries=2097152 # 2048, 8192, 32768, 131072 (default), 524288, or 2097152
     export PCAS_ALLOCATOR_BLOCK_SIZE=2 # MB
     export PCAS_ALLOCATOR_MAX_UNFLUSHED_FREE_OBJS=10
+
+    export PCAS_ALLOCATOR_MAX_LOCAL_SIZE=$KOCHI_PARAM_LOCAL_ALLOC_SIZE
 
     commands="
       ./uts++.out
