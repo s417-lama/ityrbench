@@ -70,8 +70,8 @@ batches:
     name: cilksort_${batch_name}
     params:
       nodes:
-        - value: [1, 2, 2x3, 2x3x2, 3x4x3, 6x6x4]
-        # - value: [1, 2, 2x3, 2x3x2, 3x4x3, 6x6x4, 8x9x8]
+        - value: [1, 2:torus, 2x3:torus, 2x3x2:torus, 3x4x3:torus, 6x6x4:torus]
+        # - value: [1, 2:torus, 2x3:torus, 2x3x2:torus, 3x4x3:torus, 6x6x4:torus, 8x9x8:torus]
           machines: [wisteria-o]
         - value: [1, 2, 4, 8, 16]
           machines: [ito-a]
@@ -92,8 +92,8 @@ batches:
     name: cilksort_${batch_name}
     params:
       nodes:
-        - value: [2x3x2, 3x4x3, 6x6x4]
-        # - value: [2x3x2, 3x4x3, 6x6x4, 8x9x8]
+        - value: [2x3x2:torus, 3x4x3:torus, 6x6x4:torus]
+        # - value: [2x3x2:torus, 3x4x3:torus, 6x6x4:torus, 8x9x8:torus]
           machines: [wisteria-o]
       n_input: 10_000_000_000
       repeats: 11
