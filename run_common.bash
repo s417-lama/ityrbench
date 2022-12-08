@@ -93,6 +93,25 @@ case $KOCHI_MACHINE in
       )
     }
     ;;
+  squid-c)
+    ityr_mpirun() {
+      local n_processes=$1
+      local n_processes_per_node=$2
+
+      if [[ $PBS_ENVIRONMENT == PBS_BATCH ]]; then
+        OUTPUT_CMD="tee $STDOUT_FILE"
+      else
+        OUTPUT_CMD=cat
+      fi
+      $MPIEXEC -n $n_processes -N $n_processes_per_node \
+        --prtemca ras simulator \
+        --prtemca plm_ssh_agent /opt/nec/nqsv/sbin/jmm_openmpi \
+        --prtemca plm_ssh_no_tree_spawn true \
+        --hostfile $NQSII_MPINODES \
+        --mca osc_ucx_acc_single_intrinsic true \
+        -- setarch $(uname -m) --addr-no-randomize "${@:3}" | $OUTPUT_CMD
+    }
+    ;;
   *)
     ityr_mpirun() {
       local n_processes=$1

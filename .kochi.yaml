@@ -56,6 +56,20 @@ machines:
       export MPICXX=mpicxx
       module load cmake/3.18.2
 
+  squid-c:
+    login_host: squid
+    work_dir: /sqfs/work/G15442/v60680
+    kochi_root: /sqfs/work/G15442/v60680/.kochi
+    alloc_interact_script: |
+      qlogin -q INTC --group=G15442 -b $KOCHI_ALLOC_NODE_SPEC -T openmpi
+    alloc_script: |
+      echo "$KOCHI_WORKER_LAUNCH_CMD" | qsub -q SQUID -j o --group=G15442 -b $KOCHI_ALLOC_NODE_SPEC -T openmpi -l elapstim_req=${KOCHI_ALLOC_TIME_LIMIT:-6:00:00}
+    load_env_script: |
+      . /sqfs/work/G15442/v60680/venv/squid-c/bin/activate
+      export TERM=xterm-256color
+      export MPICC=mpicc
+      export MPICXX=mpicxx
+
 dependencies:
   ucx:
     recipes:
@@ -83,6 +97,11 @@ dependencies:
       - name: ucx
         recipe: v1.11.0
     recipes:
+      - name:   main
+        branch: main
+        depends:
+          - name: ucx
+            recipe: v1.13.1
       - name:   v5.0.0rc7
         branch: v5.0.0rc7
       - name:   v5.0.0rc9
@@ -107,7 +126,7 @@ dependencies:
       - mkdir build
       - cd build/
       - CFLAGS="${CFLAGS:+$CFLAGS} -g"
-      - ../configure ${CFLAGS:+CFLAGS="$CFLAGS"} --prefix=$KOCHI_INSTALL_PREFIX --with-ucx=$KOCHI_INSTALL_PREFIX_UCX --disable-man-pages --with-pmix=internal --with-hwloc=internal --with-libevent=internal --without-hcoll ${CONFIGURE_OPTS:+$CONFIGURE_OPTS}
+      - ../configure ${CFLAGS:+CFLAGS="$CFLAGS"} --prefix=$KOCHI_INSTALL_PREFIX --with-ucx=$KOCHI_INSTALL_PREFIX_UCX --disable-man-pages --with-pmix=internal --with-hwloc=internal --with-libevent=internal --without-hcoll --enable-mca-no-build=mtl-ofi ${CONFIGURE_OPTS:+$CONFIGURE_OPTS}
       - make -j
       - make install
     activate_script:
@@ -123,6 +142,9 @@ dependencies:
       - name: openmpi
         recipe: v5.0.0rc9
         machines: [ito-a]
+      - name: openmpi
+        recipe: main
+        machines: [squid-c]
     recipes:
       - name: release
         branch: ityr
@@ -157,6 +179,9 @@ dependencies:
       - name: openmpi
         recipe: v5.0.0rc9
         machines: [ito-a]
+      - name: openmpi
+        recipe: main
+        machines: [squid-c]
     recipes:
       - name: release
         branch: master
@@ -248,9 +273,9 @@ dependencies:
       ./bootstrap.sh --prefix=$KOCHI_INSTALL_PREFIX
       if [[ $KOCHI_MACHINE == wisteria-o ]]; then
         echo "using clang : fcc : FCCpx ;" > user-config.jam
-        CONFIGURE_OPTS="${CONFIGURE_OPTS:+$CONFIGURE_OPTS} --user-config=user-config.jam toolset=clang-fcc pch=off"
+        CONFIGURE_OPTS="${CONFIGURE_OPTS:+$CONFIGURE_OPTS} --user-config=user-config.jam toolset=clang-fcc"
       fi
-      ./b2 ${CONFIGURE_OPTS:+$CONFIGURE_OPTS} -j $(nproc) install
+      ./b2 --without-python pch=off ${CONFIGURE_OPTS:+$CONFIGURE_OPTS} -j $(nproc) install
 
   pcg:
     git: https://github.com/imneme/pcg-cpp.git
