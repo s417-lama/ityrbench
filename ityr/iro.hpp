@@ -303,7 +303,7 @@ public:
 
   static constexpr std::size_t block_size = 0;
 
-  iro_dummy(size_t) {}
+  iro_dummy(size_t, size_t) {}
 
   void release() {}
   void release_lazy(release_handler*) {}

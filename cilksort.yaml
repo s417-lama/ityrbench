@@ -136,6 +136,7 @@ build:
 
     CFLAGS="${CFLAGS:+$CFLAGS} -DNDEBUG"
     CFLAGS="${CFLAGS:+$CFLAGS} -DITYR_BENCH_ELEM_TYPE=$KOCHI_PARAM_ELEM_TYPE"
+    CFLAGS="${CFLAGS:+$CFLAGS} -DITYR_USE_MPI_WIN_DYNAMIC=false"
 
     make clean
     MPICXX=$MPICXX CFLAGS=$CFLAGS make cilksort.out
@@ -144,6 +145,8 @@ run:
   depend_params: [nodes, cores, n_input, repeats, verify, cutoff_i, cutoff_m, cutoff_q, exec_type, cache_size, sub_block_size, max_dirty, shared_mem, logger, allocator, debugger]
   script: |
     source run_common.bash
+
+    export PCAS_ALLOCATOR_MAX_LOCAL_SIZE=2
 
     commands="
       ./cilksort.out
