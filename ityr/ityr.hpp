@@ -32,6 +32,7 @@ class ityr_if {
     using wallclock_t = typename P::wallclock_t;
     template <typename P_>
     using logger_impl_t = typename P::template logger_impl_t<P_>;
+    static constexpr bool enable_acquire_whitelist = P::enable_acquire_whitelist;
   };
   using iro_ = iro_if<iro_policy>;
 
@@ -231,6 +232,8 @@ struct ityr_policy_serial {
   static void barrier() {}
 
   static constexpr bool auto_checkout = true;
+
+  static constexpr bool enable_acquire_whitelist = false;
 };
 
 // Naive
@@ -299,6 +302,12 @@ struct ityr_policy_naive {
 #define ITYR_AUTO_CHECKOUT true
 #endif
   static constexpr bool auto_checkout = ITYR_AUTO_CHECKOUT;
+#undef ITYR_AUTO_CHECKOUT
+
+#ifndef ITYR_ENABLE_ACQUIRE_WHITELIST
+#define ITYR_ENABLE_ACQUIRE_WHITELIST false
+#endif
+  static constexpr bool enable_acquire_whitelist = ITYR_ENABLE_ACQUIRE_WHITELIST;
 #undef ITYR_AUTO_CHECKOUT
 };
 

@@ -27,7 +27,7 @@ default_params:
   repeats: 10
   exec_type: parallel # serial/parallel
   # common params
-  cache_policy: writeback_lazy # serial/nocache/writethrough/writeback/writeback_lazy/getput
+  cache_policy: writeback_lazy # serial/nocache/writethrough/writeback/writeback_lazy/writeback_lazy_wl/getput
   dist_policy: cyclic # block/cyclic
   cache_size: 128 # MB
   block_size: 65536 # bytes

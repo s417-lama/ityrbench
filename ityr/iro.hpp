@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cassert>
+
 #include "pcas/pcas.hpp"
 
 #include "ityr/iro_ref.hpp"
@@ -56,6 +58,14 @@ public:
     get_instance().acquire(handler);
   }
 
+  static void acquire_whitelist() {
+    if constexpr (P::enable_acquire_whitelist) {
+      get_instance().acquire(whitelist_get());
+    } else {
+      acquire();
+    }
+  }
+
   static void poll() {
     get_instance().poll();
   }
@@ -102,6 +112,35 @@ public:
   template <access_mode Mode, typename T>
   static void checkin(T* raw_ptr, std::size_t nelems) {
     get_instance().template checkin<Mode>(raw_ptr, nelems);
+    whitelist_add(raw_ptr, sizeof(T) * nelems);
+  }
+
+  static void whitelist_add(const void* raw_ptr, std::size_t size) {
+    if constexpr (P::enable_acquire_whitelist) {
+      get_instance().whitelist_add(raw_ptr, size);
+    }
+  }
+
+  static const pcas::whitelist& whitelist_get() {
+    return get_instance().whitelist_get();
+  }
+
+  static void whitelist_new() {
+    if constexpr (P::enable_acquire_whitelist) {
+      get_instance().whitelist_new();
+    }
+  }
+
+  static void whitelist_merge() {
+    if constexpr (P::enable_acquire_whitelist) {
+      get_instance().whitelist_merge();
+    }
+  }
+
+  static void whitelist_clear() {
+    if constexpr (P::enable_acquire_whitelist) {
+      get_instance().whitelist_clear();
+    }
   }
 
   static void logger_clear() {
@@ -162,6 +201,8 @@ template <typename P>
 class iro_pcas_default : public pcas::pcas_if<my_pcas_policy<P>> {
   using base_t = pcas::pcas_if<my_pcas_policy<P>>;
 
+  std::vector<pcas::whitelist> wls_;
+
 public:
   template <typename T>
   using global_ptr = typename base_t::template global_ptr<T>;
@@ -169,6 +210,29 @@ public:
   using release_handler = pcas::release_handler;
 
   using base_t::base_t;
+
+  void whitelist_add(const void* raw_ptr, std::size_t size) {
+    wls_.back().add(raw_ptr, size);
+  }
+
+  const pcas::whitelist& whitelist_get() {
+    return wls_.back();
+  }
+
+  void whitelist_new() {
+    wls_.emplace_back();
+  }
+
+  void whitelist_merge() {
+    assert(wls_.size() > 1);
+    wls_[wls_.size() - 2].merge(wls_.back());
+    wls_.pop_back();
+  }
+
+  void whitelist_clear() {
+    wls_.clear();
+    wls_.emplace_back();
+  }
 
   void logger_clear() {
     base_t::logger::clear();
@@ -338,6 +402,11 @@ public:
   void logger_clear() {}
   void logger_flush(uint64_t t_begin, uint64_t t_end) {}
   void logger_flush_and_print_stat(uint64_t t_begin, uint64_t t_end) {}
+
+  void whitelist_add(const void*, std::size_t) {}
+  void whitelist_new() {}
+  void whitelist_merge() {}
+  void whitelist_clear() {}
 };
 
 struct iro_policy_default {
@@ -346,6 +415,7 @@ struct iro_policy_default {
   using wallclock_t = wallclock_native;
   template <typename P>
   using logger_impl_t = logger::impl_dummy<P>;
+  static constexpr bool enable_acquire_whitelist = false;
 };
 
 }

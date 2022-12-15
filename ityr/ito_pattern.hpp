@@ -1136,16 +1136,21 @@ class ito_pattern_workfirst_lazy {
     auto parallel_invoke_impl(Fn&& f, ArgsTuple&& args, Rest&&... r) {
       iro::poll();
 
+      iro::whitelist_new();
+
       auto th = madm::uth::thread<RetVal>{};
       bool synched = th.spawn_aux(f, args,
         [=] (bool parent_popped) {
           // on-die callback
-          if (!parent_popped) {
+          if (parent_popped) {
+            iro::whitelist_merge();
+          } else {
             iro::release();
           }
         }
       );
       if (!synched) {
+        iro::whitelist_clear();
         iro::acquire(rh);
       }
       all_synched &= synched;
@@ -1186,6 +1191,8 @@ class ito_pattern_workfirst_lazy {
                                 typename iro::release_handler    rh) {
     iro::poll();
 
+    iro::whitelist_new();
+
     auto d = std::distance(first, last);
     if (d <= cutoff) {
       for_each_serial<P, Mode>(first, last, f, cutoff);
@@ -1199,12 +1206,15 @@ class ito_pattern_workfirst_lazy {
         std::make_tuple(first, mid, f, cutoff, rh),
         [=] (bool parent_popped) {
           // on-die callback
-          if (!parent_popped) {
+          if (parent_popped) {
+            iro::whitelist_merge();
+          } else {
             iro::release();
           }
         }
       );
       if (!synched) {
+        iro::whitelist_clear();
         iro::acquire(rh);
       }
 
@@ -1236,18 +1246,23 @@ class ito_pattern_workfirst_lazy {
     } else {
       auto mid1 = std::next(first1, d / 2);
 
+      iro::whitelist_new();
+
       auto th = madm::uth::thread<void>{};
       bool synched = th.spawn_aux(
         parallel_for_impl<Mode1, Mode2, ForwardIterator1, ForwardIterator2, Fn>,
         std::make_tuple(first1, mid1, first2, f, cutoff, rh),
         [=] (bool parent_popped) {
           // on-die callback
-          if (!parent_popped) {
+          if (parent_popped) {
+            iro::whitelist_merge();
+          } else {
             iro::release();
           }
         }
       );
       if (!synched) {
+        iro::whitelist_clear();
         iro::acquire(rh);
       }
 
@@ -1288,18 +1303,23 @@ class ito_pattern_workfirst_lazy {
     } else {
       auto mid = std::next(first, d / 2);
 
+      iro::whitelist_new();
+
       auto th = madm::uth::thread<T>{};
       bool synched = th.spawn_aux(
         parallel_reduce_impl<false, ForwardIterator, T, ReduceOp, TransformOp>,
         std::make_tuple(first, mid, init, reduce, transform, cutoff, rh),
         [=] (bool parent_popped) {
           // on-die callback
-          if (!parent_popped) {
+          if (parent_popped) {
+            iro::whitelist_merge();
+          } else {
             iro::release();
           }
         }
       );
       if (!synched) {
+        iro::whitelist_clear();
         iro::acquire(rh);
       }
 
@@ -1339,18 +1359,23 @@ class ito_pattern_workfirst_lazy {
     } else {
       auto mid = std::next(first, d / 2);
 
+      iro::whitelist_new();
+
       auto th = madm::uth::thread<void>{};
       bool synched = th.spawn_aux(
         parallel_transform_impl<ForwardIterator, ForwardIteratorR, UnaryOp>,
         std::make_tuple(first, mid, result, unary_op, cutoff, rh),
         [=] (bool parent_popped) {
           // on-die callback
-          if (!parent_popped) {
+          if (parent_popped) {
+            iro::whitelist_merge();
+          } else {
             iro::release();
           }
         }
       );
       if (!synched) {
+        iro::whitelist_clear();
         iro::acquire(rh);
       }
 
@@ -1386,18 +1411,23 @@ class ito_pattern_workfirst_lazy {
     } else {
       auto mid1 = std::next(first1, d / 2);
 
+      iro::whitelist_new();
+
       auto th = madm::uth::thread<void>{};
       bool synched = th.spawn_aux(
         parallel_transform_impl<ForwardIterator1, ForwardIterator2, ForwardIteratorR, BinaryOp>,
         std::make_tuple(first1, mid1, first2, result, binary_op, cutoff, rh),
         [=] (bool parent_popped) {
           // on-die callback
-          if (!parent_popped) {
+          if (parent_popped) {
+            iro::whitelist_merge();
+          } else {
             iro::release();
           }
         }
       );
       if (!synched) {
+        iro::whitelist_clear();
         iro::acquire(rh);
       }
 
@@ -1427,7 +1457,7 @@ public:
       iro::acquire();
     } else {
       auto&& ret = th.join();
-      iro::acquire();
+      iro::acquire_whitelist();
       return ret;
     }
   }
@@ -1441,7 +1471,7 @@ public:
     iro::release_lazy(&s.rh);
     auto ret = s.parallel_invoke(std::forward<Args>(args)...);
     if (initial_rank != P::rank() || !s.all_synched) {
-      iro::acquire();
+      iro::acquire_whitelist();
     }
 
     iro::poll();
@@ -1459,7 +1489,7 @@ public:
     iro::release_lazy(&rh);
     bool synched = parallel_for_impl<Mode>(first, last, f, cutoff, rh);
     if (!synched) {
-      iro::acquire();
+      iro::acquire_whitelist();
     }
 
     iro::poll();
@@ -1478,7 +1508,7 @@ public:
     iro::release_lazy(&rh);
     bool synched = parallel_for_impl<Mode1, Mode2>(first1, last1, first2, f, cutoff, rh);
     if (!synched) {
-      iro::acquire();
+      iro::acquire_whitelist();
     }
 
     iro::poll();
@@ -1497,7 +1527,7 @@ public:
     iro::release_lazy(&rh);
     auto [ret, synched] = parallel_reduce_impl<true>(first, last, init, reduce, transform, cutoff, rh);
     if (!synched) {
-      iro::acquire();
+      iro::acquire_whitelist();
     }
 
     iro::poll();
@@ -1517,7 +1547,7 @@ public:
     iro::release_lazy(&rh);
     bool synched = parallel_transform_impl(first, last, result, unary_op, cutoff, rh);
     if (!synched) {
-      iro::acquire();
+      iro::acquire_whitelist();
     }
 
     iro::poll();
@@ -1539,7 +1569,7 @@ public:
     iro::release_lazy(&rh);
     bool synched = parallel_transform_impl(first1, last1, first2, result, binary_op, cutoff, rh);
     if (!synched) {
-      iro::acquire();
+      iro::acquire_whitelist();
     }
 
     iro::poll();
