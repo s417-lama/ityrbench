@@ -103,10 +103,11 @@ case $KOCHI_MACHINE in
       else
         OUTPUT_CMD=cat
       fi
+      export OMPI_MCA_mca_base_env_list="LD_PRELOAD;"
       $MPIEXEC -n $n_processes -N $n_processes_per_node \
         --prtemca ras simulator \
-        --prtemca plm_ssh_agent /opt/nec/nqsv/sbin/jmm_openmpi \
-        --prtemca plm_ssh_no_tree_spawn true \
+        --prtemca plm_ssh_agent ssh \
+        --prtemca plm_ssh_args " -i /sqfs/home/v60680/sshd/ssh_client_rsa_key -o StrictHostKeyChecking=no -p 50000 -q" \
         --hostfile $NQSII_MPINODES \
         --mca osc_ucx_acc_single_intrinsic true \
         -- setarch $(uname -m) --addr-no-randomize "${@:3}" | $OUTPUT_CMD
@@ -139,6 +140,8 @@ export MADM_STACK_SIZE=$((4 * 1024 * 1024))
 
 if [[ $KOCHI_PARAM_ALLOCATOR == jemalloc ]]; then
   export LD_PRELOAD=${KOCHI_INSTALL_PREFIX_JEMALLOC}/lib/libjemalloc.so${LD_PRELOAD:+:$LD_PRELOAD}
+else
+  export LD_PRELOAD=${LD_PRELOAD:+$LD_PRELOAD}
 fi
 
 if [[ $KOCHI_PARAM_DEBUGGER == 1 ]] && [[ -z "${PS1+x}" ]]; then
