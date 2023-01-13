@@ -98,19 +98,19 @@ case $KOCHI_MACHINE in
       local n_processes=$1
       local n_processes_per_node=$2
 
-      if [[ $PBS_ENVIRONMENT == PBS_BATCH ]]; then
-        OUTPUT_CMD="tee $STDOUT_FILE"
-      else
-        OUTPUT_CMD=cat
-      fi
-      export OMPI_MCA_mca_base_env_list="LD_PRELOAD;"
+      trap "compgen -G ${STDOUT_FILE}.* && tail -n +1 \$(ls ${STDOUT_FILE}.* -v) > $STDOUT_FILE && rm ${STDOUT_FILE}.*" EXIT
+
+      export OMPI_MCA_mca_base_env_list="LD_PRELOAD;UCX_NET_DEVICES;UCX_TLS=rc;"
       $MPIEXEC -n $n_processes -N $n_processes_per_node \
+        --bind-to core \
+        --leave-session-attached \
+        --output file=$STDOUT_FILE \
         --prtemca ras simulator \
         --prtemca plm_ssh_agent ssh \
         --prtemca plm_ssh_args " -i /sqfs/home/v60680/sshd/ssh_client_rsa_key -o StrictHostKeyChecking=no -p 50000 -q" \
         --hostfile $NQSII_MPINODES \
         --mca osc_ucx_acc_single_intrinsic true \
-        -- setarch $(uname -m) --addr-no-randomize "${@:3}" | $OUTPUT_CMD
+        -- setarch $(uname -m) --addr-no-randomize "${@:3}"
     }
     ;;
   *)

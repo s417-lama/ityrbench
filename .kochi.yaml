@@ -71,11 +71,11 @@ machines:
         export MPICC=mpicc
         export MPICXX=mpicxx
       on_machine: |
-        (module load BaseGCC/2022; mpirun -N 1 $NQSV_MPIOPTS /sqfs/home/v60680/launch_sshd.sh)
         . /sqfs/work/G15442/v60680/venv/squid-c/bin/activate
         export TERM=xterm-256color
         export MPICC=mpicc
         export MPICXX=mpicxx
+        (module load BaseGCC/2022; mpirun -N 1 $NQSV_MPIOPTS /sqfs/home/v60680/launch_sshd.sh)
 
 dependencies:
   ucx:
@@ -88,13 +88,15 @@ dependencies:
         before_script: UCX_VERSION=1.11.0 CONFIGURE_OPTS="--enable-debug --enable-debug-data" CFLAGS="${CFLAGS:+$CFLAGS} -O0"
       - name: v1.13.1-debug
         before_script: UCX_VERSION=1.13.1 CONFIGURE_OPTS="--enable-debug --enable-debug-data" CFLAGS="${CFLAGS:+$CFLAGS} -O0"
+      - name: v1.11.0-prof
+        before_script: UCX_VERSION=1.11.0 CONFIGURE_OPTS="--disable-logging --disable-debug --disable-assertions --disable-params-check --enable-profiling --enable-frame-pointer --enable-stats"
     script:
       - unset MPICC
       - unset MPICXX
       - wget https://github.com/openucx/ucx/releases/download/v${UCX_VERSION}/ucx-${UCX_VERSION}.tar.gz
       - tar xvf ucx-${UCX_VERSION}.tar.gz
       - cd ucx-${UCX_VERSION}/
-      - ./configure ${CFLAGS:+CFLAGS="$CFLAGS"} --prefix=$KOCHI_INSTALL_PREFIX ${CONFIGURE_OPTS:+$CONFIGURE_OPTS}
+      - ./configure CFLAGS="${CFLAGS:+$CFLAGS} -gdwarf-4" --prefix=$KOCHI_INSTALL_PREFIX ${CONFIGURE_OPTS:+$CONFIGURE_OPTS}
       - make -j
       - make install
 
@@ -106,16 +108,10 @@ dependencies:
     recipes:
       - name:   main
         branch: main
-        depends:
-          - name: ucx
-            recipe: v1.13.1
       - name:   v5.0.0rc7
         branch: v5.0.0rc7
       - name:   v5.0.0rc9
         branch: v5.0.0rc9
-        depends:
-          - name: ucx
-            recipe: v1.13.1
       - name:   v5.0.0rc7-debug
         branch: v5.0.0rc7
         before_script: CONFIGURE_OPTS="--enable-debug" CFLAGS="${CFLAGS:+$CFLAGS} -O0"
@@ -252,7 +248,7 @@ dependencies:
         envs:
           JEMALLOC_VERSION: 5.3.0
           CONFIGURE_OPTS: ""
-      - name: v5.3.0_prof
+      - name: v5.3.0-prof
         envs:
           JEMALLOC_VERSION: 5.3.0
           CONFIGURE_OPTS: --enable-prof

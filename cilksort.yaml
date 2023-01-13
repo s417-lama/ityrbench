@@ -170,7 +170,7 @@ run:
 
     # jeprof_wrap() {
     #   # FILEPATH=jeprof.${PMIX_RANK}.out
-    #   FILEPATH=/work/gc64/c64050/jeprof/cilksort.${PMIX_RANK}
+    #   FILEPATH=cilksort.${PMIX_RANK}
     #   export MALLOC_CONF="prof:true,lg_prof_interval:30,prof_prefix:$FILEPATH"
     #   "$@"
     # }
