@@ -108,6 +108,8 @@ dependencies:
     recipes:
       - name:   main
         branch: main
+      - name:   v5.0.x
+        branch: v5.0.x
       - name:   v5.0.0rc7
         branch: v5.0.0rc7
       - name:   v5.0.0rc9
@@ -146,7 +148,7 @@ dependencies:
         recipe: v5.0.0rc9
         machines: [ito-a]
       - name: openmpi
-        recipe: main
+        recipe: v5.0.x
         machines: [squid-c]
     recipes:
       - name: release
@@ -183,7 +185,7 @@ dependencies:
         recipe: v5.0.0rc9
         machines: [ito-a]
       - name: openmpi
-        recipe: main
+        recipe: v5.0.x
         machines: [squid-c]
     recipes:
       - name: release
