@@ -129,6 +129,26 @@ batches:
         src: mpirun_out.txt
         dest: cilksort/${batch_name}/c_${cutoff_q}_p_${cache_policy}_${duplicate}.out
 
+  sbsize:
+    name: cilksort_${batch_name}
+    params:
+      nodes:
+        - value: 3x4x3:torus
+          machines: [wisteria-o]
+      n_input: [1_000_000_000, 10_000_000_000]
+      repeats: 11
+      cache_policy: writeback_lazy
+      sub_block_size: [1, 4, 16, 64, 256, 1024, 4096, 16384, 65536]
+    duplicate: 1
+    artifacts:
+      - type: stdout
+        dest: cilksort/${batch_name}/n_${n_input}_s_${sub_block_size}_${duplicate}.log
+      - type: stats
+        dest: cilksort/${batch_name}/n_${n_input}_s_${sub_block_size}_${duplicate}.stats
+      - type: file
+        src: mpirun_out.txt
+        dest: cilksort/${batch_name}/n_${n_input}_s_${sub_block_size}_${duplicate}.out
+
 build:
   depend_params: [elem_type, cache_policy, dist_policy, block_size, logger]
   script: |
