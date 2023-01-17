@@ -44,6 +44,65 @@ default_params:
   debugger: 0
 
 default_name: exafmm
+default_queue: node_${nodes}
+default_duplicates: 3
+
+batches:
+  serial:
+    params:
+      nodes: 1
+      cores: 1
+      n_input: 1_000_000
+      P: 4
+      repeats: 11
+      cache_policy: serial
+    duplicates: 1
+    artifacts:
+      - type: stdout
+        dest: exafmm/${batch_name}/n_${n_input}_${duplicate}.log
+      - type: stats
+        dest: exafmm/${batch_name}/n_${n_input}_${duplicate}.stats
+      - type: file
+        src: mpirun_out.txt
+        dest: exafmm/${batch_name}/n_${n_input}_${duplicate}.out
+
+  scale1M:
+    name: exafmm_${batch_name}
+    params:
+      nodes:
+        - value: [1, 2:torus, 2x3:torus, 2x3x2:torus, 3x4x3:torus]
+          machines: [wisteria-o]
+      n_input: 1_000_000
+      P: 4
+      repeats: 11
+      cache_policy: [nocache, writethrough, writeback, writeback_lazy]
+    artifacts:
+      - type: stdout
+        dest: exafmm/${batch_name}/nodes_${nodes}_p_${cache_policy}_${duplicate}.log
+      - type: stats
+        dest: exafmm/${batch_name}/nodes_${nodes}_p_${cache_policy}_${duplicate}.stats
+      - type: file
+        src: mpirun_out.txt
+        dest: exafmm/${batch_name}/nodes_${nodes}_p_${cache_policy}_${duplicate}.out
+
+  scale10M:
+    name: exafmm_${batch_name}
+    params:
+      nodes:
+        - value: [2x3x2:torus, 3x4x3:torus]
+          machines: [wisteria-o]
+      n_input: 10_000_000
+      P: 4
+      repeats: 11
+      cache_policy: [nocache, writethrough, writeback, writeback_lazy]
+    artifacts:
+      - type: stdout
+        dest: exafmm/${batch_name}/nodes_${nodes}_p_${cache_policy}_${duplicate}.log
+      - type: stats
+        dest: exafmm/${batch_name}/nodes_${nodes}_p_${cache_policy}_${duplicate}.stats
+      - type: file
+        src: mpirun_out.txt
+        dest: exafmm/${batch_name}/nodes_${nodes}_p_${cache_policy}_${duplicate}.out
 
 build:
   depend_params: [cache_policy, dist_policy, block_size, logger]
