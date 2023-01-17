@@ -95,6 +95,7 @@ batches:
       P: 4
       repeats: 11
       cache_policy: [nocache, writethrough, writeback, writeback_lazy]
+      accuracy_test: 0
     artifacts:
       - type: stdout
         dest: exafmm/${batch_name}/nodes_${nodes}_p_${cache_policy}_${duplicate}.log
