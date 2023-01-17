@@ -104,6 +104,26 @@ batches:
         src: mpirun_out.txt
         dest: uts++/${batch_name}/nodes_${nodes}_p_${cache_policy}_${duplicate}.out
 
+  sbsize:
+    name: uts++_${batch_name}
+    params:
+      nodes:
+        - value: 3x4x3:torus
+          machines: [wisteria-o]
+      tree: [T1L, T1XL]
+      repeats: 11
+      cache_policy: writeback_lazy
+      sub_block_size: [1, 4, 16, 64, 256, 1024, 4096, 16384, 65536]
+    duplicate: 1
+    artifacts:
+      - type: stdout
+        dest: uts++/${batch_name}/tree_${tree}_s_${sub_block_size}_${duplicate}.log
+      - type: stats
+        dest: uts++/${batch_name}/tree_${tree}_s_${sub_block_size}_${duplicate}.stats
+      - type: file
+        src: mpirun_out.txt
+        dest: uts++/${batch_name}/tree_${tree}_s_${sub_block_size}_${duplicate}.out
+
 build:
   depend_params: [exec_type, rebuild_tree, use_vector, use_win_dynamic, cache_policy, dist_policy, block_size, logger]
   script: |
