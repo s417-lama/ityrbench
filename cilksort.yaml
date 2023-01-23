@@ -149,6 +149,46 @@ batches:
         src: mpirun_out.txt
         dest: cilksort/${batch_name}/n_${n_input}_s_${sub_block_size}_${duplicate}.out
 
+  getput_shmem:
+    name: cilksort_${batch_name}
+    params:
+      nodes:
+        - value: 1
+          machines: [wisteria-o]
+      n_input: 1_000_000_000
+      repeats: 11
+      cache_policy: [nocache, writeback_lazy, getput]
+      dist_policy: [block, cyclic]
+      logger: stats
+    artifacts:
+      - type: stdout
+        dest: cilksort/${batch_name}/c_${cache_policy}_d_${dist_policy}_${duplicate}.log
+      - type: stats
+        dest: cilksort/${batch_name}/c_${cache_policy}_d_${dist_policy}_${duplicate}.stats
+      - type: file
+        src: mpirun_out.txt
+        dest: cilksort/${batch_name}/c_${cache_policy}_d_${dist_policy}_${duplicate}.out
+
+  getput_multinode:
+    name: cilksort_${batch_name}
+    params:
+      nodes:
+        - value: 3x4x3:torus
+          machines: [wisteria-o]
+      n_input: 10_000_000_000
+      repeats: 11
+      cache_policy: [nocache, writeback_lazy, getput]
+      dist_policy: [block, cyclic]
+      logger: stats
+    artifacts:
+      - type: stdout
+        dest: cilksort/${batch_name}/c_${cache_policy}_d_${dist_policy}_${duplicate}.log
+      - type: stats
+        dest: cilksort/${batch_name}/c_${cache_policy}_d_${dist_policy}_${duplicate}.stats
+      - type: file
+        src: mpirun_out.txt
+        dest: cilksort/${batch_name}/c_${cache_policy}_d_${dist_policy}_${duplicate}.out
+
 build:
   depend_params: [elem_type, cache_policy, dist_policy, block_size, logger]
   script: |
