@@ -64,6 +64,7 @@ enum class kind_dummy_value { _NKinds = 0 };
 
 class kind_dummy : public kind_base<kind_dummy, kind_dummy_value> {
 public:
+  using ityr::logger::kind_base<kind_dummy, kind_dummy_value>::kind_base;
   constexpr const char* str() const { return ""; }
 };
 

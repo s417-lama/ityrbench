@@ -94,16 +94,16 @@ case $KOCHI_MACHINE in
     }
     ;;
   squid-c)
+    export UCX_TLS=rc_x,self,sm
+    export OMPI_MCA_mca_base_env_list="LD_PRELOAD;UCX_NET_DEVICES;UCX_TLS;"
     ityr_mpirun() {
       local n_processes=$1
       local n_processes_per_node=$2
 
       trap "compgen -G ${STDOUT_FILE}.* && tail -n +1 \$(ls ${STDOUT_FILE}.* -v) > $STDOUT_FILE && rm ${STDOUT_FILE}.*" EXIT
 
-      export OMPI_MCA_mca_base_env_list="LD_PRELOAD;UCX_NET_DEVICES;UCX_TLS=rc;"
       $MPIEXEC -n $n_processes -N $n_processes_per_node \
         --bind-to core \
-        --leave-session-attached \
         --output file=$STDOUT_FILE \
         --prtemca ras simulator \
         --prtemca plm_ssh_agent ssh \
@@ -134,7 +134,6 @@ run_trace_viewer() {
 
 export PCAS_ENABLE_SHARED_MEMORY=$KOCHI_PARAM_SHARED_MEM
 export PCAS_MAX_DIRTY_CACHE_SIZE=$(bc <<< "$KOCHI_PARAM_MAX_DIRTY * 2^20 / 1")
-export PCAS_PREFETCH_BLOCKS=0
 
 export MADM_STACK_SIZE=$((4 * 1024 * 1024))
 

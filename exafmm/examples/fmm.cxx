@@ -16,7 +16,9 @@ void run_fmm(const Args& args) {
   const complex_t wavek = complex_t(10.,1.) / real_t(2 * M_PI);
 
   int my_rank = my_ityr::rank();
-  /* int n_ranks = my_ityr::n_ranks(); */
+  int n_ranks = my_ityr::n_ranks();
+
+  my_ityr::logger::init(my_rank, n_ranks);
 
   global_vec<Body> bodies_vec(global_vec_coll_opts);
   global_vec<Body> jbodies_vec(global_vec_coll_opts);

@@ -114,24 +114,32 @@ dependencies:
         branch: v5.0.0rc7
       - name:   v5.0.0rc9
         branch: v5.0.0rc9
-      - name:   v5.0.0rc7-debug
-        branch: v5.0.0rc7
+      - name:   dev
+        mirror: true
+        mirror_dir: ../../github/ompi
+      - name:   dev2
+        mirror: true
+        mirror_dir: ../../github/ompi
+        before_script: CONFIGURE_OPTS="--with-cma=no"
+      - name:   v5.0.x-debug
+        branch: v5.0.x
         before_script: CONFIGURE_OPTS="--enable-debug" CFLAGS="${CFLAGS:+$CFLAGS} -O0"
         depends:
           - name: ucx
             recipe: v1.11.0-debug
-      - name:   v5.0.0rc9-debug
-        branch: v5.0.0rc9
+      - name:   dev-debug
+        mirror: true
+        mirror_dir: ../../github/ompi
         before_script: CONFIGURE_OPTS="--enable-debug" CFLAGS="${CFLAGS:+$CFLAGS} -O0"
         depends:
           - name: ucx
-            recipe: v1.13.1-debug
+            recipe: v1.11.0-debug
     script:
       - ./autogen.pl
       - mkdir build
       - cd build/
       - CFLAGS="${CFLAGS:+$CFLAGS} -g -gdwarf-4"
-      - ../configure ${CFLAGS:+CFLAGS="$CFLAGS"} --prefix=$KOCHI_INSTALL_PREFIX --with-ucx=$KOCHI_INSTALL_PREFIX_UCX --disable-man-pages --with-pmix=internal --with-hwloc=internal --with-libevent=internal --without-hcoll --enable-mca-no-build=mtl-ofi ${CONFIGURE_OPTS:+$CONFIGURE_OPTS}
+      - ../configure ${CFLAGS:+CFLAGS="$CFLAGS"} --prefix=$KOCHI_INSTALL_PREFIX --with-ucx=$KOCHI_INSTALL_PREFIX_UCX --disable-man-pages --with-pmix=internal --with-hwloc=internal --with-libevent=internal --without-hcoll ${CONFIGURE_OPTS:+$CONFIGURE_OPTS}
       - make -j
       - make install
     activate_script:
@@ -148,7 +156,7 @@ dependencies:
         recipe: v5.0.0rc9
         machines: [ito-a]
       - name: openmpi
-        recipe: v5.0.x
+        recipe: dev
         machines: [squid-c]
     recipes:
       - name: release
@@ -157,8 +165,8 @@ dependencies:
           - CFLAGS="${CFLAGS:+$CFLAGS} -O3 -g -gdwarf-4 -Wall"
           - CCFLAGS="$CFLAGS" CXXFLAGS="$CFLAGS" ./configure MPICC=$MPICC MPICXX=$MPICXX $CONFIGURE_OPTS --with-comm-layer=mpi3 --prefix=$KOCHI_INSTALL_PREFIX
       - name: develop
-        git: ../massivethreads-dm
-        current_state: true
+        mirror: true
+        mirror_dir: ../massivethreads-dm
         script:
           - CFLAGS="${CFLAGS:+$CFLAGS} -O3 -g -gdwarf-4 -Wall"
           - CCFLAGS="$CFLAGS" CXXFLAGS="$CFLAGS" ./configure MPICC=$MPICC MPICXX=$MPICXX $CONFIGURE_OPTS --with-comm-layer=mpi3 --prefix=$KOCHI_INSTALL_PREFIX
@@ -185,17 +193,17 @@ dependencies:
         recipe: v5.0.0rc9
         machines: [ito-a]
       - name: openmpi
-        recipe: v5.0.x
+        recipe: dev
         machines: [squid-c]
     recipes:
       - name: release
         branch: master
       - name: develop
-        git: ../pcas
-        current_state: true
+        mirror: true
+        mirror_dir: ../pcas
       - name: develop_test
-        git: ../pcas
-        current_state: true
+        mirror: true
+        mirror_dir: ../pcas
         on_machine: true
         script:
           - CC=$MPICC CXX=$MPICXX cmake -DCMAKE_INSTALL_PREFIX=$KOCHI_INSTALL_PREFIX .
@@ -210,8 +218,8 @@ dependencies:
       - name: release
         branch: master
       - name: develop
-        git: ../massivelogger
-        current_state: true
+        mirror: true
+        mirror_dir: ../massivelogger
     script:
       - rm -rf $KOCHI_INSTALL_PREFIX/*
       - cp -af . $KOCHI_INSTALL_PREFIX
@@ -293,7 +301,6 @@ dependencies:
   # experimental
   itoyori:
     git: ../itoyori
-    current_state: true
     on_machine: true
     depends:
       - name: openmpi

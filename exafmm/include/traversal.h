@@ -386,9 +386,17 @@ namespace EXAFMM_NAMESPACE {
     void traverse(GCells icells, GCells jcells, vec3 cycle, bool dual, real_t remote=1) {
       if (icells.empty() || jcells.empty()) return;             // Quit if either of the cell vectors are empty
       int my_rank = my_ityr::rank();
+
+      my_ityr::barrier();
+      my_ityr::logger::clear();
+      my_ityr::barrier();
+
+      uint64_t t0 = my_ityr::wallclock::get_time();
+
       if (my_rank == 0) {
         logger::startTimer("Traverse");                           // Start timer
       }
+
       logger::initTracer();                                     // Initialize tracer
       int prange = .5 / theta + 1;                              // Periodic range
       prange = 1;
@@ -414,10 +422,14 @@ namespace EXAFMM_NAMESPACE {
         }                                                         //  End if for periodic boundary condition
       });
 
+      uint64_t t1 = my_ityr::wallclock::get_time();
+
       if (my_rank == 0) {
         logger::stopTimer("Traverse");                            // Stop timer
         logger::writeTracer();                                    // Write tracer to file
       }
+
+      my_ityr::logger::flush_and_print_stat(t0, t1);
     }
 
     //! Direct summation
