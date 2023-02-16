@@ -117,10 +117,6 @@ dependencies:
       - name:   dev
         mirror: true
         mirror_dir: ../../github/ompi
-      - name:   dev2
-        mirror: true
-        mirror_dir: ../../github/ompi
-        before_script: CONFIGURE_OPTS="--with-cma=no"
       - name:   v5.0.x-debug
         branch: v5.0.x
         before_script: CONFIGURE_OPTS="--enable-debug" CFLAGS="${CFLAGS:+$CFLAGS} -O0"
