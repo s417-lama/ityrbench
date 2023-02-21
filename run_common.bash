@@ -108,6 +108,7 @@ case $KOCHI_MACHINE in
         --prtemca plm_ssh_agent ssh \
         --prtemca plm_ssh_args " -i /sqfs/home/v60680/sshd/ssh_client_rsa_key -o StrictHostKeyChecking=no -p 50000 -q" \
         --hostfile $NQSII_MPINODES \
+        --mca btl ^ofi \
         --mca osc_ucx_acc_single_intrinsic true \
         setarch $(uname -m) --addr-no-randomize "${@:3}"
     }
@@ -128,7 +129,7 @@ run_trace_viewer() {
     exit 1
   fi
   shopt -s nullglob
-  MLOG_VIEWER_ONESHOT=false bokeh serve $KOCHI_INSTALL_PREFIX_MASSIVELOGGER/viewer --port $KOCHI_FORWARD_PORT --allow-websocket-origin \* --args ityr_log_*.ignore pcas_log_*.ignore
+  MLOG_VIEWER_ONESHOT=false bokeh serve $KOCHI_INSTALL_PREFIX_MASSIVELOGGER/viewer --port $KOCHI_FORWARD_PORT --allow-websocket-origin \* --session-token-expiration 3600 --args ityr_log_*.ignore pcas_log_*.ignore
 }
 
 export PCAS_ENABLE_SHARED_MEMORY=$KOCHI_PARAM_SHARED_MEM

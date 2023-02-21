@@ -3,6 +3,8 @@
 #include <cstdio>
 #include <cstdint>
 
+#include "madm_comm.h"
+
 #include "ityr/wallclock.hpp"
 #include "ityr/iro.hpp"
 #include "ityr/logger/kind.hpp"
@@ -27,20 +29,24 @@ public:
   }
 
   static void flush(uint64_t t_begin, uint64_t t_end) {
+    madi::logger::flush(t_begin, t_end);
     iro::logger_flush(t_begin, t_end);
     impl::flush(t_begin, t_end);
   }
 
   static void flush_and_print_stat(uint64_t t_begin, uint64_t t_end) {
+    madi::logger::flush_and_print_stat(t_begin, t_end);
     iro::logger_flush_and_print_stat(t_begin, t_end);
     impl::flush_and_print_stat(t_begin, t_end);
   }
 
   static void warmup() {
+    madi::logger::warmup();
     impl::warmup();
   }
 
   static void clear() {
+    madi::logger::clear();
     iro::logger_clear();
     impl::clear();
   }
