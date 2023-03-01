@@ -17,8 +17,6 @@ default_params:
   cores:
     - value: 48
       machines: [wisteria-o]
-    - value: 36
-      machines: [ito-a]
     - value: 76
       machines: [squid-c]
     - value: 6

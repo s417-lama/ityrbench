@@ -13,23 +13,6 @@ export ITYR_PRINT_ENV=1
 STDOUT_FILE=mpirun_out.txt
 
 case $KOCHI_MACHINE in
-  ito-a)
-    ityr_mpirun() {
-      local n_processes=$1
-      local n_processes_per_node=$2
-
-      if [[ $PJM_ENVIRONMENT == BATCH ]]; then
-        OUTPUT_CMD="tee $STDOUT_FILE"
-      else
-        OUTPUT_CMD=cat
-      fi
-      $MPIEXEC -n $n_processes -N $n_processes_per_node \
-        --mca prte_ssh_agent pjrsh \
-        --hostfile $PJM_O_NODEINF \
-        --mca osc_ucx_acc_single_intrinsic true \
-        -- setarch $(uname -m) --addr-no-randomize "${@:3}" | $OUTPUT_CMD
-    }
-    ;;
   wisteria-o)
     export UTOFU_SWAP_PROTECT=1
 

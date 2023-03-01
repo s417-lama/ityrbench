@@ -19,8 +19,6 @@ default_params:
   cores:
     - value: 48
       machines: [wisteria-o]
-    - value: 36
-      machines: [ito-a]
     - value: 76
       machines: [squid-c]
     - value: 6
@@ -74,8 +72,6 @@ batches:
       nodes:
         - value: [1, 2:torus, 2x3:torus, 2x3x2:torus, 3x4x3:torus, 6x6x4:torus, 8x9x8:torus]
           machines: [wisteria-o]
-        - value: [1, 2, 4, 8, 16]
-          machines: [ito-a]
       n_input: 1_000_000_000
       repeats: 11
       cache_policy: [nocache, writethrough, writeback, writeback_lazy]
