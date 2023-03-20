@@ -39,12 +39,12 @@ default_params:
   max_dirty: $cache_size # MB
   shared_mem: 1
   logger: dummy # dummy/trace/stats
-  allocator: jemalloc # sys/jemalloc
+  allocator: sys # sys/jemalloc
   debugger: 0
 
 default_name: uts++
 default_queue: node_${nodes}
-default_duplicates: 3
+default_duplicates: 1
 
 batches:
   serial:
@@ -71,6 +71,8 @@ batches:
       nodes:
         - value: [1, 2:torus, 2x3:torus, 2x3x2:torus, 3x4x3:torus, 6x6x4:torus, 8x9x8:torus]
           machines: [wisteria-o]
+        - value: [1, 2, 4, 8, 16]
+          machines: [squid-c]
       tree: T1L
       repeats: 11
       # cache_policy: [nocache, writethrough, writeback, writeback_lazy]
@@ -149,7 +151,7 @@ run:
 
     source uts/sample_trees.sh
 
-    # export OMPI_MCA_common_tofu_num_mrq_entries=2097152 # 2048, 8192, 32768, 131072 (default), 524288, or 2097152
+    export OMPI_MCA_common_tofu_num_mrq_entries=2097152 # 2048, 8192, 32768, 131072 (default), 524288, or 2097152
     export PCAS_ALLOCATOR_BLOCK_SIZE=2 # MB
     export PCAS_ALLOCATOR_MAX_UNFLUSHED_FREE_OBJS=10
 

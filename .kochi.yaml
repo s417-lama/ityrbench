@@ -260,6 +260,9 @@ dependencies:
         CONFIGURE_OPTS="${CONFIGURE_OPTS:+$CONFIGURE_OPTS} --user-config=user-config.jam toolset=clang-fcc"
       fi
       ./b2 --without-python pch=off ${CONFIGURE_OPTS:+$CONFIGURE_OPTS} -j $(nproc) install
+    activate_script:
+      - export BOOST_ROOT=$KOCHI_INSTALL_PREFIX_BOOST
+      - export LD_LIBRARY_PATH=$KOCHI_INSTALL_PREFIX_BOOST/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
 
   pcg:
     git: https://github.com/imneme/pcg-cpp.git
@@ -271,14 +274,30 @@ dependencies:
 
   # experimental
   itoyori:
-    git: ../itoyori
-    on_machine: true
+    git: git@gitlab.eidos.ic.i.u-tokyo.ac.jp:shiina/itoyori.git
     depends:
       - name: openmpi
         recipe: v5.0.0rc7
         machines: [local]
+      - name: boost
+        recipe: v1.80.0
+        machines: [wisteria-o]
     recipes:
+      - name: release
+        branch: master
+        script:
+          - CC=$MPICC CXX=$MPICXX cmake -DCMAKE_INSTALL_PREFIX=$KOCHI_INSTALL_PREFIX .
+          - make -j all install
       - name: develop
-    script:
-      - CC=$MPICC CXX=$MPICXX cmake -DCMAKE_INSTALL_PREFIX=$KOCHI_INSTALL_PREFIX .
-      - make all test install
+        mirror: true
+        mirror_dir: ../itoyori
+        script:
+          - CC=$MPICC CXX=$MPICXX cmake -DCMAKE_INSTALL_PREFIX=$KOCHI_INSTALL_PREFIX .
+          - make -j all install
+      - name: develop_test
+        on_machine: true
+        mirror: true
+        mirror_dir: ../itoyori
+        script:
+          - CC=$MPICC CXX=$MPICXX cmake -DCMAKE_INSTALL_PREFIX=$KOCHI_INSTALL_PREFIX .
+          - make -j all test install
