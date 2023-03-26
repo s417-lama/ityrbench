@@ -39,7 +39,7 @@ run:
     source run_common.bash
 
     commands="
-      ./exafmm/examples/${KOCHI_PARAM_KERNEL}_mpi
+      ./exafmm_mpi/examples/${KOCHI_PARAM_KERNEL}_mpi
         -v -T 1 -D
         $([[ $KOCHI_PARAM_ACCURACY_TEST == 0 ]] || echo -a)
         -n $KOCHI_PARAM_N_INPUT
@@ -56,5 +56,3 @@ run:
     else
       MPIEXEC=mpitx ityr_mpirun $((n_nodes * KOCHI_PARAM_CORES)) $KOCHI_PARAM_CORES gdb --args $commands
     fi
-
-    if [[ $KOCHI_PARAM_LOGGER == trace ]]; then run_trace_viewer; fi
