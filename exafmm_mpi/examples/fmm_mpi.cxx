@@ -89,6 +89,8 @@ int main(int argc, char ** argv) {
         upDownPass.upwardPass(jcells);
       }
 
+      logger::startTimer("Traverse (total)");
+
 #if 1 // Set to 0 for debugging by shifting bodies and reconstructing tree
       treeMPI.allgatherBounds(localBounds);
       if (args.IneJ) {
@@ -140,6 +142,7 @@ int main(int argc, char ** argv) {
         traversal.traverse(cells, jcells, cycle, args.dual);
       }
 #endif
+      logger::stopTimer("Traverse (total)");
       upDownPass.downwardPass(cells);
     }
     logger::stopPAPI();

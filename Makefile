@@ -68,7 +68,7 @@ exafmm:
 .PHONY: exafmm_mpi
 exafmm_mpi:
 	cd exafmm_mpi
-	[ -f Makefile ] || ./configure --disable-simd --enable-mpi CXXFLAGS="$(COMMON_CXXFLAGS) -fopenmp"
+	[ -f Makefile ] || ./configure --disable-simd --enable-mpi --enable-openmp CXXFLAGS="$(COMMON_CXXFLAGS) -fopenmp"
 	make -j
 
 clean:

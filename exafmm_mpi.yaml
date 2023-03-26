@@ -29,6 +29,7 @@ build:
 
     CFLAGS="${CFLAGS:+$CFLAGS} -DNDEBUG"
     # CFLAGS="${CFLAGS:+$CFLAGS} -O0"
+    CFLAGS="${CFLAGS:+$CFLAGS} -Nlibomp"
 
     make distclean
     MPICXX=$MPICXX CFLAGS=$CFLAGS make -j exafmm_mpi
@@ -38,9 +39,13 @@ run:
   script: |
     source run_common.bash
 
+    export OMPI_MCA_plm_ple_cpu_affinity=0
+    export OMP_WAIT_POLICY=active
+    # export OMP_PROC_BIND=false
+
     commands="
       ./exafmm_mpi/examples/${KOCHI_PARAM_KERNEL}_mpi
-        -v -T 1 -D
+        -v -T $KOCHI_PARAM_CORES -D
         $([[ $KOCHI_PARAM_ACCURACY_TEST == 0 ]] || echo -a)
         -n $KOCHI_PARAM_N_INPUT
         -r $KOCHI_PARAM_REPEATS
@@ -52,7 +57,7 @@ run:
     n_nodes=$(echo $KOCHI_PARAM_NODES | cut -f 1 -d ":" | sed 's/x/*/g' | bc)
 
     if [[ $KOCHI_PARAM_DEBUGGER == 0 ]]; then
-      ityr_mpirun $((n_nodes * KOCHI_PARAM_CORES)) $KOCHI_PARAM_CORES $commands
+      ityr_mpirun $((n_nodes)) 1 $commands
     else
-      MPIEXEC=mpitx ityr_mpirun $((n_nodes * KOCHI_PARAM_CORES)) $KOCHI_PARAM_CORES gdb --args $commands
+      MPIEXEC=mpitx ityr_mpirun $((n_nodes)) 1 gdb --args $commands
     fi
