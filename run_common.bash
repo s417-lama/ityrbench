@@ -117,8 +117,10 @@ run_trace_viewer() {
   MLOG_VIEWER_ONESHOT=false bokeh serve $KOCHI_INSTALL_PREFIX_MASSIVELOGGER/viewer --port $KOCHI_FORWARD_PORT --allow-websocket-origin \* --session-token-expiration 3600 --args ityr_log_*.ignore pcas_log_*.ignore
 }
 
-export PCAS_ENABLE_SHARED_MEMORY=$KOCHI_PARAM_SHARED_MEM
-export PCAS_MAX_DIRTY_CACHE_SIZE=$(bc <<< "$KOCHI_PARAM_MAX_DIRTY * 2^20 / 1")
+if [[ ! -z ${KOCHI_INSTALL_PREFIX_PCAS+x} ]]; then
+  export PCAS_ENABLE_SHARED_MEMORY=$KOCHI_PARAM_SHARED_MEM
+  export PCAS_MAX_DIRTY_CACHE_SIZE=$(bc <<< "$KOCHI_PARAM_MAX_DIRTY * 2^20 / 1")
+fi
 
 export MADM_STACK_SIZE=$((4 * 1024 * 1024))
 

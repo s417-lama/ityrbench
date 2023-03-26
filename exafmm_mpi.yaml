@@ -1,0 +1,60 @@
+default_params:
+  nodes: 1
+  cores:
+    - value: 48
+      machines: [wisteria-o]
+    - value: 76
+      machines: [squid-c]
+    - value: 6
+      machines: [local]
+  n_input: 10000
+  repeats: 1
+  theta: 0.2
+  nspawn: 1000
+  ncrit: 32
+  P: 10
+  kernel: laplace # laplace/helmholtz/biotsavart
+  accuracy_test: 1
+  allocator: sys # sys/jemalloc
+  debugger: 0
+
+default_name: exafmm_mpi
+default_queue: node_${nodes}
+default_duplicates: 1
+
+build:
+  depend_params: []
+  script: |
+    source build_common.bash
+
+    CFLAGS="${CFLAGS:+$CFLAGS} -DNDEBUG"
+    # CFLAGS="${CFLAGS:+$CFLAGS} -O0"
+
+    make distclean
+    MPICXX=$MPICXX CFLAGS=$CFLAGS make exafmm_mpi
+
+run:
+  depend_params: [nodes, cores, n_input, repeats, theta, nspawn, ncrit, P, kernel, accuracy_test, allocator, debugger]
+  script: |
+    source run_common.bash
+
+    commands="
+      ./exafmm/examples/${KOCHI_PARAM_KERNEL}_mpi
+        -v -T 1 -D
+        $([[ $KOCHI_PARAM_ACCURACY_TEST == 0 ]] || echo -a)
+        -n $KOCHI_PARAM_N_INPUT
+        -r $KOCHI_PARAM_REPEATS
+        -t $KOCHI_PARAM_THETA
+        -s $KOCHI_PARAM_NSPAWN
+        -c $KOCHI_PARAM_NCRIT
+        -P $KOCHI_PARAM_P"
+
+    n_nodes=$(echo $KOCHI_PARAM_NODES | cut -f 1 -d ":" | sed 's/x/*/g' | bc)
+
+    if [[ $KOCHI_PARAM_DEBUGGER == 0 ]]; then
+      ityr_mpirun $((n_nodes * KOCHI_PARAM_CORES)) $KOCHI_PARAM_CORES $commands
+    else
+      MPIEXEC=mpitx ityr_mpirun $((n_nodes * KOCHI_PARAM_CORES)) $KOCHI_PARAM_CORES gdb --args $commands
+    fi
+
+    if [[ $KOCHI_PARAM_LOGGER == trace ]]; then run_trace_viewer; fi

@@ -35,7 +35,9 @@ BOOST_CXXFLAGS := -I$(BOOST_PATH)/include
 BOOST_LDFLAGS  := -L$(BOOST_PATH)/lib -Wl,-R$(BOOST_PATH)/lib
 BOOST_LIBS     := -lboost_container
 
-CXXFLAGS := $(UTH_CXXFLAGS) $(PCAS_CXXFLAGS) $(LIBUNWIND_CXXFLAGS) $(BACKWARD_CXXFLAGS) $(PCG_CXXFLAGS) $(BOOST_CXXFLAGS) -I. -std=c++17 -O3 -g -gdwarf-4 -Wall $(CXXFLAGS) $(CFLAGS)
+COMMON_CXXFLAGS := -std=c++17 -O3 -g -gdwarf-4 -Wall
+
+CXXFLAGS := $(UTH_CXXFLAGS) $(PCAS_CXXFLAGS) $(LIBUNWIND_CXXFLAGS) $(BACKWARD_CXXFLAGS) $(PCG_CXXFLAGS) $(BOOST_CXXFLAGS) -I. $(COMMON_CXXFLAGS) $(CXXFLAGS) $(CFLAGS)
 LDFLAGS  := $(UTH_LDFLAGS) $(PCAS_LDFLAGS) $(LIBUNWIND_LDFLAGS) $(BACKWARD_LDFLAGS) $(PCG_LDFLAGS) $(BOOST_LDFLAGS) -Wl,-export-dynamic
 LIBS     := $(UTH_LIBS) $(PCAS_LIBS) $(LIBUNWIND_LIBS) $(BACKWARD_LIBS) $(PCG_LIBS) $(BOOST_LIBS) -lpthread -lm -ldl
 
@@ -46,7 +48,7 @@ HEADERS := $(wildcard ./ityr/**/*.hpp)
 
 MAIN_TARGETS := $(patsubst %.cpp,%.out,$(SRCS)) uts.out uts++.out
 
-all: $(MAIN_TARGETS) exafmm
+all: $(MAIN_TARGETS) exafmm exafmm_mpi
 
 %.out: %.cpp $(HEADERS)
 	$(MPICXX) $(CXXFLAGS) -o $@ $< $(LDFLAGS) $(LIBS)
@@ -61,6 +63,12 @@ uts++.out: uts/uts.c uts/rng/brg_sha1.c uts/main++.cc $(HEADERS)
 exafmm:
 	cd exafmm
 	[ -f Makefile ] || ./configure --disable-simd --enable-mpi CXXFLAGS="-I$(THIS_DIR) $(CXXFLAGS)" LDFLAGS="$(LDFLAGS)" LIBS="$(LIBS)"
+	make -j
+
+.PHONY: exafmm_mpi
+exafmm_mpi:
+	cd exafmm_mpi
+	[ -f Makefile ] || ./configure --disable-simd --enable-mpi CXXFLAGS="$(COMMON_CXXFLAGS)"
 	make -j
 
 clean:
