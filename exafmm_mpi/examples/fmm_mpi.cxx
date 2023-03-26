@@ -91,6 +91,7 @@ int main(int argc, char ** argv) {
 
       MPI_Barrier(MPI_COMM_WORLD);
       logger::startTimer("Traverse (total)");
+      MPI_Barrier(MPI_COMM_WORLD);
 
 #if 1 // Set to 0 for debugging by shifting bodies and reconstructing tree
       treeMPI.allgatherBounds(localBounds);

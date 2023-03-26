@@ -24,7 +24,47 @@ default_params:
 
 default_name: exafmm_mpi
 default_queue: node_${nodes}
-default_duplicates: 1
+default_duplicates: 3
+
+batches:
+  scale1M:
+    name: exafmm_mpi_${batch_name}
+    params:
+      nodes:
+        - value: [1, 2:torus, 2x3:torus, 2x3x2:torus, 3x4x3:torus]
+          machines: [wisteria-o]
+        - value: [1, 2, 4, 8, 16]
+          machines: [squid-c]
+      n_input: 1_000_000
+      P: 4
+      repeats: 11
+    artifacts:
+      - type: stdout
+        dest: exafmm_mpi/${batch_name}/nodes_${nodes}_${duplicate}.log
+      - type: stats
+        dest: exafmm_mpi/${batch_name}/nodes_${nodes}_${duplicate}.stats
+      - type: file
+        src: mpirun_out.txt
+        dest: exafmm_mpi/${batch_name}/nodes_${nodes}_${duplicate}.out
+
+  scale10M:
+    name: exafmm_mpi_${batch_name}
+    params:
+      nodes:
+        - value: [2x3x2:torus, 3x4x3:torus]
+          machines: [wisteria-o]
+      n_input: 10_000_000
+      P: 4
+      repeats: 11
+      accuracy_test: 0
+    artifacts:
+      - type: stdout
+        dest: exafmm_mpi/${batch_name}/nodes_${nodes}_${duplicate}.log
+      - type: stats
+        dest: exafmm_mpi/${batch_name}/nodes_${nodes}_${duplicate}.stats
+      - type: file
+        src: mpirun_out.txt
+        dest: exafmm_mpi/${batch_name}/nodes_${nodes}_${duplicate}.out
 
 build:
   depend_params: []

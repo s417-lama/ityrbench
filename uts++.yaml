@@ -44,7 +44,7 @@ default_params:
 
 default_name: uts++
 default_queue: node_${nodes}
-default_duplicates: 1
+default_duplicates: 3
 
 batches:
   serial:

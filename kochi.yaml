@@ -118,8 +118,11 @@ dependencies:
     recipes:
       - name: release
         branch: master
+      - name: develop
+        mirror: true
+        mirror_dir: ../massivethreads
     script:
-      - CFLAGS="${CFLAGS:+$CFLAGS} -O3 -g -gdwarf-4"
+      - CFLAGS="${CFLAGS:+$CFLAGS} -O3 -g -gdwarf-4 -DNDEBUG"
       - if [[ $KOCHI_MACHINE == wisteria-o ]]; then
       -   ./configure CC=fccpx CFLAGS="${CFLAGS:+$CFLAGS}" --prefix=$KOCHI_INSTALL_PREFIX --host=aarch64-linux-gnu
       - else
