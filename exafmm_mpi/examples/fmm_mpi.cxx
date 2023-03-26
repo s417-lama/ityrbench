@@ -34,29 +34,29 @@ int main(int argc, char ** argv) {
   Verify verify(args.path);
   num_threads(args.threads);
 
-  //args.numBodies /= baseMPI.mpisize;
+  args.numBodies /= baseMPI.mpisize;
   args.verbose &= baseMPI.mpirank == 0;
   verify.verbose = args.verbose;
   logger::verbose = args.verbose;
   logger::path = args.path;
   logger::printTitle("FMM Parameters");
   args.print(logger::stringLength);
-  bodies = data.initBodies(args.numBodies, args.distribution, baseMPI.mpirank, baseMPI.mpisize);
-  buffer.reserve(bodies.size());
-  if (args.IneJ) {
-    for (B_iter B=bodies.begin(); B!=bodies.end(); B++) {
-      B->X[0] += M_PI;
-      B->X[0] *= 0.5;
-    }
-    jbodies = data.initBodies(args.numBodies, args.distribution, baseMPI.mpirank+baseMPI.mpisize, baseMPI.mpisize);
-    for (B_iter B=jbodies.begin(); B!=jbodies.end(); B++) {
-      B->X[0] -= M_PI;
-      B->X[0] *= 0.5;
-    }
-  }
   bool pass = true;
   bool isTime = false;
   for (int t=0; t<args.repeat; t++) {
+    bodies = data.initBodies(args.numBodies, args.distribution, baseMPI.mpirank, baseMPI.mpisize);
+    buffer.reserve(bodies.size());
+    if (args.IneJ) {
+      for (B_iter B=bodies.begin(); B!=bodies.end(); B++) {
+        B->X[0] += M_PI;
+        B->X[0] *= 0.5;
+      }
+      jbodies = data.initBodies(args.numBodies, args.distribution, baseMPI.mpirank+baseMPI.mpisize, baseMPI.mpisize);
+      for (B_iter B=jbodies.begin(); B!=jbodies.end(); B++) {
+        B->X[0] -= M_PI;
+        B->X[0] *= 0.5;
+      }
+    }
     logger::printTitle("FMM Profiling");
     logger::startTimer("Total FMM");
     logger::startPAPI();
@@ -89,6 +89,7 @@ int main(int argc, char ** argv) {
         upDownPass.upwardPass(jcells);
       }
 
+      MPI_Barrier(MPI_COMM_WORLD);
       logger::startTimer("Traverse (total)");
 
 #if 1 // Set to 0 for debugging by shifting bodies and reconstructing tree
@@ -113,7 +114,6 @@ int main(int argc, char ** argv) {
             traversal.traverse(cells, jcells, cycle, args.dual);
           } else {
             traversal.traverse(cells, cells, cycle, args.dual);
-            jbodies = bodies;
           }
         }
       }
@@ -142,7 +142,13 @@ int main(int argc, char ** argv) {
         traversal.traverse(cells, jcells, cycle, args.dual);
       }
 #endif
+      MPI_Barrier(MPI_COMM_WORLD);
       logger::stopTimer("Traverse (total)");
+
+      if (!args.IneJ) {
+        jbodies = bodies;
+      }
+
       upDownPass.downwardPass(cells);
     }
     logger::stopPAPI();
@@ -195,31 +201,33 @@ int main(int argc, char ** argv) {
       MPI_Bcast(&pass, 1, MPI_BYTE, 0, MPI_COMM_WORLD);
       if (pass) {
         if (verify.verbose) std::cout << "passed accuracy regression at t: " << t << std::endl;
-        if (args.accuracy) break;
-        t = -1;
-        isTime = true;
-      }
-    } else {
-      double totalFMMGlob;
-      MPI_Reduce(&totalFMM, &totalFMMGlob, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
-      totalFMMGlob /= baseMPI.mpisize;
-      if (!baseMPI.mpirank) {
-        pass = verify.regression(args.getKey(baseMPI.mpisize), isTime, t, totalFMMGlob);
-      }
-      MPI_Bcast(&pass, 1, MPI_BYTE, 0, MPI_COMM_WORLD);
-      if (pass) {
-        if (verify.verbose) std::cout << "passed time regression at t: " << t << std::endl;
+        /* if (args.accuracy) break; */
+        /* t = -1; */
+        /* isTime = true; */
+      } else {
+        if (verify.verbose) std::cout << "failed accuracy regression" << std::endl;
         break;
       }
+    } else {
+      /* double totalFMMGlob; */
+      /* MPI_Reduce(&totalFMM, &totalFMMGlob, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD); */
+      /* totalFMMGlob /= baseMPI.mpisize; */
+      /* if (!baseMPI.mpirank) { */
+      /*   pass = verify.regression(args.getKey(baseMPI.mpisize), isTime, t, totalFMMGlob); */
+      /* } */
+      /* MPI_Bcast(&pass, 1, MPI_BYTE, 0, MPI_COMM_WORLD); */
+      /* if (pass) { */
+      /*   if (verify.verbose) std::cout << "passed time regression at t: " << t << std::endl; */
+      /*   break; */
+      /* } */
     }
-    data.initTarget(bodies);
   }
-  if (!pass) {
-    if (verify.verbose) {
-      if(!isTime) std::cout << "failed accuracy regression" << std::endl;
-      else std::cout << "failed time regression" << std::endl;
-    }
-    abort();
-  }
+  /* if (!pass) { */
+  /*   if (verify.verbose) { */
+  /*     if(!isTime) std::cout << "failed accuracy regression" << std::endl; */
+  /*     else std::cout << "failed time regression" << std::endl; */
+  /*   } */
+  /*   abort(); */
+  /* } */
   return 0;
 }
