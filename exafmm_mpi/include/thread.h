@@ -24,9 +24,17 @@ using namespace tbb;
 
 #elif EXAFMM_WITH_MTHREAD
 /* MassiveThreads (TBB-like interface on top of MassiveThreads)  */
-#define num_threads(E)		      myth_init_ex(E, 1 << 16)
-#define TO_MTHREAD_NATIVE 1
-#include <tpswitch/tpswitch.h>
+#include <mtbb/task_group.h>
+#define num_threads(E)		            { myth_globalattr_t myth_attr; \
+                                        myth_globalattr_init(&myth_attr); \
+                                        myth_globalattr_set_stacksize(&myth_attr, 1 << 16); \
+                                        myth_globalattr_set_n_workers(&myth_attr, E); \
+                                        myth_init_ex(&myth_attr); \
+                                        myth_globalattr_destroy(&myth_attr); }
+#define mk_task_group                 mtbb::task_group tg;
+#define wait_tasks                    tg.wait()
+#define create_taskc(E)               tg.run(E)
+#define create_taskc_if(x, E)         if(x) { create_taskc(E); } else { E(); }
 
 #elif EXAFMM_WITH_OPENMP
 #include <omp.h>

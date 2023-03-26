@@ -4,6 +4,11 @@ SHELL=/bin/bash
 
 THIS_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 
+MYTH_PATH     := ${KOCHI_INSTALL_PREFIX_MASSIVETHREADS}
+MYTH_CXXFLAGS := -I$(MYTH_PATH)/include
+MYTH_LDFLAGS  := -L$(MYTH_PATH)/lib -Wl,-R$(MYTH_PATH)/lib
+MYTH_LIBS     := -lmyth
+
 UTH_PATH     := ${KOCHI_INSTALL_PREFIX_MASSIVETHREADS_DM}
 UTH_CXXFLAGS := -I$(UTH_PATH)/include -fno-stack-protector -Wno-register
 UTH_LDFLAGS  := -L$(UTH_PATH)/lib
@@ -35,9 +40,9 @@ BOOST_CXXFLAGS := -I$(BOOST_PATH)/include
 BOOST_LDFLAGS  := -L$(BOOST_PATH)/lib -Wl,-R$(BOOST_PATH)/lib
 BOOST_LIBS     := -lboost_container
 
-COMMON_CXXFLAGS := -std=c++17 -O3 -g -gdwarf-4 -Wall
+COMMON_CXXFLAGS := -std=c++17 -O3 -g -gdwarf-4 -Wall $(CXXFLAGS) $(CFLAGS)
 
-CXXFLAGS := $(UTH_CXXFLAGS) $(PCAS_CXXFLAGS) $(LIBUNWIND_CXXFLAGS) $(BACKWARD_CXXFLAGS) $(PCG_CXXFLAGS) $(BOOST_CXXFLAGS) -I. $(COMMON_CXXFLAGS) $(CXXFLAGS) $(CFLAGS)
+CXXFLAGS := $(UTH_CXXFLAGS) $(PCAS_CXXFLAGS) $(LIBUNWIND_CXXFLAGS) $(BACKWARD_CXXFLAGS) $(PCG_CXXFLAGS) $(BOOST_CXXFLAGS) -I. $(COMMON_CXXFLAGS)
 LDFLAGS  := $(UTH_LDFLAGS) $(PCAS_LDFLAGS) $(LIBUNWIND_LDFLAGS) $(BACKWARD_LDFLAGS) $(PCG_LDFLAGS) $(BOOST_LDFLAGS) -Wl,-export-dynamic
 LIBS     := $(UTH_LIBS) $(PCAS_LIBS) $(LIBUNWIND_LIBS) $(BACKWARD_LIBS) $(PCG_LIBS) $(BOOST_LIBS) -lpthread -lm -ldl
 
@@ -68,7 +73,8 @@ exafmm:
 .PHONY: exafmm_mpi
 exafmm_mpi:
 	cd exafmm_mpi
-	[ -f Makefile ] || ./configure --disable-simd --enable-mpi --enable-openmp CXXFLAGS="$(COMMON_CXXFLAGS) -fopenmp"
+	# [ -f Makefile ] || ./configure --disable-simd --enable-mpi --enable-openmp CXXFLAGS="$(COMMON_CXXFLAGS) -fopenmp"
+	[ -f Makefile ] || ./configure --disable-simd --enable-mpi --with-mthread CXXFLAGS="$(MYTH_CXXFLAGS) $(COMMON_CXXFLAGS)" LDFLAGS="$(MYTH_LDFLAGS)" LIBS="$(MYTH_LIBS)"
 	make -j
 
 clean:

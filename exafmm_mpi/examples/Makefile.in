@@ -96,7 +96,7 @@ POST_UNINSTALL = :
 @EXAFMM_HAVE_OPENMP_TRUE@am__append_6 = $(OPENMP_CXXFLAGS)
 @EXAFMM_HAVE_OPENMP_TRUE@am__append_7 = $(OPENMP_CXXFLAGS)
 @EXAFMM_WITH_TBB_TRUE@am__append_8 = -ltbb
-@EXAFMM_WITH_MTHREAD_TRUE@am__append_9 = -lmyth-native
+@EXAFMM_WITH_MTHREAD_TRUE@am__append_9 = -lmyth
 
 # Floating point precision
 @EXAFMM_SINGLE_TRUE@am__append_10 = -DEXAFMM_SINGLE

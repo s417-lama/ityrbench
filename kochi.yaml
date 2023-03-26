@@ -113,6 +113,21 @@ dependencies:
       - export PATH=$KOCHI_INSTALL_PREFIX_OPENMPI/bin${PATH:+:$PATH}
       - export LD_LIBRARY_PATH=$KOCHI_INSTALL_PREFIX_OPENMPI/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
 
+  massivethreads:
+    git: https://github.com/massivethreads/massivethreads.git
+    recipes:
+      - name: release
+        branch: master
+    script:
+      - CFLAGS="${CFLAGS:+$CFLAGS} -O3 -g -gdwarf-4"
+      - if [[ $KOCHI_MACHINE == wisteria-o ]]; then
+      -   ./configure CC=fccpx CFLAGS="${CFLAGS:+$CFLAGS}" --prefix=$KOCHI_INSTALL_PREFIX --host=aarch64-linux-gnu
+      - else
+      -   ./configure --prefix=$KOCHI_INSTALL_PREFIX CFLAGS="${CFLAGS:+$CFLAGS}"
+      - fi
+      - make -j
+      - make install
+
   massivethreads-dm:
     git: git@gitlab.eidos.ic.i.u-tokyo.ac.jp:shiina/massivethreads-dm.git
     depends:

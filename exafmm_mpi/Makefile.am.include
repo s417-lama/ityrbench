@@ -51,7 +51,7 @@ if EXAFMM_WITH_TBB
 LIBS += -ltbb
 endif
 if EXAFMM_WITH_MTHREAD
-LIBS += -lmyth-native
+LIBS += -lmyth
 endif
 
 # Floating point precision
