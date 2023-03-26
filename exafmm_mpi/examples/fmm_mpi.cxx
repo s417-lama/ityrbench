@@ -64,7 +64,7 @@ int main(int argc, char ** argv) {
     if (isTime) numIteration = 10;
     for (int it=0; it<numIteration; it++) {
       std::stringstream title;
-      title << "Time average loop " << it;
+      title << "Time average loop " << t;
       logger::printTitle(title.str());
       data.initTarget(bodies);
       localBounds = boundBox.getBounds(bodies);

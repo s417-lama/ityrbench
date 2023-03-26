@@ -10,6 +10,7 @@
 #include "namespace.h"
 #include <stdint.h>
 #include "types.h"
+#include <mpi.h>
 
 namespace EXAFMM_NAMESPACE {
   static struct option long_options[] = {
@@ -294,6 +295,8 @@ namespace EXAFMM_NAMESPACE {
     }
 
     void print(int stringLength) {
+      int mpisize;
+      MPI_Comm_size(MPI_COMM_WORLD, &mpisize);
       if (verbose) {
 	std::cout << std::setw(stringLength) << std::fixed << std::left
 		  << "accuracy" << " : " << accuracy << std::endl
@@ -330,7 +333,9 @@ namespace EXAFMM_NAMESPACE {
 		  << std::setw(stringLength)
 		  << "verbose" << " : " << verbose << std::endl
 		  << std::setw(stringLength)
-		  << "write" << " : " << write << std::endl;
+		  << "write" << " : " << write << std::endl
+		  << std::setw(stringLength)
+		  << "# of processes" << " : " << mpisize << std::endl;
       }
     }
   };
