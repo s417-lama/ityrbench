@@ -31,7 +31,7 @@ build:
     # CFLAGS="${CFLAGS:+$CFLAGS} -O0"
 
     make distclean
-    MPICXX=$MPICXX CFLAGS=$CFLAGS make exafmm_mpi
+    MPICXX=$MPICXX CFLAGS=$CFLAGS make -j exafmm_mpi
 
 run:
   depend_params: [nodes, cores, n_input, repeats, theta, nspawn, ncrit, P, kernel, accuracy_test, allocator, debugger]

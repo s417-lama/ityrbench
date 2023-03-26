@@ -136,7 +136,7 @@ build:
     CFLAGS="${CFLAGS:+$CFLAGS} -DITYR_USE_MPI_WIN_DYNAMIC=false"
 
     make distclean
-    MPICXX=$MPICXX CFLAGS=$CFLAGS make exafmm
+    MPICXX=$MPICXX CFLAGS=$CFLAGS make -j exafmm
 
 run:
   depend_params: [nodes, cores, n_input, repeats, theta, nspawn, ncrit, P, kernel, accuracy_test, cache_size, sub_block_size, max_dirty, shared_mem, logger, allocator, debugger]
