@@ -93,6 +93,8 @@ int main(int argc, char ** argv) {
       logger::startTimer("Traverse (total)");
       MPI_Barrier(MPI_COMM_WORLD);
 
+      double t0 = logger::get_time();
+
 #if 1 // Set to 0 for debugging by shifting bodies and reconstructing tree
       treeMPI.allgatherBounds(localBounds);
       if (args.IneJ) {
@@ -100,6 +102,7 @@ int main(int argc, char ** argv) {
       } else {
         treeMPI.setLET(cells, cycle);
       }
+#if EXAFMM_WITH_OPENMP
 #pragma omp parallel sections
       {
 #pragma omp section
@@ -118,6 +121,23 @@ int main(int argc, char ** argv) {
           }
         }
       }
+#else
+      {
+        mk_task_group;
+        create_taskc([&] {
+          treeMPI.commBodies();
+          treeMPI.commCells();
+        });
+        traversal.initListCount(cells);
+        traversal.initWeight(cells);
+        if (args.IneJ) {
+          traversal.traverse(cells, jcells, cycle, args.dual);
+        } else {
+          traversal.traverse(cells, cells, cycle, args.dual);
+        }
+        wait_tasks;
+      }
+#endif
       if (baseMPI.mpisize > 1) {
         if (args.graft) {
           treeMPI.linkLET();
@@ -143,8 +163,13 @@ int main(int argc, char ** argv) {
         traversal.traverse(cells, jcells, cycle, args.dual);
       }
 #endif
+      double t1 = logger::get_time();
+      printf("Traverse (rank %d): %f s\n", baseMPI.mpirank, t1 - t0);
+
       MPI_Barrier(MPI_COMM_WORLD);
       logger::stopTimer("Traverse (total)");
+
+      fflush(stdout);
 
       if (!args.IneJ) {
         jbodies = bodies;
