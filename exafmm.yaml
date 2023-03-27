@@ -105,6 +105,28 @@ batches:
         src: mpirun_out.txt
         dest: exafmm/${batch_name}/nodes_${nodes}_p_${cache_policy}_${duplicate}.out
 
+  weak1M:
+    name: exafmm_${batch_name}
+    params:
+      nodes:
+        - value: [1, 2:torus, 2x3:torus, 2x3x2:torus, 3x4x3:torus, 6x6x4:torus]
+          machines: [wisteria-o]
+        - value: [1, 2, 4, 8, 16]
+          machines: [squid-c]
+      n_input: "`eval('$nodes'.split(':')[0].replace('x', '*')) * 1_000_000`"
+      P: 4
+      repeats: 11
+      cache_policy: [nocache, writethrough, writeback, writeback_lazy]
+      accuracy_test: 0
+    artifacts:
+      - type: stdout
+        dest: exafmm/${batch_name}/nodes_${nodes}_p_${cache_policy}_${duplicate}.log
+      - type: stats
+        dest: exafmm/${batch_name}/nodes_${nodes}_p_${cache_policy}_${duplicate}.stats
+      - type: file
+        src: mpirun_out.txt
+        dest: exafmm/${batch_name}/nodes_${nodes}_p_${cache_policy}_${duplicate}.out
+
   sbsize:
     name: exafmm_${batch_name}
     params:
