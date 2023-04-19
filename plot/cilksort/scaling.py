@@ -14,8 +14,15 @@ import plot_util
 
 benchmark = "cilksort"
 
-machine = "wisteria-o"
+# machine = "wisteria-o"
 # machine = "squid-c"
+machine = "local"
+
+plot_serial = True
+# plot_serial = False
+
+plot_10G = True
+# plot_10G = False
 
 fig_dir = os.path.join("figs", benchmark)
 
@@ -85,6 +92,9 @@ def get_parallel_result_1G():
     elif machine == "squid-c":
         nodes = [1, 2, 4, 8, 16]
         duplicates = [0]
+    else:
+        nodes = [1]
+        duplicates = [0]
     return get_result("scale1G", "nodes_{nodes}_p_{policy}_{duplicate}.out",
                       n_input=[1_000_000_000],
                       nodes=nodes,
@@ -101,6 +111,9 @@ def get_parallel_result_10G():
         # nodes = [8, 16]
         # duplicates = [0]
         return pd.DataFrame()
+    else:
+        nodes = [1]
+        duplicates = [0]
     return get_result("scale10G", "nodes_{nodes}_p_{policy}_{duplicate}.out",
                       n_input=[10_000_000_000],
                       nodes=nodes,
@@ -109,12 +122,13 @@ def get_parallel_result_10G():
                       duplicate=duplicates)
 
 if __name__ == "__main__":
-    df_ser = get_serial_result()
-    serial_exectimes = dict()
-    for n_input, df in df_ser.groupby("n_input"):
-        for exec_type, df_e in df.groupby("exec_type"):
-            serial_exectimes[(n_input, exec_type)] = df_e["time"].mean()
-    print(serial_exectimes)
+    if plot_serial:
+        df_ser = get_serial_result()
+        serial_exectimes = dict()
+        for n_input, df in df_ser.groupby("n_input"):
+            for exec_type, df_e in df.groupby("exec_type"):
+                serial_exectimes[(n_input, exec_type)] = df_e["time"].mean()
+        print(serial_exectimes)
 
     fig = go.Figure()
     log_axis = dict(type="log", dtick=1, minor=dict(ticks="inside", ticklen=5, showgrid=True))
@@ -122,7 +136,10 @@ if __name__ == "__main__":
     x_axis = log_axis
     y_axis = log_axis
 
-    df_par = pd.concat([get_parallel_result_1G(), get_parallel_result_10G()])
+    if plot_10G:
+        df_par = pd.concat([get_parallel_result_1G(), get_parallel_result_10G()])
+    else:
+        df_par = get_parallel_result_1G()
 
     for policy, df_p in df_par.groupby("policy"):
         print("## policy={}".format(policy))
@@ -135,22 +152,9 @@ if __name__ == "__main__":
         for n_input, df_n in df_p.groupby("n_input"):
             print("### n_input={}...".format(n_input))
 
-            # for ideal lines
-
-            # n_samples = 1000
-            # nproc_points = np.linspace(10, max(df_n["nproc"]), n_samples)
-
-            # serial_t  = serial_exectimes[(n_input, 0)]
-            # stdsort_t = serial_exectimes[(n_input, 1)]
-
-            # ideal_ys = serial_t / nproc_points
-
             df_n["time"] /= 1_000_000_000.0
             df_n = df_n.groupby("nproc").agg({"time": ["mean", "median", "min", plot_util.ci_lower, plot_util.ci_upper]})
             xs = df_n.index
-
-            # print("Speedup to std::sort():")
-            # print(stdsort_t / df_f[("time", "mean")])
 
             ys = df_n[("time", "mean")]
             ci_uppers = df_n[("time", "ci_upper")] - ys
@@ -186,62 +190,64 @@ if __name__ == "__main__":
         ))
 
     # Ideal (1G, serial)
-    base_exec_time = serial_exectimes[(1_000_000_000, 0)]
-    base_exec_time /= 1_000_000_000.0
-    min_x = df_par["nproc"].min()
-    max_x = df_par["nproc"].max() * 1.5
-    xrange = [min_x * 0.8, max_x]
-    textangle=34
-    fig.add_trace(go.Scatter(
-        x=xrange,
-        y=[base_exec_time / x for x in xrange],
-        marker_color="#999999",
-        mode="lines",
-        line=dict(dash="4px,3px", width=1.5),
-        showlegend=False,
-        name="Ideal",
-    ))
-    if machine == "wisteria-o":
-        text_x = 100
-        fig.add_annotation(
-            x=math.log10(text_x),
-            y=math.log10(base_exec_time / text_x),
-            textangle=textangle,
-            font_size=14,
-            yshift=-24,
-            showarrow=False,
-            text="Linear speedup<br>(vs. serial)",
-        )
+    if plot_serial:
+        base_exec_time = serial_exectimes[(1_000_000_000, 0)]
+        base_exec_time /= 1_000_000_000.0
+        min_x = df_par["nproc"].min()
+        max_x = df_par["nproc"].max() * 1.5
+        xrange = [min_x * 0.8, max_x]
+        textangle=34
+        fig.add_trace(go.Scatter(
+            x=xrange,
+            y=[base_exec_time / x for x in xrange],
+            marker_color="#999999",
+            mode="lines",
+            line=dict(dash="4px,3px", width=1.5),
+            showlegend=False,
+            name="Ideal",
+        ))
+        if machine == "wisteria-o":
+            text_x = 100
+            fig.add_annotation(
+                x=math.log10(text_x),
+                y=math.log10(base_exec_time / text_x),
+                textangle=textangle,
+                font_size=14,
+                yshift=-24,
+                showarrow=False,
+                text="Linear speedup<br>(vs. serial)",
+            )
 
     # 10G ideal
-    df_10G_base = df_par[(df_par["n_input"] == 10_000_000_000) &
-                         (df_par["nodes"] == "2x3:torus") &
-                         (df_par["policy"] == "writeback_lazy")]
-    min_x = df_10G_base["nproc"].min()
-    xrange = [min_x, max_x]
-    base_exec_time = df_10G_base["time"].mean()
-    base_exec_time /= 1_000_000_000.0
-    base_exec_time *= min_x
-    fig.add_trace(go.Scatter(
-        x=xrange,
-        y=[base_exec_time / x for x in xrange],
-        marker_color="#999999",
-        mode="lines",
-        line=dict(dash="4px,3px", width=1.5),
-        showlegend=False,
-        name="Ideal",
-    ))
-    if machine == "wisteria-o":
-        text_x = 1000
-        fig.add_annotation(
-            x=math.log10(text_x),
-            y=math.log10(base_exec_time / text_x),
-            textangle=textangle,
-            font_size=14,
-            yshift=-24,
-            showarrow=False,
-            text="Linear speedup<br>(vs. 288 cores)",
-        )
+    if plot_serial and plot_10G:
+        df_10G_base = df_par[(df_par["n_input"] == 10_000_000_000) &
+                             (df_par["nodes"] == "2x3:torus") &
+                             (df_par["policy"] == "writeback_lazy")]
+        min_x = df_10G_base["nproc"].min()
+        xrange = [min_x, max_x]
+        base_exec_time = df_10G_base["time"].mean()
+        base_exec_time /= 1_000_000_000.0
+        base_exec_time *= min_x
+        fig.add_trace(go.Scatter(
+            x=xrange,
+            y=[base_exec_time / x for x in xrange],
+            marker_color="#999999",
+            mode="lines",
+            line=dict(dash="4px,3px", width=1.5),
+            showlegend=False,
+            name="Ideal",
+        ))
+        if machine == "wisteria-o":
+            text_x = 1000
+            fig.add_annotation(
+                x=math.log10(text_x),
+                y=math.log10(base_exec_time / text_x),
+                textangle=textangle,
+                font_size=14,
+                yshift=-24,
+                showarrow=False,
+                text="Linear speedup<br>(vs. 288 cores)",
+            )
 
     if machine == "wisteria-o":
         # annotations
@@ -262,6 +268,8 @@ if __name__ == "__main__":
         yrange = [math.log10(0.1), math.log10(50)]
     elif machine == "squid-c":
         yrange = [math.log10(0.1), math.log10(3)]
+    else:
+        yrange = None
 
     fig.update_xaxes(
         showline=True,
