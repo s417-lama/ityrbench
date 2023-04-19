@@ -151,7 +151,7 @@ run:
 
     source uts/sample_trees.sh
 
-    export OMPI_MCA_common_tofu_num_mrq_entries=2097152 # 2048, 8192, 32768, 131072 (default), 524288, or 2097152
+    # export OMPI_MCA_common_tofu_num_mrq_entries=2097152 # 2048, 8192, 32768, 131072 (default), 524288, or 2097152
     export PCAS_ALLOCATOR_BLOCK_SIZE=2 # MB
     export PCAS_ALLOCATOR_MAX_UNFLUSHED_FREE_OBJS=10
 

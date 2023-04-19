@@ -277,7 +277,7 @@ dependencies:
         echo "using clang : fcc : FCCpx ;" > user-config.jam
         CONFIGURE_OPTS="${CONFIGURE_OPTS:+$CONFIGURE_OPTS} --user-config=user-config.jam toolset=clang-fcc"
       fi
-      ./b2 --without-python pch=off ${CONFIGURE_OPTS:+$CONFIGURE_OPTS} -j $(nproc) install
+      ./b2 --with-container pch=off ${CONFIGURE_OPTS:+$CONFIGURE_OPTS} -j $(nproc) install
     activate_script:
       - export BOOST_ROOT=$KOCHI_INSTALL_PREFIX_BOOST
       - export LD_LIBRARY_PATH=$KOCHI_INSTALL_PREFIX_BOOST/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}

@@ -202,7 +202,7 @@ run:
   script: |
     source run_common.bash
 
-    export OMPI_MCA_common_tofu_num_mrq_entries=2097152 # 2048, 8192, 32768, 131072 (default), 524288, or 2097152
+    # export OMPI_MCA_common_tofu_num_mrq_entries=2097152 # 2048, 8192, 32768, 131072 (default), 524288, or 2097152
     export PCAS_ALLOCATOR_MAX_LOCAL_SIZE=2
 
     commands="
