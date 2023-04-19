@@ -27,92 +27,7 @@ machines:
         module load cmake/3.22.2
         export PYTHONPATH="/usr/share/gcc-8/python:${PYTHONPATH:+$PYTHONPATH}" # workaround for gdb bug (module 'libstdcxx' not found)
 
-  squid-c:
-    login_host: squid
-    work_dir: /sqfs/work/G15442/v60680
-    kochi_root: /sqfs/work/G15442/v60680/.kochi
-    alloc_interact_script: |
-      qlogin -q INTC --group=G15442 -b $KOCHI_ALLOC_NODE_SPEC -T openmpi
-    alloc_script: |
-      echo "$KOCHI_WORKER_LAUNCH_CMD" | qsub -q SCMEM -j o --group=G15442 -b $KOCHI_ALLOC_NODE_SPEC -T openmpi -l elapstim_req=${KOCHI_ALLOC_TIME_LIMIT:-6:00:00},memsz_job=unlimited
-    load_env_script:
-      on_login_node: |
-        . /sqfs/work/G15442/v60680/venv/squid-c/bin/activate
-        export TERM=xterm-256color
-        export MPICC=mpicc
-        export MPICXX=mpicxx
-      on_machine: |
-        . /sqfs/work/G15442/v60680/venv/squid-c/bin/activate
-        export TERM=xterm-256color
-        export MPICC=mpicc
-        export MPICXX=mpicxx
-        (module load BaseGCC/2022; mpirun -N 1 $NQSV_MPIOPTS /sqfs/home/v60680/launch_sshd.sh)
-
 dependencies:
-  ucx:
-    recipes:
-      - name: v1.11.0
-        before_script: UCX_VERSION=1.11.0 CONFIGURE_OPTS="--disable-logging --disable-debug --disable-assertions --disable-params-check"
-      - name: v1.13.1
-        before_script: UCX_VERSION=1.13.1 CONFIGURE_OPTS="--disable-logging --disable-debug --disable-assertions --disable-params-check"
-      - name: v1.11.0-debug
-        before_script: UCX_VERSION=1.11.0 CONFIGURE_OPTS="--enable-debug --enable-debug-data" CFLAGS="${CFLAGS:+$CFLAGS} -O0"
-      - name: v1.13.1-debug
-        before_script: UCX_VERSION=1.13.1 CONFIGURE_OPTS="--enable-debug --enable-debug-data" CFLAGS="${CFLAGS:+$CFLAGS} -O0"
-      - name: v1.11.0-prof
-        before_script: UCX_VERSION=1.11.0 CONFIGURE_OPTS="--disable-logging --disable-debug --disable-assertions --disable-params-check --enable-profiling --enable-frame-pointer --enable-stats"
-    script:
-      - unset MPICC
-      - unset MPICXX
-      - wget https://github.com/openucx/ucx/releases/download/v${UCX_VERSION}/ucx-${UCX_VERSION}.tar.gz
-      - tar xvf ucx-${UCX_VERSION}.tar.gz
-      - cd ucx-${UCX_VERSION}/
-      - ./configure CFLAGS="${CFLAGS:+$CFLAGS} -gdwarf-4" --prefix=$KOCHI_INSTALL_PREFIX ${CONFIGURE_OPTS:+$CONFIGURE_OPTS}
-      - make -j
-      - make install
-
-  openmpi:
-    git: https://github.com/open-mpi/ompi.git
-    depends:
-      - name: ucx
-        recipe: v1.11.0
-    recipes:
-      - name:   main
-        branch: main
-      - name:   v5.0.x
-        branch: v5.0.x
-      - name:   v5.0.0rc7
-        branch: v5.0.0rc7
-      - name:   v5.0.0rc9
-        branch: v5.0.0rc9
-      - name:   dev
-        mirror: true
-        mirror_dir: ../../github/ompi
-      - name:   v5.0.x-debug
-        branch: v5.0.x
-        before_script: CONFIGURE_OPTS="--enable-debug" CFLAGS="${CFLAGS:+$CFLAGS} -O0"
-        depends:
-          - name: ucx
-            recipe: v1.11.0-debug
-      - name:   dev-debug
-        mirror: true
-        mirror_dir: ../../github/ompi
-        before_script: CONFIGURE_OPTS="--enable-debug" CFLAGS="${CFLAGS:+$CFLAGS} -O0"
-        depends:
-          - name: ucx
-            recipe: v1.11.0-debug
-    script:
-      - ./autogen.pl
-      - mkdir build
-      - cd build/
-      - CFLAGS="${CFLAGS:+$CFLAGS} -g -gdwarf-4"
-      - ../configure ${CFLAGS:+CFLAGS="$CFLAGS"} --prefix=$KOCHI_INSTALL_PREFIX --with-ucx=$KOCHI_INSTALL_PREFIX_UCX --disable-man-pages --with-pmix=internal --with-hwloc=internal --with-libevent=internal --without-hcoll ${CONFIGURE_OPTS:+$CONFIGURE_OPTS}
-      - make -j
-      - make install
-    activate_script:
-      - export PATH=$KOCHI_INSTALL_PREFIX_OPENMPI/bin${PATH:+:$PATH}
-      - export LD_LIBRARY_PATH=$KOCHI_INSTALL_PREFIX_OPENMPI/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
-
   massivethreads:
     git: https://github.com/massivethreads/massivethreads.git
     recipes:
@@ -132,14 +47,7 @@ dependencies:
       - make install
 
   massivethreads-dm:
-    git: git@gitlab.eidos.ic.i.u-tokyo.ac.jp:shiina/massivethreads-dm.git
-    depends:
-      - name: openmpi
-        recipe: v5.0.0rc7
-        machines: [local]
-      - name: openmpi
-        recipe: dev
-        machines: [squid-c]
+    git: https://github.com/s417-lama/massivethreads-dm.git
     recipes:
       - name: release
         branch: ityr
@@ -176,14 +84,7 @@ dependencies:
       - make install
 
   pcas:
-    git: git@gitlab.eidos.ic.i.u-tokyo.ac.jp:shiina/pcas.git
-    depends:
-      - name: openmpi
-        recipe: v5.0.0rc7
-        machines: [local]
-      - name: openmpi
-        recipe: dev
-        machines: [squid-c]
+    git: https://github.com/s417-lama/pcas.git
     recipes:
       - name: release
         branch: master
@@ -289,33 +190,3 @@ dependencies:
         branch: master
     script:
       - cp -r include/ $KOCHI_INSTALL_PREFIX/
-
-  # experimental
-  itoyori:
-    git: git@gitlab.eidos.ic.i.u-tokyo.ac.jp:shiina/itoyori.git
-    depends:
-      - name: openmpi
-        recipe: v5.0.0rc7
-        machines: [local]
-      - name: boost
-        recipe: v1.80.0
-        machines: [wisteria-o]
-    recipes:
-      - name: release
-        branch: master
-        script:
-          - CC=$MPICC CXX=$MPICXX cmake -DCMAKE_INSTALL_PREFIX=$KOCHI_INSTALL_PREFIX .
-          - make -j all install
-      - name: develop
-        mirror: true
-        mirror_dir: ../itoyori
-        script:
-          - CC=$MPICC CXX=$MPICXX cmake -DCMAKE_INSTALL_PREFIX=$KOCHI_INSTALL_PREFIX .
-          - make -j all install
-      - name: develop_test
-        on_machine: true
-        mirror: true
-        mirror_dir: ../itoyori
-        script:
-          - CC=$MPICC CXX=$MPICXX cmake -DCMAKE_INSTALL_PREFIX=$KOCHI_INSTALL_PREFIX .
-          - make -j all test install
